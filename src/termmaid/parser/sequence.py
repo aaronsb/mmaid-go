@@ -50,9 +50,9 @@ _BLOCK_START_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Block section: else, and (with optional label)
+# Block section: else, and, option (with optional label)
 _BLOCK_SECTION_RE = re.compile(
-    r"^\s*(else|and)\b\s*(.*?)\s*$",
+    r"^\s*(else|and|option)\b\s*(.*?)\s*$",
     re.IGNORECASE,
 )
 

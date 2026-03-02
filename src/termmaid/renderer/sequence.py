@@ -577,8 +577,8 @@ def render_sequence(diagram: SequenceDiagram, *, use_ascii: bool = False) -> Can
 def _block_frame_bounds(col_centers: list[int], depth: int) -> tuple[int, int]:
     """Compute left and right columns for block frame at given nesting depth."""
     indent = depth * 2
-    left = max(0, col_centers[0] - 6 - indent) if col_centers else indent
-    right = (col_centers[-1] + 6 + indent) if col_centers else 20 + indent
+    left = max(0, col_centers[0] - 6 + indent) if col_centers else indent
+    right = (col_centers[-1] + 6 - indent) if col_centers else 20 - indent
     return left, right
 
 

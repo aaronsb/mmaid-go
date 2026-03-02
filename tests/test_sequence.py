@@ -436,6 +436,57 @@ class TestSequenceBlockParser:
         assert len(inner_blocks) == 1
         assert inner_blocks[0].kind == "alt"
 
+    def test_par_and_parsed(self):
+        d = parse_sequence_diagram(
+            "sequenceDiagram\n"
+            "  par Task A\n"
+            "    A->>B: req1\n"
+            "  and Task B\n"
+            "    A->>C: req2\n"
+            "  end"
+        )
+        blocks = [e for e in d.events if isinstance(e, Block)]
+        assert len(blocks) == 1
+        assert blocks[0].kind == "par"
+        assert blocks[0].label == "Task A"
+        msgs = [e for e in blocks[0].events if isinstance(e, Message)]
+        assert len(msgs) == 1
+        assert msgs[0].target == "B"
+        assert len(blocks[0].sections) == 1
+        assert blocks[0].sections[0].label == "Task B"
+        sec_msgs = [e for e in blocks[0].sections[0].events if isinstance(e, Message)]
+        assert len(sec_msgs) == 1
+        assert sec_msgs[0].target == "C"
+
+    def test_critical_option_parsed(self):
+        d = parse_sequence_diagram(
+            "sequenceDiagram\n"
+            "  critical Establish connection\n"
+            "    A->>B: connect\n"
+            "  option Timeout\n"
+            "    A->>A: retry\n"
+            "  end"
+        )
+        blocks = [e for e in d.events if isinstance(e, Block)]
+        assert len(blocks) == 1
+        assert blocks[0].kind == "critical"
+        assert blocks[0].label == "Establish connection"
+        assert len(blocks[0].sections) == 1
+        assert blocks[0].sections[0].label == "Timeout"
+
+    def test_break_parsed(self):
+        d = parse_sequence_diagram(
+            "sequenceDiagram\n"
+            "  A->>B: req\n"
+            "  break When error\n"
+            "    B-->>A: err\n"
+            "  end"
+        )
+        blocks = [e for e in d.events if isinstance(e, Block)]
+        assert len(blocks) == 1
+        assert blocks[0].kind == "break"
+        assert blocks[0].label == "When error"
+
     def test_activate_deactivate_keywords(self):
         d = parse_sequence_diagram(
             "sequenceDiagram\n"
@@ -521,6 +572,43 @@ class TestSequenceBlockRendering:
         assert "[alt]" in output
         assert "ping" in output
         assert "ok" in output
+
+    def test_par_and_rendered(self):
+        output = render(
+            "sequenceDiagram\n"
+            "  par Task A\n"
+            "    A->>B: req1\n"
+            "  and Task B\n"
+            "    A->>C: req2\n"
+            "  end"
+        )
+        assert "[par]" in output
+        assert "req1" in output
+        assert "req2" in output
+
+    def test_critical_option_rendered(self):
+        output = render(
+            "sequenceDiagram\n"
+            "  critical Establish connection\n"
+            "    A->>B: connect\n"
+            "  option Timeout\n"
+            "    A->>A: retry\n"
+            "  end"
+        )
+        assert "[critical]" in output
+        assert "connect" in output
+        assert "retry" in output
+
+    def test_break_rendered(self):
+        output = render(
+            "sequenceDiagram\n"
+            "  A->>B: req\n"
+            "  break When error\n"
+            "    B-->>A: err\n"
+            "  end"
+        )
+        assert "[break]" in output
+        assert "err" in output
 
     def test_alt_else_no_label_overlap(self):
         """Message label after else should not overlap with section label."""
