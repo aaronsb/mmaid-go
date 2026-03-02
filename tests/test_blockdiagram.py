@@ -143,3 +143,36 @@ class TestBlockDiagramRendering:
         unicode_chars = set("┌┐└┘─│├┤┬┴┼╭╮╰╯►◄▲▼┄┆━┃╋")
         for ch in output:
             assert ch not in unicode_chars
+
+    def test_space_block_creates_gap(self):
+        output = render(
+            "block-beta\n"
+            "  columns 3\n"
+            '  A["Left"] space B["Right"]'
+        )
+        assert "Left" in output
+        assert "Right" in output
+        # Space block should not have its own label rendered
+        lines = output.split("\n")
+        # Both blocks should be rendered
+        assert any("Left" in l and "Right" in l for l in lines)
+
+    def test_col_span_wider_blocks(self):
+        output = render(
+            "block-beta\n"
+            "  columns 3\n"
+            '  A["Wide"]:2 B["Normal"]\n'
+            '  C["One"] D["Two"] E["Three"]'
+        )
+        assert "Wide" in output
+        assert "Normal" in output
+
+    def test_link_arrows_between_blocks(self):
+        output = render(
+            "block-beta\n"
+            '  A["Source"]\n'
+            '  B["Target"]\n'
+            "  A-->B"
+        )
+        assert "Source" in output
+        assert "Target" in output

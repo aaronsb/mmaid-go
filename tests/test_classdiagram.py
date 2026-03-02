@@ -128,6 +128,33 @@ class TestClassDiagramParser:
         )
         assert d.direction == "LR"
 
+    def test_composition_marker(self):
+        d = parse_class_diagram("classDiagram\n  Car *-- Engine")
+        r = d.relationships[0]
+        assert r.source_marker == "*"
+
+    def test_aggregation_marker(self):
+        d = parse_class_diagram("classDiagram\n  Pond o-- Duck")
+        r = d.relationships[0]
+        assert r.source_marker == "o"
+
+    def test_interface_annotation_inline(self):
+        d = parse_class_diagram(
+            "classDiagram\n"
+            "  class Shape <<interface>> {\n"
+            "    +draw()\n"
+            "  }"
+        )
+        assert d.classes["Shape"].annotation == "interface"
+
+    def test_annotation_separate_line(self):
+        d = parse_class_diagram(
+            "classDiagram\n"
+            "  class Foo\n"
+            "  <<interface>> Foo"
+        )
+        assert d.classes["Foo"].annotation == "interface"
+
 
 # ── Rendering tests ──────────────────────────────────────────────────────────
 
@@ -195,3 +222,33 @@ class TestClassDiagramRendering:
         unicode_chars = set("┌┐└┘─│├┤┬┴┼╭╮╰╯►◄▲▼┄┆━┃╋")
         for ch in output:
             assert ch not in unicode_chars
+
+    def test_composition_rendered(self):
+        output = render(
+            "classDiagram\n"
+            "  class Car\n"
+            "  class Engine\n"
+            "  Car *-- Engine"
+        )
+        assert "Car" in output
+        assert "Engine" in output
+
+    def test_aggregation_rendered(self):
+        output = render(
+            "classDiagram\n"
+            "  class Pond\n"
+            "  class Duck\n"
+            "  Pond o-- Duck"
+        )
+        assert "Pond" in output
+        assert "Duck" in output
+
+    def test_interface_annotation_displayed(self):
+        output = render(
+            "classDiagram\n"
+            "  class Shape {\n"
+            "    <<interface>>\n"
+            "    +draw()\n"
+            "  }"
+        )
+        assert "interface" in output

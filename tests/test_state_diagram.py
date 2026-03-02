@@ -132,6 +132,45 @@ class TestStateDiagramParser:
         assert "A" in g.nodes
         assert "B" in g.nodes
 
+    def test_multiple_start_states(self):
+        g = parse_state_diagram(
+            "stateDiagram-v2\n"
+            "  [*] --> A\n"
+            "  [*] --> B"
+        )
+        start_nodes = [n for n in g.nodes.values() if n.label == "●"]
+        assert len(start_nodes) == 2
+
+    def test_multiple_end_states(self):
+        g = parse_state_diagram(
+            "stateDiagram-v2\n"
+            "  A --> [*]\n"
+            "  B --> [*]"
+        )
+        end_nodes = [n for n in g.nodes.values() if n.label == "◉"]
+        assert len(end_nodes) == 2
+
+    def test_nested_composite_states(self):
+        g = parse_state_diagram(
+            "stateDiagram-v2\n"
+            '  state "Outer" {\n'
+            '    state "Inner" {\n'
+            "      X --> Y\n"
+            "    }\n"
+            "  }"
+        )
+        assert len(g.subgraphs) == 1
+        assert len(g.subgraphs[0].children) == 1
+
+    def test_notes_skipped_gracefully(self):
+        g = parse_state_diagram(
+            "stateDiagram-v2\n"
+            "  A --> B\n"
+            '  note right of A : some note'
+        )
+        assert len(g.edges) == 1
+        assert "A" in g.nodes
+
 
 # ── Auto-detection tests ─────────────────────────────────────────────────────
 

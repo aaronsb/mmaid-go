@@ -38,3 +38,4 @@ class ERDiagram:
     entities: dict[str, Entity] = field(default_factory=dict)
     relationships: list[Relationship] = field(default_factory=list)
     direction: str = "TB"              # "TB" or "LR"
+    warnings: list[str] = field(default_factory=list)

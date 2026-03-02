@@ -27,3 +27,4 @@ class BlockDiagram:
     blocks: list[Block] = field(default_factory=list)
     links: list[BlockLink] = field(default_factory=list)
     columns: int = 0  # 0 = auto
+    warnings: list[str] = field(default_factory=list)

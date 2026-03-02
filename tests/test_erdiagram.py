@@ -101,6 +101,27 @@ class TestERDiagramParser:
         )
         assert "LINE-ITEM" in d.entities
 
+    def test_fk_attribute_key(self):
+        d = parse_er_diagram(
+            "erDiagram\n"
+            "  ORDER {\n"
+            "    int customer_id FK\n"
+            "  }"
+        )
+        attrs = d.entities["ORDER"].attributes
+        assert "FK" in attrs[0].keys
+
+    def test_pk_and_fk_combined(self):
+        d = parse_er_diagram(
+            "erDiagram\n"
+            "  ITEM {\n"
+            "    int id PK, FK\n"
+            "  }"
+        )
+        attrs = d.entities["ITEM"].attributes
+        assert "PK" in attrs[0].keys
+        assert "FK" in attrs[0].keys
+
 
 # ── Rendering tests ──────────────────────────────────────────────────────────
 
@@ -170,3 +191,31 @@ class TestERDiagramRendering:
         unicode_chars = set("┌┐└┘─│├┤┬┴┼╭╮╰╯►◄▲▼┄┆━┃╋")
         for ch in output:
             assert ch not in unicode_chars
+
+    def test_pk_displayed(self):
+        output = render(
+            "erDiagram\n"
+            "  CUSTOMER {\n"
+            "    int id PK\n"
+            "  }"
+        )
+        assert "PK" in output
+
+    def test_fk_displayed(self):
+        output = render(
+            "erDiagram\n"
+            "  ORDER {\n"
+            "    int customer_id FK\n"
+            "  }"
+        )
+        assert "FK" in output
+
+    def test_dashed_line_rendered(self):
+        output = render(
+            "erDiagram\n"
+            '  A }|..|{ B : uses'
+        )
+        assert "A" in output
+        assert "B" in output
+        # Dashed lines use dotted characters
+        assert "┄" in output or "." in output

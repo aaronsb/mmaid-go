@@ -5,7 +5,7 @@ and A* edge routing used by flowcharts.
 """
 from __future__ import annotations
 
-from ..model.sequence import Message, Note, SequenceDiagram
+from ..model.sequence import ActivateEvent, Block, BlockSection, Message, Note, SequenceDiagram
 from .canvas import Canvas
 from .charset import ASCII, UNICODE, CharSet
 from .shapes import draw_rectangle, draw_cylinder
@@ -18,6 +18,9 @@ _ACTOR_HEIGHT = 5     # actor stick-figure height (head, body, legs, gap, label)
 _MIN_GAP = 16         # minimum gap between participant centers
 _EVENT_ROW_H = 2      # rows per message event
 _NOTE_ROW_H = 4       # rows per note event (3-row box + 1 gap)
+_BLOCK_START_H = 2    # rows for block start (label + border)
+_BLOCK_SECTION_H = 1  # rows for section break (dashed line)
+_BLOCK_END_H = 1      # rows for block end (bottom border)
 _TOP_MARGIN = 0
 _BOTTOM_MARGIN = 1
 
@@ -32,6 +35,45 @@ _KIND_HEIGHT = {
     "entity": 5,
     "collections": 5,
 }
+
+
+# ── Sentinel types for flattened events ──────────────────────────
+class _BlockStart:
+    """Marker for block start in flattened event list."""
+    def __init__(self, block: Block, depth: int) -> None:
+        self.block = block
+        self.depth = depth
+
+class _BlockSectionBreak:
+    """Marker for else/and section in flattened event list."""
+    def __init__(self, section: BlockSection, depth: int) -> None:
+        self.section = section
+        self.depth = depth
+
+class _BlockEnd:
+    """Marker for block end in flattened event list."""
+    def __init__(self, block: Block, depth: int) -> None:
+        self.block = block
+        self.depth = depth
+
+
+def _flatten_events(events: list, depth: int = 0) -> list:
+    """Recursively flatten Block events into a linear list with boundary markers."""
+    result = []
+    for ev in events:
+        if isinstance(ev, Block):
+            result.append(_BlockStart(ev, depth))
+            result.extend(_flatten_events(ev.events, depth + 1))
+            for section in ev.sections:
+                result.append(_BlockSectionBreak(section, depth))
+                result.extend(_flatten_events(section.events, depth + 1))
+            result.append(_BlockEnd(ev, depth))
+        elif isinstance(ev, ActivateEvent):
+            # ActivateEvents don't take a row; processed separately
+            result.append(ev)
+        else:
+            result.append(ev)
+    return result
 
 
 def _participant_index(diagram: SequenceDiagram, pid: str) -> int:
@@ -52,6 +94,7 @@ def _effective_label(msg: Message, msg_number: int | None) -> str:
 def _compute_layout(
     diagram: SequenceDiagram,
     autonumber: bool,
+    flat_events: list,
 ) -> tuple[list[int], list[int], int, int, int, list[int]]:
     """Compute column center positions and box widths.
 
@@ -69,22 +112,37 @@ def _compute_layout(
 
     # Compute per-event heights and effective labels for gap computation
     event_heights: list[int] = []
-    effective_labels: list[str] = []  # only for Messages
+    effective_labels: list[str] = []
     msg_counter = 0
-    for ev in diagram.events:
-        if isinstance(ev, Note):
+    for ev in flat_events:
+        if isinstance(ev, ActivateEvent):
+            # No row needed
+            event_heights.append(0)
+            effective_labels.append("")
+        elif isinstance(ev, Note):
             event_heights.append(_NOTE_ROW_H)
             effective_labels.append("")
-        else:
+        elif isinstance(ev, _BlockStart):
+            event_heights.append(_BLOCK_START_H)
+            effective_labels.append("")
+        elif isinstance(ev, _BlockSectionBreak):
+            event_heights.append(_BLOCK_SECTION_H)
+            effective_labels.append("")
+        elif isinstance(ev, _BlockEnd):
+            event_heights.append(_BLOCK_END_H)
+            effective_labels.append("")
+        elif isinstance(ev, Message):
             msg_counter += 1
             eff = _effective_label(ev, msg_counter if autonumber else None)
             effective_labels.append(eff)
             event_heights.append(_EVENT_ROW_H)
+        else:
+            event_heights.append(0)
+            effective_labels.append("")
 
     # Compute per-gap minimum widths based on message labels between adjacent pairs
-    gap_mins = [_MIN_GAP] * (n - 1)
-    msg_idx = 0
-    for ev_idx, ev in enumerate(diagram.events):
+    gap_mins = [_MIN_GAP] * (n - 1) if n > 1 else []
+    for ev_idx, ev in enumerate(flat_events):
         if isinstance(ev, Note):
             # Notes may need gap expansion
             note_width = len(ev.text) + 4
@@ -107,6 +165,9 @@ def _compute_layout(
                         gap_mins[g] = max(gap_mins[g], per_gap)
             continue
 
+        if not isinstance(ev, Message):
+            continue
+
         eff = effective_labels[ev_idx]
         si = _participant_index(diagram, ev.source)
         ti = _participant_index(diagram, ev.target)
@@ -127,7 +188,7 @@ def _compute_layout(
 
     # Account for self-messages extending to the right of a lifeline
     max_right = col_centers[-1] + box_widths[-1] // 2 + 2
-    for ev in diagram.events:
+    for ev in flat_events:
         if isinstance(ev, Message):
             si = _participant_index(diagram, ev.source)
             ti = _participant_index(diagram, ev.target)
@@ -311,8 +372,6 @@ def _draw_collections(canvas: Canvas, cx: int, y: int, width: int, label: str, c
 
     # Bottom of back rect merges with top-right of front
     canvas.put(y + 2, bx + width, cs.bottom_right, style=style)
-    for c in range(bx + width - 1, bx + width):
-        pass  # handled by junction merging
 
     # Side borders of front
     for r in range(y + 2, y + h - 1):
@@ -371,17 +430,62 @@ def _draw_participant_header(
         draw_rectangle(canvas, bx, box_y, bw, _BOX_HEIGHT, label, cs, style="node")
 
 
+def _compute_activation_ranges(flat_events: list, row_offsets: list[int]) -> dict[str, list[tuple[int, int]]]:
+    """Compute activation ranges per participant from flattened events.
+
+    Returns {participant_id: [(start_row, end_row), ...]}.
+    """
+    # Track open activations per participant
+    open_activations: dict[str, list[int]] = {}  # pid -> [start_rows...]
+    ranges: dict[str, list[tuple[int, int]]] = {}
+
+    for idx, ev in enumerate(flat_events):
+        if not isinstance(ev, ActivateEvent):
+            continue
+        row = row_offsets[idx]
+        pid = ev.participant
+        if ev.active:
+            open_activations.setdefault(pid, []).append(row)
+        else:
+            # Close the most recent activation
+            if pid in open_activations and open_activations[pid]:
+                start = open_activations[pid].pop()
+                ranges.setdefault(pid, []).append((start, row))
+
+    # Close any still-open activations at the last row
+    max_row = max(row_offsets) + 1 if row_offsets else 0
+    for pid, starts in open_activations.items():
+        for start in starts:
+            ranges.setdefault(pid, []).append((start, max_row))
+
+    return ranges
+
+
+def _is_activated(ranges: dict[str, list[tuple[int, int]]], pid: str, row: int) -> bool:
+    """Check if a participant is activated at a given row."""
+    for start, end in ranges.get(pid, []):
+        if start <= row <= end:
+            return True
+    return False
+
+
 def render_sequence(diagram: SequenceDiagram, *, use_ascii: bool = False) -> Canvas:
     """Render a SequenceDiagram to a Canvas."""
     cs = ASCII if use_ascii else UNICODE
 
+    # Flatten events for linear layout
+    flat_events = _flatten_events(diagram.events)
+
     col_centers, box_widths, width, height, header_height, row_offsets = _compute_layout(
-        diagram, diagram.autonumber
+        diagram, diagram.autonumber, flat_events
     )
     if width == 0:
         return Canvas(1, 1)
 
     canvas = Canvas(width, height)
+
+    # Compute activation ranges
+    activation_ranges = _compute_activation_ranges(flat_events, row_offsets)
 
     # ── 1. Draw participant headers at top ────────────────────────
     for i, p in enumerate(diagram.participants):
@@ -393,36 +497,142 @@ def render_sequence(diagram: SequenceDiagram, *, use_ascii: bool = False) -> Can
     lifeline_start = _TOP_MARGIN + header_height
     lifeline_end = height - _BOTTOM_MARGIN - 1
     lifeline_char = ":" if use_ascii else "┆"
-    for i in range(len(diagram.participants)):
+    active_char = "[" if use_ascii else "║"
+    for i, p in enumerate(diagram.participants):
         cx = col_centers[i]
         for r in range(lifeline_start, lifeline_end + 1):
-            canvas.put(r, cx, lifeline_char, merge=False, style="edge")
+            if _is_activated(activation_ranges, p.id, r):
+                canvas.put(r, cx, active_char, merge=False, style="edge")
+            else:
+                canvas.put(r, cx, lifeline_char, merge=False, style="edge")
 
-    # ── 3. Draw events (messages and notes) ───────────────────────
+    # ── 3. Draw events (messages, notes, blocks) ──────────────────
     msg_counter = 0
-    for idx, ev in enumerate(diagram.events):
+    for idx, ev in enumerate(flat_events):
         row = row_offsets[idx]
+
+        if isinstance(ev, ActivateEvent):
+            # No visual output needed (lifeline already handles it)
+            continue
 
         if isinstance(ev, Note):
             _draw_note(canvas, ev, row, col_centers, diagram, cs, use_ascii)
             continue
 
-        # It's a Message
-        msg_counter += 1
-        display_label = _effective_label(ev, msg_counter if diagram.autonumber else None)
-
-        si = _participant_index(diagram, ev.source)
-        ti = _participant_index(diagram, ev.target)
-        if si < 0 or ti < 0:
+        if isinstance(ev, _BlockStart):
+            _draw_block_start(canvas, ev, row, col_centers, cs, use_ascii)
             continue
 
-        if si == ti:
-            _draw_self_message(canvas, col_centers[si], row, ev, display_label, cs, use_ascii)
-        else:
-            _draw_message(canvas, col_centers[si], col_centers[ti], row, ev, display_label, cs, use_ascii)
+        if isinstance(ev, _BlockSectionBreak):
+            _draw_block_section(canvas, ev, row, col_centers, cs, use_ascii)
+            continue
+
+        if isinstance(ev, _BlockEnd):
+            _draw_block_end(canvas, ev, row, col_centers, cs, use_ascii)
+            continue
+
+        if isinstance(ev, Message):
+            msg_counter += 1
+            display_label = _effective_label(ev, msg_counter if diagram.autonumber else None)
+
+            si = _participant_index(diagram, ev.source)
+            ti = _participant_index(diagram, ev.target)
+            if si < 0 or ti < 0:
+                continue
+
+            if si == ti:
+                _draw_self_message(canvas, col_centers[si], row, ev, display_label, cs, use_ascii)
+            else:
+                _draw_message(canvas, col_centers[si], col_centers[ti], row, ev, display_label, cs, use_ascii)
 
     return canvas
 
+
+# ── Block frame drawing ──────────────────────────────────────────
+
+def _block_frame_bounds(col_centers: list[int], depth: int) -> tuple[int, int]:
+    """Compute left and right columns for block frame at given nesting depth."""
+    indent = depth * 2
+    left = max(0, col_centers[0] - 6 - indent) if col_centers else indent
+    right = (col_centers[-1] + 6 + indent) if col_centers else 20 + indent
+    return left, right
+
+
+def _draw_block_start(
+    canvas: Canvas,
+    ev: _BlockStart,
+    row: int,
+    col_centers: list[int],
+    cs: CharSet,
+    use_ascii: bool,
+) -> None:
+    """Draw the top border of a block frame with kind label."""
+    left, right = _block_frame_bounds(col_centers, ev.depth)
+    h_char = cs.horizontal
+    style = "node"
+
+    # Top border
+    canvas.put(row, left, cs.top_left, merge=False, style=style)
+    for c in range(left + 1, min(right, canvas.width)):
+        canvas.put(row, c, h_char, merge=False, style=style)
+    if right < canvas.width:
+        canvas.put(row, right, cs.top_right, merge=False, style=style)
+
+    # Label row: [kind] label
+    label = f"[{ev.block.kind}] {ev.block.label}" if ev.block.label else f"[{ev.block.kind}]"
+    label_col = left + 1
+    if row + 1 < canvas.height:
+        canvas.put(row + 1, left, cs.vertical, merge=False, style=style)
+        if right < canvas.width:
+            canvas.put(row + 1, right, cs.vertical, merge=False, style=style)
+        canvas.put_text(row + 1, label_col, label, style="edge_label")
+
+
+def _draw_block_section(
+    canvas: Canvas,
+    ev: _BlockSectionBreak,
+    row: int,
+    col_centers: list[int],
+    cs: CharSet,
+    use_ascii: bool,
+) -> None:
+    """Draw a dashed horizontal divider for else/and sections."""
+    left, right = _block_frame_bounds(col_centers, ev.depth)
+    dash = "." if use_ascii else "┄"
+    style = "node"
+
+    canvas.put(row, left, cs.vertical, merge=False, style=style)
+    for c in range(left + 1, min(right, canvas.width)):
+        canvas.put(row, c, dash, merge=False, style=style)
+    if right < canvas.width:
+        canvas.put(row, right, cs.vertical, merge=False, style=style)
+
+    # Section label after left border
+    if ev.section.label:
+        canvas.put_text(row, left + 2, f"[{ev.section.label}]", style="edge_label")
+
+
+def _draw_block_end(
+    canvas: Canvas,
+    ev: _BlockEnd,
+    row: int,
+    col_centers: list[int],
+    cs: CharSet,
+    use_ascii: bool,
+) -> None:
+    """Draw the bottom border of a block frame."""
+    left, right = _block_frame_bounds(col_centers, ev.depth)
+    h_char = cs.horizontal
+    style = "node"
+
+    canvas.put(row, left, cs.bottom_left, merge=False, style=style)
+    for c in range(left + 1, min(right, canvas.width)):
+        canvas.put(row, c, h_char, merge=False, style=style)
+    if right < canvas.width:
+        canvas.put(row, right, cs.bottom_right, merge=False, style=style)
+
+
+# ── Note drawing ─────────────────────────────────────────────────
 
 def _draw_note(
     canvas: Canvas,
@@ -478,6 +688,8 @@ def _draw_note(
 
     draw_rectangle(canvas, note_x, row, note_width, note_height, note.text, cs, style="node")
 
+
+# ── Message drawing ──────────────────────────────────────────────
 
 def _draw_message(
     canvas: Canvas,

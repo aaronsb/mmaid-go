@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Union
 
 
 @dataclass
@@ -29,7 +30,32 @@ class Note:
 
 
 @dataclass
+class ActivateEvent:
+    participant: str
+    active: bool  # True = activate, False = deactivate
+
+
+@dataclass
+class BlockSection:
+    label: str = ""
+    events: list = field(default_factory=list)
+
+
+@dataclass
+class Block:
+    kind: str  # "loop", "alt", "opt", "par", "critical", "break"
+    label: str = ""
+    events: list = field(default_factory=list)
+    sections: list[BlockSection] = field(default_factory=list)
+
+
+# Union type for all event types
+Event = Union[Message, Note, ActivateEvent, Block]
+
+
+@dataclass
 class SequenceDiagram:
     participants: list[Participant] = field(default_factory=list)
-    events: list[Message | Note] = field(default_factory=list)
+    events: list[Event] = field(default_factory=list)
     autonumber: bool = False
+    warnings: list[str] = field(default_factory=list)

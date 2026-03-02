@@ -27,3 +27,4 @@ class GitGraph:
     branches: list[Branch] = field(default_factory=list)
     direction: str = "LR"
     main_branch_name: str = "main"
+    warnings: list[str] = field(default_factory=list)

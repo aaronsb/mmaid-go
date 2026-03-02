@@ -321,3 +321,12 @@ class TestParseEdgeCases:
         assert len(g.edges) == 1
         assert g.edges[0].label == "text"
         assert g.edges[0].style == EdgeStyle.DOTTED
+
+    def test_malformed_input_no_crash(self):
+        """Malformed input should not crash the parser."""
+        g = parse_flowchart("graph LR\n  ???!!!")
+        assert isinstance(g.nodes, dict)
+
+    def test_special_chars_in_labels(self):
+        g = parse_flowchart('graph LR\n  A["Hello, World! #42"]')
+        assert g.nodes["A"].label == "Hello, World! #42"

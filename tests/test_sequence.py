@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from termmaid import render
 from termmaid.parser.sequence import parse_sequence_diagram
+from termmaid.model.sequence import ActivateEvent, Block, Message, Note
 
 
 # ── Parser tests ──────────────────────────────────────────────────────────────
@@ -99,6 +100,129 @@ class TestSequenceParser:
         )
         assert len(d.events) == 1
 
+    def test_cross_arrow(self):
+        d = parse_sequence_diagram("sequenceDiagram\n  A-xB: lost")
+        assert d.events[0].line_type == "solid"
+        assert d.events[0].arrow_type == "cross"
+
+    def test_dotted_cross_arrow(self):
+        d = parse_sequence_diagram("sequenceDiagram\n  A--xB: lost")
+        assert d.events[0].line_type == "dotted"
+        assert d.events[0].arrow_type == "cross"
+
+    def test_async_arrow(self):
+        d = parse_sequence_diagram("sequenceDiagram\n  A-)B: fire")
+        assert d.events[0].line_type == "solid"
+        assert d.events[0].arrow_type == "async"
+
+    def test_dotted_async_arrow(self):
+        d = parse_sequence_diagram("sequenceDiagram\n  A--)B: fire")
+        assert d.events[0].line_type == "dotted"
+        assert d.events[0].arrow_type == "async"
+
+    def test_bidirectional_arrow(self):
+        d = parse_sequence_diagram("sequenceDiagram\n  A<<->>B: sync")
+        assert d.events[0].line_type == "solid"
+        assert d.events[0].arrow_type == "bidirectional"
+
+    def test_dotted_bidirectional_arrow(self):
+        d = parse_sequence_diagram("sequenceDiagram\n  A<<-->>B: sync")
+        assert d.events[0].line_type == "dotted"
+        assert d.events[0].arrow_type == "bidirectional"
+
+    def test_database_participant(self):
+        d = parse_sequence_diagram(
+            "sequenceDiagram\n"
+            "  database DB as Database\n"
+            "  DB->>A: data"
+        )
+        assert d.participants[0].kind == "database"
+        assert d.participants[0].label == "Database"
+
+    def test_queue_participant(self):
+        d = parse_sequence_diagram(
+            "sequenceDiagram\n  queue Q as MessageQueue"
+        )
+        assert d.participants[0].kind == "queue"
+
+    def test_boundary_participant(self):
+        d = parse_sequence_diagram(
+            "sequenceDiagram\n  boundary B as Boundary"
+        )
+        assert d.participants[0].kind == "boundary"
+
+    def test_control_participant(self):
+        d = parse_sequence_diagram(
+            "sequenceDiagram\n  control C as Controller"
+        )
+        assert d.participants[0].kind == "control"
+
+    def test_entity_participant(self):
+        d = parse_sequence_diagram(
+            "sequenceDiagram\n  entity E as Entity"
+        )
+        assert d.participants[0].kind == "entity"
+
+    def test_collections_participant(self):
+        d = parse_sequence_diagram(
+            "sequenceDiagram\n  collections C as Items"
+        )
+        assert d.participants[0].kind == "collections"
+
+    def test_note_rightof(self):
+        d = parse_sequence_diagram(
+            "sequenceDiagram\n"
+            "  A->>B: msg\n"
+            "  Note right of A: hello"
+        )
+        from termmaid.model.sequence import Note
+        notes = [e for e in d.events if isinstance(e, Note)]
+        assert len(notes) == 1
+        assert notes[0].position == "rightof"
+        assert notes[0].text == "hello"
+
+    def test_note_leftof(self):
+        d = parse_sequence_diagram(
+            "sequenceDiagram\n"
+            "  A->>B: msg\n"
+            "  Note left of B: bye"
+        )
+        from termmaid.model.sequence import Note
+        notes = [e for e in d.events if isinstance(e, Note)]
+        assert len(notes) == 1
+        assert notes[0].position == "leftof"
+
+    def test_note_over_single(self):
+        d = parse_sequence_diagram(
+            "sequenceDiagram\n"
+            "  A->>B: msg\n"
+            "  Note over A: thinking"
+        )
+        from termmaid.model.sequence import Note
+        notes = [e for e in d.events if isinstance(e, Note)]
+        assert notes[0].position == "over"
+        assert notes[0].participants == ["A"]
+
+    def test_note_over_two_participants(self):
+        d = parse_sequence_diagram(
+            "sequenceDiagram\n"
+            "  A->>B: msg\n"
+            "  Note over A,B: shared note"
+        )
+        from termmaid.model.sequence import Note
+        notes = [e for e in d.events if isinstance(e, Note)]
+        assert notes[0].participants == ["A", "B"]
+
+    def test_create_participant(self):
+        d = parse_sequence_diagram(
+            "sequenceDiagram\n"
+            "  create participant C as Charlie\n"
+            "  A->>C: hello"
+        )
+        charlie = [p for p in d.participants if p.id == "C"]
+        assert len(charlie) == 1
+        assert charlie[0].label == "Charlie"
+
 
 # ── Rendering tests ──────────────────────────────────────────────────────────
 
@@ -159,3 +283,223 @@ class TestSequenceRendering:
         )
         assert "Alice" in output
         assert "Bob" in output
+
+    def test_note_rightof_rendered(self):
+        output = render(
+            "sequenceDiagram\n"
+            "  A->>B: msg\n"
+            "  Note right of A: thinking"
+        )
+        assert "thinking" in output
+
+    def test_note_leftof_rendered(self):
+        output = render(
+            "sequenceDiagram\n"
+            "  A->>B: msg\n"
+            "  Note left of B: done"
+        )
+        assert "done" in output
+
+    def test_note_over_rendered(self):
+        output = render(
+            "sequenceDiagram\n"
+            "  A->>B: msg\n"
+            "  Note over A,B: shared thought"
+        )
+        assert "shared thought" in output
+
+    def test_cross_arrow_char(self):
+        output = render("sequenceDiagram\n  A-xB: lost")
+        assert "x" in output
+
+    def test_async_arrow_char(self):
+        output = render("sequenceDiagram\n  A-)B: fire")
+        assert ")" in output
+
+    def test_database_participant_rendered(self):
+        output = render(
+            "sequenceDiagram\n"
+            "  database DB as Database\n"
+            "  DB->>A: data"
+        )
+        assert "Database" in output
+
+    def test_self_message(self):
+        output = render(
+            "sequenceDiagram\n"
+            "  A->>A: think"
+        )
+        assert "think" in output
+        assert "A" in output
+
+    def test_autonumber_display(self):
+        output = render(
+            "sequenceDiagram\n"
+            "  autonumber\n"
+            "  A->>B: hello\n"
+            "  B->>A: world"
+        )
+        assert "1:" in output
+        assert "2:" in output
+
+
+# ── Block and activation tests ────────────────────────────────────────────────
+
+
+class TestSequenceBlockParser:
+    def test_loop_parsed(self):
+        d = parse_sequence_diagram(
+            "sequenceDiagram\n"
+            "  Alice->>Bob: Hello\n"
+            "  loop Every minute\n"
+            "    Bob->>Alice: ping\n"
+            "  end"
+        )
+        # First event is the message, second is the loop block
+        blocks = [e for e in d.events if isinstance(e, Block)]
+        assert len(blocks) == 1
+        assert blocks[0].kind == "loop"
+        assert blocks[0].label == "Every minute"
+        # Loop should contain one message
+        msgs = [e for e in blocks[0].events if isinstance(e, Message)]
+        assert len(msgs) == 1
+        assert msgs[0].source == "Bob"
+
+    def test_alt_else_parsed(self):
+        d = parse_sequence_diagram(
+            "sequenceDiagram\n"
+            "  Alice->>Bob: Request\n"
+            "  alt success\n"
+            "    Bob-->>Alice: OK\n"
+            "  else failure\n"
+            "    Bob-->>Alice: Error\n"
+            "  end"
+        )
+        blocks = [e for e in d.events if isinstance(e, Block)]
+        assert len(blocks) == 1
+        assert blocks[0].kind == "alt"
+        assert blocks[0].label == "success"
+        # Main block should have the OK message
+        msgs = [e for e in blocks[0].events if isinstance(e, Message)]
+        assert len(msgs) == 1
+        assert msgs[0].label == "OK"
+        # Else section
+        assert len(blocks[0].sections) == 1
+        assert blocks[0].sections[0].label == "failure"
+        sec_msgs = [e for e in blocks[0].sections[0].events if isinstance(e, Message)]
+        assert len(sec_msgs) == 1
+        assert sec_msgs[0].label == "Error"
+
+    def test_opt_parsed(self):
+        d = parse_sequence_diagram(
+            "sequenceDiagram\n"
+            "  opt Extra\n"
+            "    A->>B: bonus\n"
+            "  end"
+        )
+        blocks = [e for e in d.events if isinstance(e, Block)]
+        assert len(blocks) == 1
+        assert blocks[0].kind == "opt"
+
+    def test_nested_blocks(self):
+        d = parse_sequence_diagram(
+            "sequenceDiagram\n"
+            "  loop Outer\n"
+            "    A->>B: ping\n"
+            "    alt check\n"
+            "      B-->>A: ok\n"
+            "    end\n"
+            "  end"
+        )
+        blocks = [e for e in d.events if isinstance(e, Block)]
+        assert len(blocks) == 1
+        assert blocks[0].kind == "loop"
+        inner_blocks = [e for e in blocks[0].events if isinstance(e, Block)]
+        assert len(inner_blocks) == 1
+        assert inner_blocks[0].kind == "alt"
+
+    def test_activate_deactivate_keywords(self):
+        d = parse_sequence_diagram(
+            "sequenceDiagram\n"
+            "  A->>B: msg\n"
+            "  activate B\n"
+            "  B-->>A: reply\n"
+            "  deactivate B"
+        )
+        activations = [e for e in d.events if isinstance(e, ActivateEvent)]
+        assert len(activations) == 2
+        assert activations[0].participant == "B"
+        assert activations[0].active is True
+        assert activations[1].participant == "B"
+        assert activations[1].active is False
+
+    def test_inline_activation(self):
+        d = parse_sequence_diagram(
+            "sequenceDiagram\n"
+            "  Alice->>+Bob: Hello\n"
+            "  Bob-->>-Alice: Hi"
+        )
+        activations = [e for e in d.events if isinstance(e, ActivateEvent)]
+        assert len(activations) == 2
+        # First: +Bob activates Bob
+        assert activations[0].participant == "Bob"
+        assert activations[0].active is True
+        # Second: -Alice deactivates Alice
+        assert activations[1].participant == "Alice"
+        assert activations[1].active is False
+
+
+class TestSequenceBlockRendering:
+    def test_loop_frame_displayed(self):
+        output = render(
+            "sequenceDiagram\n"
+            "  Alice->>Bob: Hello\n"
+            "  loop Every minute\n"
+            "    Bob->>Alice: ping\n"
+            "  end"
+        )
+        assert "Alice" in output
+        assert "Bob" in output
+        assert "[loop]" in output
+        assert "ping" in output
+
+    def test_alt_else_sections_visible(self):
+        output = render(
+            "sequenceDiagram\n"
+            "  Alice->>Bob: Request\n"
+            "  alt success\n"
+            "    Bob-->>Alice: OK\n"
+            "  else failure\n"
+            "    Bob-->>Alice: Error\n"
+            "  end"
+        )
+        assert "[alt]" in output
+        assert "OK" in output
+        assert "Error" in output
+        # Section divider uses dashed chars
+        assert "┄" in output
+
+    def test_activation_uses_active_char(self):
+        output = render(
+            "sequenceDiagram\n"
+            "  A->>B: msg\n"
+            "  activate B\n"
+            "  B-->>A: reply\n"
+            "  deactivate B"
+        )
+        assert "║" in output  # activated lifeline char
+
+    def test_nested_blocks_render(self):
+        output = render(
+            "sequenceDiagram\n"
+            "  loop Outer\n"
+            "    A->>B: ping\n"
+            "    alt check\n"
+            "      B-->>A: ok\n"
+            "    end\n"
+            "  end"
+        )
+        assert "[loop]" in output
+        assert "[alt]" in output
+        assert "ping" in output
+        assert "ok" in output

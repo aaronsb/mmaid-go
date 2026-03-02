@@ -58,40 +58,43 @@ def render(
         >>> from termmaid import render
         >>> print(render("graph LR\\n  A --> B --> C"))
     """
-    text = _strip_frontmatter(source.strip())
-    if text.startswith("sequenceDiagram"):
-        from .parser.sequence import parse_sequence_diagram
-        from .renderer.sequence import render_sequence
-        diagram = parse_sequence_diagram(text)
-        return render_sequence(diagram, use_ascii=use_ascii).to_string()
+    try:
+        text = _strip_frontmatter(source.strip())
+        if text.startswith("sequenceDiagram"):
+            from .parser.sequence import parse_sequence_diagram
+            from .renderer.sequence import render_sequence
+            diagram = parse_sequence_diagram(text)
+            return render_sequence(diagram, use_ascii=use_ascii).to_string()
 
-    if text.startswith("classDiagram"):
-        from .parser.classdiagram import parse_class_diagram
-        from .renderer.classdiagram import render_class_diagram
-        diagram = parse_class_diagram(text)
-        return render_class_diagram(diagram, use_ascii=use_ascii).to_string()
+        if text.startswith("classDiagram"):
+            from .parser.classdiagram import parse_class_diagram
+            from .renderer.classdiagram import render_class_diagram
+            diagram = parse_class_diagram(text)
+            return render_class_diagram(diagram, use_ascii=use_ascii).to_string()
 
-    if text.startswith("erDiagram"):
-        from .parser.erdiagram import parse_er_diagram
-        from .renderer.erdiagram import render_er_diagram
-        diagram = parse_er_diagram(text)
-        return render_er_diagram(diagram, use_ascii=use_ascii).to_string()
+        if text.startswith("erDiagram"):
+            from .parser.erdiagram import parse_er_diagram
+            from .renderer.erdiagram import render_er_diagram
+            diagram = parse_er_diagram(text)
+            return render_er_diagram(diagram, use_ascii=use_ascii).to_string()
 
-    if text.startswith("block"):
-        from .parser.blockdiagram import parse_block_diagram
-        from .renderer.blockdiagram import render_block_diagram
-        diagram = parse_block_diagram(text)
-        return render_block_diagram(diagram, use_ascii=use_ascii).to_string()
+        if text.startswith("block"):
+            from .parser.blockdiagram import parse_block_diagram
+            from .renderer.blockdiagram import render_block_diagram
+            diagram = parse_block_diagram(text)
+            return render_block_diagram(diagram, use_ascii=use_ascii).to_string()
 
-    if text.startswith("gitGraph") or (text.startswith("%%{init") and "gitGraph" in text):
-        from .parser.gitgraph import parse_git_graph
-        from .renderer.gitgraph import render_git_graph
-        diagram = parse_git_graph(text)
-        return render_git_graph(diagram, use_ascii=use_ascii).to_string()
+        if text.startswith("gitGraph") or (text.startswith("%%{init") and "gitGraph" in text):
+            from .parser.gitgraph import parse_git_graph
+            from .renderer.gitgraph import render_git_graph
+            diagram = parse_git_graph(text)
+            return render_git_graph(diagram, use_ascii=use_ascii).to_string()
 
-    graph = parse(text)
-    from .output.text import render_text
-    return render_text(graph, use_ascii=use_ascii, padding_x=padding_x, padding_y=padding_y, rounded_edges=rounded_edges)
+        graph = parse(text)
+        from .output.text import render_text
+        return render_text(graph, use_ascii=use_ascii, padding_x=padding_x, padding_y=padding_y, rounded_edges=rounded_edges)
+    except Exception as exc:
+        return f"[termmaid] Failed to render diagram: {exc}"
 
 
 def render_rich(
@@ -117,50 +120,54 @@ def render_rich(
     Returns:
         rich.text.Text object
     """
-    text = _strip_frontmatter(source.strip())
-    if text.startswith("sequenceDiagram"):
-        from .parser.sequence import parse_sequence_diagram
-        from .renderer.sequence import render_sequence
-        from .output.rich import render_sequence_rich
-        diagram = parse_sequence_diagram(text)
-        canvas = render_sequence(diagram, use_ascii=use_ascii)
-        return render_sequence_rich(canvas, theme=theme)
+    try:
+        text = _strip_frontmatter(source.strip())
+        if text.startswith("sequenceDiagram"):
+            from .parser.sequence import parse_sequence_diagram
+            from .renderer.sequence import render_sequence
+            from .output.rich import render_sequence_rich
+            diagram = parse_sequence_diagram(text)
+            canvas = render_sequence(diagram, use_ascii=use_ascii)
+            return render_sequence_rich(canvas, theme=theme)
 
-    if text.startswith("classDiagram"):
-        from .parser.classdiagram import parse_class_diagram
-        from .renderer.classdiagram import render_class_diagram
-        from .output.rich import render_sequence_rich
-        diagram = parse_class_diagram(text)
-        canvas = render_class_diagram(diagram, use_ascii=use_ascii)
-        return render_sequence_rich(canvas, theme=theme)
+        if text.startswith("classDiagram"):
+            from .parser.classdiagram import parse_class_diagram
+            from .renderer.classdiagram import render_class_diagram
+            from .output.rich import render_sequence_rich
+            diagram = parse_class_diagram(text)
+            canvas = render_class_diagram(diagram, use_ascii=use_ascii)
+            return render_sequence_rich(canvas, theme=theme)
 
-    if text.startswith("erDiagram"):
-        from .parser.erdiagram import parse_er_diagram
-        from .renderer.erdiagram import render_er_diagram
-        from .output.rich import render_sequence_rich
-        diagram = parse_er_diagram(text)
-        canvas = render_er_diagram(diagram, use_ascii=use_ascii)
-        return render_sequence_rich(canvas, theme=theme)
+        if text.startswith("erDiagram"):
+            from .parser.erdiagram import parse_er_diagram
+            from .renderer.erdiagram import render_er_diagram
+            from .output.rich import render_sequence_rich
+            diagram = parse_er_diagram(text)
+            canvas = render_er_diagram(diagram, use_ascii=use_ascii)
+            return render_sequence_rich(canvas, theme=theme)
 
-    if text.startswith("block"):
-        from .parser.blockdiagram import parse_block_diagram
-        from .renderer.blockdiagram import render_block_diagram
-        from .output.rich import render_sequence_rich
-        diagram = parse_block_diagram(text)
-        canvas = render_block_diagram(diagram, use_ascii=use_ascii)
-        return render_sequence_rich(canvas, theme=theme)
+        if text.startswith("block"):
+            from .parser.blockdiagram import parse_block_diagram
+            from .renderer.blockdiagram import render_block_diagram
+            from .output.rich import render_sequence_rich
+            diagram = parse_block_diagram(text)
+            canvas = render_block_diagram(diagram, use_ascii=use_ascii)
+            return render_sequence_rich(canvas, theme=theme)
 
-    if text.startswith("gitGraph") or (text.startswith("%%{init") and "gitGraph" in text):
-        from .parser.gitgraph import parse_git_graph
-        from .renderer.gitgraph import render_git_graph
-        from .output.rich import render_sequence_rich
-        diagram = parse_git_graph(text)
-        canvas = render_git_graph(diagram, use_ascii=use_ascii)
-        return render_sequence_rich(canvas, theme=theme)
+        if text.startswith("gitGraph") or (text.startswith("%%{init") and "gitGraph" in text):
+            from .parser.gitgraph import parse_git_graph
+            from .renderer.gitgraph import render_git_graph
+            from .output.rich import render_sequence_rich
+            diagram = parse_git_graph(text)
+            canvas = render_git_graph(diagram, use_ascii=use_ascii)
+            return render_sequence_rich(canvas, theme=theme)
 
-    graph = parse(text)
-    from .output.rich import render_rich as _render_rich
-    return _render_rich(graph, use_ascii=use_ascii, padding_x=padding_x, padding_y=padding_y, rounded_edges=rounded_edges, theme=theme)
+        graph = parse(text)
+        from .output.rich import render_rich as _render_rich
+        return _render_rich(graph, use_ascii=use_ascii, padding_x=padding_x, padding_y=padding_y, rounded_edges=rounded_edges, theme=theme)
+    except Exception as exc:
+        from rich.text import Text
+        return Text(f"[termmaid] Failed to render diagram: {exc}")
 
 
 # Lazy import for MermaidWidget

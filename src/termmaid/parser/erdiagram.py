@@ -240,4 +240,7 @@ def parse_er_diagram(text: str) -> ERDiagram:
                     diagram.entities[entity_name].alias = alias
             continue
 
+        # Unrecognized line
+        diagram.warnings.append(f"Unrecognized line: {stripped!r}")
+
     return diagram

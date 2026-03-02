@@ -109,6 +109,7 @@ class Graph:
     class_defs: dict[str, dict[str, str]] = field(default_factory=dict)
     node_styles: dict[str, dict[str, str]] = field(default_factory=dict)
     link_styles: dict[int, dict[str, str]] = field(default_factory=dict)
+    warnings: list[str] = field(default_factory=list)
 
     def add_node(self, node: Node) -> None:
         if node.id not in self.nodes:

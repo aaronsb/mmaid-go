@@ -116,6 +116,10 @@ class _GitGraphParser:
                 branch_name = parts[1].strip().strip('"')
                 if branch_name in self._branch_set:
                     self.current_branch = branch_name
+                else:
+                    self.diagram.warnings.append(
+                        f"Checkout non-existent branch: {branch_name!r}"
+                    )
             return
 
         # merge
@@ -127,6 +131,9 @@ class _GitGraphParser:
         if line.startswith("cherry-pick"):
             self._parse_cherry_pick(line)
             return
+
+        # Unrecognized line
+        self.diagram.warnings.append(f"Unrecognized line: {line!r}")
 
     def _parse_commit(self, line: str) -> None:
         """Parse a commit line with optional id, type, tag attributes."""
@@ -241,6 +248,9 @@ class _GitGraphParser:
         source_id = m.group(1)
 
         if source_id not in self._commit_map:
+            self.diagram.warnings.append(
+                f"Cherry-pick non-existent commit: {source_id!r}"
+            )
             return
 
         commit_id = f"{source_id}-cherry"

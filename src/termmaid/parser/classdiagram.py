@@ -248,4 +248,7 @@ def parse_class_diagram(text: str) -> ClassDiagram:
             diagram.classes[class_name].members.append(_parse_member_text(member_text))
             continue
 
+        # Unrecognized line
+        diagram.warnings.append(f"Unrecognized line: {stripped!r}")
+
     return diagram

@@ -27,7 +27,7 @@ def update_snapshots(request: pytest.FixtureRequest) -> bool:
 
 
 def get_fixture_pairs() -> list[tuple[str, Path, Path]]:
-    """Get all (name, input_path, expected_path) tuples for snapshot testing."""
+    """Get all (name, input_path, expected_path) tuples for flowchart snapshot testing."""
     pairs = []
     if not FLOWCHARTS_DIR.exists():
         return pairs
@@ -35,6 +35,23 @@ def get_fixture_pairs() -> list[tuple[str, Path, Path]]:
         name = mmd_file.stem
         expected_file = EXPECTED_DIR / f"{name}.txt"
         pairs.append((name, mmd_file, expected_file))
+    return pairs
+
+
+def get_all_fixture_pairs() -> list[tuple[str, Path, Path]]:
+    """Scan all diagram-type subdirectories for (name, input_path, expected_path) tuples."""
+    pairs = []
+    if not FIXTURES_DIR.exists():
+        return pairs
+    for subdir in sorted(FIXTURES_DIR.iterdir()):
+        if not subdir.is_dir() or subdir.name in ("expected", "flowcharts"):
+            continue
+        diagram_type = subdir.name
+        expected_subdir = EXPECTED_DIR / diagram_type
+        for mmd_file in sorted(subdir.glob("*.mmd")):
+            name = f"{diagram_type}/{mmd_file.stem}"
+            expected_file = expected_subdir / f"{mmd_file.stem}.txt"
+            pairs.append((name, mmd_file, expected_file))
     return pairs
 
 

@@ -3,7 +3,15 @@ from __future__ import annotations
 
 import re
 
-from ..model.sequence import Message, Note, Participant, SequenceDiagram
+from ..model.sequence import (
+    ActivateEvent,
+    Block,
+    BlockSection,
+    Message,
+    Note,
+    Participant,
+    SequenceDiagram,
+)
 
 # Arrow patterns ordered by specificity (longest match first)
 _ARROW_PATTERNS: list[tuple[str, str, str]] = [
@@ -36,9 +44,30 @@ _NOTE_RE = re.compile(
     r"^\s*Note\s+(right\s+of|left\s+of|over)\s+(\S+?)(?:\s*,\s*(\S+?))?\s*:\s*(.*?)\s*$",
     re.IGNORECASE)
 
-# Lines to skip silently (control blocks, etc.)
+# Block start: loop, alt, opt, par, critical, break (with optional label)
+_BLOCK_START_RE = re.compile(
+    r"^\s*(loop|alt|opt|par|critical|break)\b\s*(.*?)\s*$",
+    re.IGNORECASE,
+)
+
+# Block section: else, and (with optional label)
+_BLOCK_SECTION_RE = re.compile(
+    r"^\s*(else|and)\b\s*(.*?)\s*$",
+    re.IGNORECASE,
+)
+
+# Block end
+_BLOCK_END_RE = re.compile(r"^\s*end\s*$", re.IGNORECASE)
+
+# Activate/deactivate keywords
+_ACTIVATE_RE = re.compile(
+    r"^\s*(activate|deactivate)\s+(\S+)\s*$",
+    re.IGNORECASE,
+)
+
+# Lines to skip silently (rect, destroy — purely visual in Mermaid, unsupported)
 _SKIP_RE = re.compile(
-    r"^\s*(?:alt\s|else\s|end\b|loop\s|opt\s|par\s|and\s|critical\s|break\s|rect\s|activate\s|deactivate\s|destroy\s)",
+    r"^\s*(?:rect\s|destroy\s)",
     re.IGNORECASE,
 )
 
@@ -63,6 +92,11 @@ def parse_sequence_diagram(text: str) -> SequenceDiagram:
     """Parse a Mermaid sequence diagram source into a SequenceDiagram model."""
     diagram = SequenceDiagram()
 
+    # Stack-based parsing for nested blocks
+    # event_stack[0] is the top-level events list
+    event_stack: list[list] = [diagram.events]
+    block_stack: list[Block] = []
+
     lines = text.split("\n")
     for line in lines:
         stripped = line.strip()
@@ -76,8 +110,49 @@ def parse_sequence_diagram(text: str) -> SequenceDiagram:
             diagram.autonumber = True
             continue
 
-        # Skip control blocks and other unsupported constructs
+        # Skip purely visual constructs
         if _SKIP_RE.match(stripped):
+            continue
+
+        # Block end
+        if _BLOCK_END_RE.match(stripped):
+            if block_stack:
+                block_stack.pop()
+                event_stack.pop()
+            continue
+
+        # Block section (else / and)
+        m = _BLOCK_SECTION_RE.match(stripped)
+        if m and block_stack:
+            section_keyword = m.group(1).lower()
+            section_label = m.group(2).strip()
+            section = BlockSection(label=section_label, events=[])
+            block_stack[-1].sections.append(section)
+            # Switch current event target to this section's events
+            event_stack[-1] = section.events
+            continue
+
+        # Block start (loop, alt, opt, par, critical, break)
+        m = _BLOCK_START_RE.match(stripped)
+        if m:
+            kind = m.group(1).lower()
+            label = m.group(2).strip()
+            block = Block(kind=kind, label=label)
+            event_stack[-1].append(block)
+            block_stack.append(block)
+            event_stack.append(block.events)
+            continue
+
+        # Activate/deactivate keywords
+        m = _ACTIVATE_RE.match(stripped)
+        if m:
+            keyword = m.group(1).lower()
+            pid = m.group(2)
+            _ensure_participant(diagram, pid)
+            event_stack[-1].append(ActivateEvent(
+                participant=pid,
+                active=(keyword == "activate"),
+            ))
             continue
 
         # Note declarations
@@ -91,7 +166,7 @@ def parse_sequence_diagram(text: str) -> SequenceDiagram:
             _ensure_participant(diagram, p1)
             if p2:
                 _ensure_participant(diagram, p2)
-            diagram.events.append(Note(
+            event_stack[-1].append(Note(
                 text=note_text.strip(),
                 position=position,
                 participants=participants,
@@ -117,20 +192,48 @@ def parse_sequence_diagram(text: str) -> SequenceDiagram:
         # message lines
         m = _MESSAGE_RE.match(stripped)
         if m:
-            source, arrow, target, label = m.group(1), m.group(2), m.group(3), m.group(4)
-            # Strip activation/deactivation markers (+/-) from participant IDs
-            source = source.lstrip("+-")
-            target = target.lstrip("+-")
+            raw_source, arrow, raw_target, label = m.group(1), m.group(2), m.group(3), m.group(4)
+
+            # Detect inline activation markers (+/-) on source/target
+            source_activate = None
+            target_activate = None
+
+            source = raw_source
+            if source.startswith("+") or source.startswith("-"):
+                source_activate = source[0] == "+"
+                source = source[1:]
+            target = raw_target
+            if target.startswith("+") or target.startswith("-"):
+                target_activate = target[0] == "+"
+                target = target[1:]
+            # Also check trailing +/- on target (Mermaid supports Alice->>+Bob)
+            if target.endswith("+") or target.endswith("-"):
+                target_activate = target[-1] == "+"
+                target = target[:-1]
+
             _ensure_participant(diagram, source)
             _ensure_participant(diagram, target)
             line_type, arrow_type = _lookup_arrow(arrow)
-            diagram.events.append(Message(
+            event_stack[-1].append(Message(
                 source=source,
                 target=target,
                 label=label.strip() if label else "",
                 line_type=line_type,
                 arrow_type=arrow_type,
             ))
+
+            # Emit ActivateEvents for inline markers
+            if source_activate is not None:
+                event_stack[-1].append(ActivateEvent(
+                    participant=source, active=source_activate,
+                ))
+            if target_activate is not None:
+                event_stack[-1].append(ActivateEvent(
+                    participant=target, active=target_activate,
+                ))
             continue
+
+        # Unrecognized line
+        diagram.warnings.append(f"Unrecognized line: {stripped!r}")
 
     return diagram

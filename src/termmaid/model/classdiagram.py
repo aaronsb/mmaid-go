@@ -44,3 +44,4 @@ class ClassDiagram:
     relationships: list[Relationship] = field(default_factory=list)
     notes: list[Note] = field(default_factory=list)
     direction: str = "TB"              # "TB" or "LR"
+    warnings: list[str] = field(default_factory=list)
