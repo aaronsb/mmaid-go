@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 
-from ..graph.model import Direction, Edge, EdgeStyle, Graph, Node, Subgraph
+from ..graph.model import Direction, Edge, EdgeStyle, Graph, GraphNote, Node, Subgraph
 from ..graph.shapes import NodeShape
 
 
@@ -79,7 +79,19 @@ class _StateDiagramParser:
                 self._subgraph_stack.pop()
             return
 
-        # Note (skip for now)
+        # Note: note right of A : text  OR  note left of A : text
+        note_match = re.match(
+            r'note\s+(right\s+of|left\s+of)\s+(\S+)\s*:\s*(.*)',
+            line, re.IGNORECASE
+        )
+        if note_match:
+            position = note_match.group(1).lower().replace(" ", "")  # "rightof"/"leftof"
+            target = note_match.group(2)
+            text = re.sub(r'<br\s*/?>', '\n', note_match.group(3).strip(), flags=re.IGNORECASE)
+            self._ensure_node(target, self._aliases.get(target, target), NodeShape.ROUNDED)
+            self.graph.notes.append(GraphNote(text=text, position=position, target=target))
+            return
+        # Skip other note variants we don't handle yet
         if lower.startswith("note "):
             return
 

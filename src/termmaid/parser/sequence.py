@@ -7,6 +7,7 @@ from ..model.sequence import (
     ActivateEvent,
     Block,
     BlockSection,
+    DestroyEvent,
     Message,
     Note,
     Participant,
@@ -44,9 +45,9 @@ _NOTE_RE = re.compile(
     r"^\s*Note\s+(right\s+of|left\s+of|over)\s+(\S+?)(?:\s*,\s*(\S+?))?\s*:\s*(.*?)\s*$",
     re.IGNORECASE)
 
-# Block start: loop, alt, opt, par, critical, break (with optional label)
+# Block start: loop, alt, opt, par, critical, break, rect (with optional label)
 _BLOCK_START_RE = re.compile(
-    r"^\s*(loop|alt|opt|par|critical|break)\b\s*(.*?)\s*$",
+    r"^\s*(loop|alt|opt|par|critical|break|rect)\b\s*(.*?)\s*$",
     re.IGNORECASE,
 )
 
@@ -65,9 +66,9 @@ _ACTIVATE_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Lines to skip silently (rect, destroy — purely visual in Mermaid, unsupported)
+# Lines to skip silently
 _SKIP_RE = re.compile(
-    r"^\s*(?:rect\s|destroy\s)",
+    r"^\s*(?:_NOTHING_MATCHES_THIS_)",
     re.IGNORECASE,
 )
 
@@ -172,6 +173,14 @@ def parse_sequence_diagram(text: str) -> SequenceDiagram:
                 position=position,
                 participants=participants,
             ))
+            continue
+
+        # Destroy keyword
+        m = re.match(r'^\s*destroy\s+(\S+)\s*$', stripped, re.IGNORECASE)
+        if m:
+            pid = m.group(1)
+            _ensure_participant(diagram, pid)
+            event_stack[-1].append(DestroyEvent(participant=pid))
             continue
 
         # Participant kind declarations (participant, actor, database, etc.)

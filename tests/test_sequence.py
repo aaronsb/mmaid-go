@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from termmaid import render
 from termmaid.parser.sequence import parse_sequence_diagram
-from termmaid.model.sequence import ActivateEvent, Block, Message, Note
+from termmaid.model.sequence import ActivateEvent, Block, DestroyEvent, Message, Note
 
 
 # ── Parser tests ──────────────────────────────────────────────────────────────
@@ -516,6 +516,70 @@ class TestSequenceBlockParser:
         # Second: -Alice deactivates Alice
         assert activations[1].participant == "Alice"
         assert activations[1].active is False
+
+
+class TestSequenceDestroyAndRect:
+    """Tests for destroy and rect features."""
+
+    def test_destroy_parsed(self):
+        d = parse_sequence_diagram(
+            "sequenceDiagram\n"
+            "  Alice->>Bob: Hello\n"
+            "  destroy Bob\n"
+            "  Bob-->>Alice: Goodbye"
+        )
+        destroy_events = [e for e in d.events if isinstance(e, DestroyEvent)]
+        assert len(destroy_events) == 1
+        assert destroy_events[0].participant == "Bob"
+
+    def test_destroy_rendered(self):
+        output = render(
+            "sequenceDiagram\n"
+            "  Alice->>Bob: Hello\n"
+            "  destroy Bob\n"
+            "  Bob-->>Alice: Goodbye"
+        )
+        # X marker should appear on Bob's lifeline
+        assert "╳" in output or "X" in output
+
+    def test_rect_parsed_as_block(self):
+        d = parse_sequence_diagram(
+            "sequenceDiagram\n"
+            "  rect rgb(200,200,255)\n"
+            "  Alice->>Bob: Hello\n"
+            "  Bob-->>Alice: Hi\n"
+            "  end"
+        )
+        blocks = [e for e in d.events if isinstance(e, Block)]
+        assert len(blocks) == 1
+        assert blocks[0].kind == "rect"
+
+    def test_rect_rendered(self):
+        output = render(
+            "sequenceDiagram\n"
+            "  rect rgb(200,200,255)\n"
+            "  Alice->>Bob: Hello\n"
+            "  Bob-->>Alice: Hi\n"
+            "  end"
+        )
+        assert "[rect]" in output
+
+    def test_destroy_no_warning(self):
+        d = parse_sequence_diagram(
+            "sequenceDiagram\n"
+            "  Alice->>Bob: Hello\n"
+            "  destroy Bob"
+        )
+        assert d.warnings == []
+
+    def test_rect_no_warning(self):
+        d = parse_sequence_diagram(
+            "sequenceDiagram\n"
+            "  rect rgb(200,200,255)\n"
+            "  Alice->>Bob: Hello\n"
+            "  end"
+        )
+        assert d.warnings == []
 
 
 class TestSequenceBlockRendering:

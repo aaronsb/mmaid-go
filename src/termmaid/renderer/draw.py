@@ -12,13 +12,13 @@ Drawing order (back to front):
 """
 from __future__ import annotations
 
-from ..graph.model import Direction, EdgeStyle, Graph
+from ..graph.model import Direction, EdgeStyle, Graph, GraphNote
 from ..graph.shapes import NodeShape
 from ..layout.grid import GridLayout, NodePlacement, compute_layout
 from ..routing.router import AttachDir, RoutedEdge, route_edges
 from .canvas import Canvas
 from .charset import ASCII, UNICODE, CharSet
-from .shapes import SHAPE_RENDERERS
+from .shapes import SHAPE_RENDERERS, draw_rectangle
 
 
 def render_graph(
@@ -98,6 +98,9 @@ def render_graph_canvas(
 
     # 4. Draw subgraph labels (on top of everything else)
     _draw_subgraph_labels(canvas, layout, cs)
+
+    # 5. Draw notes (on top of everything else)
+    _draw_notes(canvas, graph, layout, cs)
 
     # Flip if needed
     if needs_v_flip:
@@ -457,3 +460,31 @@ def _draw_edge_label(
         mid_idx = len(re.draw_path) // 2
         mx, my = re.draw_path[mid_idx]
         canvas.put_text(my - 1, mx + 1, label, style="edge_label")
+
+
+def _draw_notes(canvas: Canvas, graph: Graph, layout: GridLayout, cs: CharSet) -> None:
+    """Draw note boxes next to their target nodes."""
+    for note in graph.notes:
+        if note.target not in layout.placements:
+            continue
+        p = layout.placements[note.target]
+
+        lines = note.text.split("\n")
+        note_width = max(len(line) for line in lines) + 4
+        note_height = len(lines) + 2
+
+        if note.position == "rightof":
+            note_x = p.draw_x + p.draw_width + 2
+        else:  # leftof
+            note_x = p.draw_x - note_width - 2
+            note_x = max(0, note_x)
+
+        note_y = p.draw_y + (p.draw_height - note_height) // 2
+
+        # Extend canvas if needed
+        needed_w = note_x + note_width + 2
+        needed_h = note_y + note_height + 2
+        if needed_w > canvas.width or needed_h > canvas.height:
+            canvas.resize(max(canvas.width, needed_w), max(canvas.height, needed_h))
+
+        draw_rectangle(canvas, note_x, note_y, note_width, note_height, note.text, cs, style="node")

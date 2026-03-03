@@ -206,6 +206,38 @@ class TestGitGraphParser:
         assert "feature" in branch_names
         assert "hotfix" in branch_names
 
+    def test_reset_to_branch(self):
+        d = parse_git_graph(
+            "gitGraph\n"
+            "  commit\n"
+            "  branch dev\n"
+            "  commit\n"
+            "  checkout main\n"
+            "  reset dev\n"
+            "  commit"
+        )
+        # After reset dev, main's HEAD moves to dev's HEAD
+        # So the last commit's parent should be dev's last commit
+        dev_head = None
+        for c in d.commits:
+            if c.branch == "dev":
+                dev_head = c.id
+        last_commit = d.commits[-1]
+        assert last_commit.branch == "main"
+        assert dev_head in last_commit.parents
+
+    def test_reset_ancestor(self):
+        d = parse_git_graph(
+            "gitGraph\n"
+            '  commit id: "c1"\n'
+            '  commit id: "c2"\n'
+            '  commit id: "c3"\n'
+            "  reset main~2\n"
+            '  commit id: "c4"'
+        )
+        c4 = [c for c in d.commits if c.id == "c4"][0]
+        assert c4.parents == ["c1"]  # walked back 2 from c3
+
 
 # ── Rendering tests ──────────────────────────────────────────────────────────
 

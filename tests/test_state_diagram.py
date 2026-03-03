@@ -162,7 +162,7 @@ class TestStateDiagramParser:
         assert len(g.subgraphs) == 1
         assert len(g.subgraphs[0].children) == 1
 
-    def test_notes_skipped_gracefully(self):
+    def test_notes_parsed(self):
         g = parse_state_diagram(
             "stateDiagram-v2\n"
             "  A --> B\n"
@@ -170,6 +170,28 @@ class TestStateDiagramParser:
         )
         assert len(g.edges) == 1
         assert "A" in g.nodes
+        assert len(g.notes) == 1
+        assert g.notes[0].text == "some note"
+        assert g.notes[0].position == "rightof"
+        assert g.notes[0].target == "A"
+
+    def test_note_left_of(self):
+        g = parse_state_diagram(
+            "stateDiagram-v2\n"
+            "  A --> B\n"
+            '  note left of B : left note'
+        )
+        assert len(g.notes) == 1
+        assert g.notes[0].position == "leftof"
+        assert g.notes[0].target == "B"
+
+    def test_note_rendered(self):
+        output = render(
+            "stateDiagram-v2\n"
+            "  A --> B\n"
+            '  note right of A : This is a note'
+        )
+        assert "This is a note" in output
 
 
 # ── Auto-detection tests ─────────────────────────────────────────────────────

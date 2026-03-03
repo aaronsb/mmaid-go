@@ -132,8 +132,9 @@ def parse_class_diagram(text: str) -> ClassDiagram:
         if not stripped or stripped.startswith("classDiagram") or stripped.startswith("%%") or stripped == "---":
             continue
 
-        # Skip unsupported constructs
+        # Skip unsupported constructs (with warning)
         if _SKIP_RE.match(stripped):
+            diagram.warnings.append(f"Unsupported directive (ignored): {stripped!r}")
             continue
 
         # Closing brace (stray)

@@ -132,6 +132,11 @@ class _GitGraphParser:
             self._parse_cherry_pick(line)
             return
 
+        # reset
+        if line.startswith("reset "):
+            self._parse_reset(line)
+            return
+
         # Unrecognized line
         self.diagram.warnings.append(f"Unrecognized line: {line!r}")
 
@@ -279,6 +284,37 @@ class _GitGraphParser:
         self._seq += 1
         self.diagram.commits.append(commit)
         self._commit_map[commit_id] = commit
+        self.branch_heads[self.current_branch] = commit_id
+
+    def _parse_reset(self, line: str) -> None:
+        """Parse reset line: reset <ref>[~<N>]."""
+        m = re.match(r'reset\s+"?([^"~]+?)"?\s*(?:~(\d+))?\s*$', line)
+        if not m:
+            return
+        ref = m.group(1).strip()
+        ancestor = int(m.group(2)) if m.group(2) else 0
+
+        # Resolve ref → commit id
+        if ref in self.branch_heads:
+            commit_id = self.branch_heads[ref]
+        elif ref in self._commit_map:
+            commit_id = ref
+        else:
+            self.diagram.warnings.append(f"Reset to unknown ref: {ref!r}")
+            return
+
+        # Walk back N ancestors
+        for _ in range(ancestor):
+            commit = self._commit_map.get(commit_id)
+            if commit and commit.parents:
+                commit_id = commit.parents[0]
+            else:
+                self.diagram.warnings.append(
+                    f"Cannot walk back {ancestor} ancestors from {ref!r}"
+                )
+                return
+
+        # Move current branch HEAD
         self.branch_heads[self.current_branch] = commit_id
 
     def _ensure_branch(

@@ -73,6 +73,25 @@ class TestWarnings:
         )
         assert any("non-existent commit" in w.lower() for w in d.warnings)
 
+    def test_classdiagram_style_directive_warns(self):
+        d = parse_class_diagram(
+            "classDiagram\n"
+            "  class Foo\n"
+            "  classDef highlight fill:#f9f\n"
+            "  style Foo highlight"
+        )
+        assert len([w for w in d.warnings if "Unsupported directive" in w]) == 2
+
+    def test_gitgraph_reset_unknown_ref_warns(self):
+        d = parse_git_graph("gitGraph\n  commit\n  reset nonexistent")
+        assert any("unknown ref" in w.lower() for w in d.warnings)
+
+    def test_gitgraph_valid_reset_no_warnings(self):
+        d = parse_git_graph(
+            "gitGraph\n  commit\n  branch dev\n  commit\n  checkout main\n  reset dev\n  commit"
+        )
+        assert d.warnings == []
+
     def test_gitgraph_valid_no_warnings(self):
         d = parse_git_graph(
             "gitGraph\n"

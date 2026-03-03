@@ -7,6 +7,14 @@ from .shapes import NodeShape
 
 
 @dataclass
+class GraphNote:
+    """A note attached to a node in the graph."""
+    text: str
+    position: str  # "rightof" or "leftof"
+    target: str    # node id
+
+
+@dataclass
 class LabelSegment:
     """A segment of a node label with optional bold/italic styling."""
     text: str
@@ -110,6 +118,7 @@ class Graph:
     node_styles: dict[str, dict[str, str]] = field(default_factory=dict)
     link_styles: dict[int, dict[str, str]] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
+    notes: list[GraphNote] = field(default_factory=list)
 
     def add_node(self, node: Node) -> None:
         if node.id not in self.nodes:

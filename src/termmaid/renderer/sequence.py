@@ -5,7 +5,7 @@ and A* edge routing used by flowcharts.
 """
 from __future__ import annotations
 
-from ..model.sequence import ActivateEvent, Block, BlockSection, Message, Note, SequenceDiagram
+from ..model.sequence import ActivateEvent, Block, BlockSection, DestroyEvent, Message, Note, SequenceDiagram
 from .canvas import Canvas
 from .charset import ASCII, UNICODE, CharSet
 from .shapes import draw_rectangle, draw_cylinder
@@ -123,6 +123,9 @@ def _compute_layout(
         if isinstance(ev, ActivateEvent):
             # No row needed
             event_heights.append(0)
+            effective_labels.append("")
+        elif isinstance(ev, DestroyEvent):
+            event_heights.append(_EVENT_ROW_H)
             effective_labels.append("")
         elif isinstance(ev, Note):
             lines = _note_lines(ev)
@@ -502,6 +505,12 @@ def render_sequence(diagram: SequenceDiagram, *, use_ascii: bool = False) -> Can
         bw = box_widths[i]
         _draw_participant_header(canvas, cx, bw, header_height, p, cs, use_ascii)
 
+    # ── Compute destroyed participants and their destruction rows ──
+    destroyed: dict[str, int] = {}  # participant -> row where destroyed
+    for idx, ev in enumerate(flat_events):
+        if isinstance(ev, DestroyEvent) and ev.participant not in destroyed:
+            destroyed[ev.participant] = row_offsets[idx]
+
     # ── 2. Draw lifelines ─────────────────────────────────────────
     lifeline_start = _TOP_MARGIN + header_height
     lifeline_end = height - _BOTTOM_MARGIN - 1
@@ -509,7 +518,8 @@ def render_sequence(diagram: SequenceDiagram, *, use_ascii: bool = False) -> Can
     active_char = "[" if use_ascii else "║"
     for i, p in enumerate(diagram.participants):
         cx = col_centers[i]
-        for r in range(lifeline_start, lifeline_end + 1):
+        end_row = destroyed.get(p.id, lifeline_end + 1)
+        for r in range(lifeline_start, min(end_row, lifeline_end + 1)):
             if _is_activated(activation_ranges, p.id, r):
                 canvas.put(r, cx, active_char, merge=False, style="edge")
             else:
@@ -537,6 +547,14 @@ def render_sequence(diagram: SequenceDiagram, *, use_ascii: bool = False) -> Can
 
         if isinstance(ev, ActivateEvent):
             # No visual output needed (lifeline already handles it)
+            continue
+
+        if isinstance(ev, DestroyEvent):
+            pi = _participant_index(diagram, ev.participant)
+            if pi >= 0:
+                cx = col_centers[pi]
+                x_char = "X" if use_ascii else "╳"
+                canvas.put(row, cx, x_char, merge=False, style="arrow")
             continue
 
         if isinstance(ev, Note):

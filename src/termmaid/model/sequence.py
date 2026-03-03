@@ -49,8 +49,13 @@ class Block:
     sections: list[BlockSection] = field(default_factory=list)
 
 
+@dataclass
+class DestroyEvent:
+    participant: str
+
+
 # Union type for all event types
-Event = Union[Message, Note, ActivateEvent, Block]
+Event = Union[Message, Note, ActivateEvent, Block, DestroyEvent]
 
 
 @dataclass

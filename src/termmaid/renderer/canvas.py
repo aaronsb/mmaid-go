@@ -121,6 +121,21 @@ class Canvas:
             ["default" for _ in range(width)] for _ in range(height)
         ]
 
+    def resize(self, new_width: int, new_height: int) -> None:
+        """Expand the canvas to at least the given dimensions."""
+        if new_width <= self.width and new_height <= self.height:
+            return
+        new_w = max(self.width, new_width)
+        new_h = max(self.height, new_height)
+        for r in range(self.height):
+            self._grid[r].extend(" " for _ in range(new_w - self.width))
+            self._style_grid[r].extend("default" for _ in range(new_w - self.width))
+        for _ in range(new_h - self.height):
+            self._grid.append([" " for _ in range(new_w)])
+            self._style_grid.append(["default" for _ in range(new_w)])
+        self.width = new_w
+        self.height = new_h
+
     def get(self, row: int, col: int) -> str:
         if 0 <= row < self.height and 0 <= col < self.width:
             return self._grid[row][col]
