@@ -1,6 +1,6 @@
 # termmaid
 
-Render [Mermaid](https://mermaid.js.org/) diagrams as Unicode art in the terminal. Pure Python, zero dependencies.
+Terminal-native Mermaid rendering for Python.
 
 ```
 ┌─────────┐    ┌───────────┐    ┌───◇───┐    ╭────────╮
@@ -10,13 +10,20 @@ Render [Mermaid](https://mermaid.js.org/) diagrams as Unicode art in the termina
 └─────────┘    └───────────┘    └───◇───┘    ╰────────╯
 ```
 
+Render [Mermaid](https://mermaid.js.org/) diagrams as Unicode art directly in your terminal. Pure Python, zero dependencies.
+
+## Features
+
+- **7 diagram types:** flowcharts, sequence, class, ER, state, block, and git graphs
+- **Zero dependencies:** pure Python, nothing to install beyond the package itself
+- **Rich and Textual integration:** colored output and TUI widgets with optional extras
+- **6 color themes:** default, terra, neon, mono, amber, phosphor
+- **ASCII fallback:** works on any terminal, even the most basic ones
+- **Pipe-friendly CLI:** `cat diagram.mmd | termmaid` just works
+
 ## Why?
 
-I needed Mermaid rendering for a Python project and couldn't find a library that worked
-without a browser, Node.js, or external services. The existing tools in this space are
-great, specially [mermaid-ascii](https://github.com/AlexanderGrooff/mermaid-ascii) (Go) and
-[beautiful-mermaid](https://github.com/lukilabs/beautiful-mermaid) (TypeScript), but
-neither offered a native Python library I could import and call directly.
+Mermaid is great for documentation, but rendering it usually means spinning up a browser or calling an external service. termmaid lets you render diagrams over SSH, in CI logs, inside TUI apps, or anywhere you have a Python environment. It was built because the existing tools in this space, like [mermaid-ascii](https://github.com/AlexanderGrooff/mermaid-ascii) (Go) and [beautiful-mermaid](https://github.com/lukilabs/beautiful-mermaid) (TypeScript), don't offer a native Python library you can import and call directly.
 
 ## Install
 
@@ -62,7 +69,7 @@ widget = MermaidWidget("graph LR\n  A --> B")
 
 ### Flowcharts
 
-All five directions: `LR`, `RL`, `TD`/`TB`, `BT`
+All directions supported: `LR`, `RL`, `TD`/`TB`, `BT`.
 
 ```mermaid
 graph TD
@@ -79,20 +86,24 @@ graph TD
 │             │
 └──────┬──────┘
        │
+       │
        ▼
 ┌──────◇──────┐
 │             │
 │  Is valid?  │
 │             │
 └──────◇──────┘
-       │No
-       ╰Yes─────────────╮
-       ▼                ▼
-╭─────────────╮    ┌─────────┐
-│             │    │         │
-│   Process   │    │  Error  │
-│             │    │         │
-╰──────┬──────╯    └─────────┘
+       │
+       │
+       ╰──────────────────╮
+    Yes│                  │No
+       ▼                  ▼
+╭─────────────╮    ┌─────────────┐
+│             │    │             │
+│   Process   │    │    Error    │
+│             │    │             │
+╰──────┬──────╯    └─────────────┘
+       │
        │
        ▼
 ╭─────────────╮
@@ -326,17 +337,17 @@ gitGraph
 
 ## Python API
 
-### `render(source, *, use_ascii=False, padding_x=4, padding_y=2, rounded_edges=True) -> str`
+### `render(source, ...) -> str`
 
 Render a Mermaid diagram as a plain text string. Auto-detects diagram type.
 
-### `render_rich(source, *, use_ascii=False, padding_x=4, padding_y=2, rounded_edges=True, theme="default") -> rich.text.Text`
+### `render_rich(source, ..., theme="default") -> rich.text.Text`
 
 Render as a [Rich](https://rich.readthedocs.io/) `Text` object with colors. Requires `pip install termmaid[rich]`.
 
 ### `MermaidWidget`
 
-A [Textual](https://textual.textualize.io/) widget with a reactive `source` attribute. Requires `pip install termmaid[textual]`.
+A [Textual](https://textual.textualize.io/) widget with a reactive `source` attribute. Requires `pip install termmaid[textual]`. Updates live when you change the `source` property.
 
 ```python
 from termmaid import MermaidWidget
@@ -348,7 +359,7 @@ class MyApp(App):
 
 ## Themes
 
-Six built-in color themes for `--color` / `render_rich()`:
+Six built-in themes for `--color` / `render_rich()`:
 
 | Theme | Description |
 |-------|-------------|
@@ -368,13 +379,12 @@ pip install termmaid[textual]   # Textual TUI widget
 
 ## Limitations
 
-- **Layout engine is approximate.** Node positioning uses a fixed-stride grid with a barycenter heuristic (up to 8 passes with improvement tracking). Graphs with many cross-layer edges may still produce crossings.
-- **Manhattan-only edge routing.** Edges use A* pathfinding (4-directional, capped at 5,000 iterations). Dense graphs may have overlapping edges.
+- **Layout engine is approximate.** Node positioning uses a grid-based barycenter heuristic. Graphs with many cross-layer edges may still produce crossings.
+- **Manhattan-only edge routing.** Edges use A* pathfinding on a grid. Very dense graphs may have overlapping edges.
 
 ## Acknowledgements
 
-Inspired by [mermaid-ascii](https://github.com/AlexanderGrooff/mermaid-ascii) by Alexander Grooff
-and [beautiful-mermaid](https://github.com/lukilabs/beautiful-mermaid) by Lukilabs.
+Inspired by [mermaid-ascii](https://github.com/AlexanderGrooff/mermaid-ascii) by Alexander Grooff and [beautiful-mermaid](https://github.com/lukilabs/beautiful-mermaid) by Lukilabs.
 
 ## License
 

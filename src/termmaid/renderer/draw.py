@@ -208,7 +208,7 @@ def _draw_edges(
     Labels are drawn in a second pass so they aren't overwritten by
     later edges' line segments.
     """
-    # Pass 1: lines, corners, arrows, T-junctions
+    # Pass 1a: lines and corners
     for re in routed:
         if len(re.draw_path) < 2:
             continue
@@ -222,8 +222,6 @@ def _draw_edges(
             edge_style_key = f"linkstyle:{re.index}"
         else:
             edge_style_key = "edge"
-
-        arrow_style_key = edge_style_key if edge_style_key != "edge" else "arrow"
 
         # Select line characters based on edge style
         h_char, v_char = _edge_line_chars(edge.style, cs)
@@ -266,6 +264,23 @@ def _draw_edges(
             corner = _get_corner_char(x_prev, y_prev, x_curr, y_curr, x_next, y_next, cs, rounded=rounded_edges)
             if corner:
                 canvas.put(y_curr, x_curr, corner, style=edge_style_key)
+
+    # Pass 1b: arrows and T-junctions (drawn after all lines so they
+    # aren't overwritten by later edges' line segments)
+    for re in routed:
+        if len(re.draw_path) < 2:
+            continue
+
+        edge = re.edge
+
+        if re.index in graph.link_styles:
+            edge_style_key = f"linkstyle:{re.index}"
+        elif -1 in graph.link_styles:
+            edge_style_key = f"linkstyle:{re.index}"
+        else:
+            edge_style_key = "edge"
+
+        arrow_style_key = edge_style_key if edge_style_key != "edge" else "arrow"
 
         # Draw arrow heads
         if edge.has_arrow_end and len(re.draw_path) >= 2:
@@ -455,14 +470,110 @@ def _try_place_label(
     return True
 
 
+def _find_last_turn(path: list[tuple[int, int]]) -> int:
+    """Find the index of the last turn in a path. Returns -1 if no turns."""
+    for i in range(len(path) - 2, 0, -1):
+        x_prev, y_prev = path[i - 1]
+        x_curr, y_curr = path[i]
+        x_next, y_next = path[i + 1]
+        # Direction changes at this point
+        dx_in = x_curr - x_prev
+        dy_in = y_curr - y_prev
+        dx_out = x_next - x_curr
+        dy_out = y_next - y_curr
+        if (dx_in, dy_in) != (0, 0) and (dx_out, dy_out) != (0, 0):
+            # Normalize
+            dx_in = 0 if dx_in == 0 else (1 if dx_in > 0 else -1)
+            dy_in = 0 if dy_in == 0 else (1 if dy_in > 0 else -1)
+            dx_out = 0 if dx_out == 0 else (1 if dx_out > 0 else -1)
+            dy_out = 0 if dy_out == 0 else (1 if dy_out > 0 else -1)
+            if (dx_in, dy_in) != (dx_out, dy_out):
+                return i
+    return -1
+
+
+def _try_place_on_segment(
+    canvas: Canvas, x1: int, y1: int, x2: int, y2: int,
+    label: str, placed_labels: list[tuple[int, int, int]],
+    prev_point: tuple[int, int] | None = None,
+    prefer_left: bool = False,
+    bias_target: bool = False,
+) -> bool:
+    """Try to place a label on a specific segment. Returns True if placed.
+
+    prev_point: the path point before (x1, y1), used to determine which side
+    of a vertical segment to prefer after a horizontal turn.
+    prefer_left: explicitly prefer the left side for vertical segments.
+    bias_target: place closer to the target end (2/3) instead of midpoint.
+    """
+    label_len = len(label)
+
+    if x1 == x2 and abs(y2 - y1) >= 2:
+        # Vertical segment — place beside the line.
+        # If preceded by a horizontal turn, prefer the inner side
+        # (left if turn came from the right, right if from the left).
+        lo, hi = min(y1, y2), max(y1, y2)
+        if bias_target:
+            # Place 2/3 toward the target end (y2)
+            if y2 > y1:
+                mid_y = y1 + (y2 - y1) * 2 // 3
+            else:
+                mid_y = y1 + (y2 - y1) * 2 // 3
+        else:
+            mid_y = (lo + hi) // 2
+
+        if not prefer_left and prev_point is not None:
+            px, py = prev_point
+            if py == y1 and px != x1:
+                # Horizontal predecessor — turn came from left (px < x1) or right (px > x1)
+                # Place label on the side the turn came from (inner side of the branch)
+                prefer_left = px > x1  # came from right → prefer left
+
+        if prefer_left:
+            sides = [
+                (mid_y, x1 - label_len),       # left
+                (mid_y, x1 + 1),                # right
+            ]
+        else:
+            sides = [
+                (mid_y, x1 + 1),                # right
+                (mid_y, x1 - label_len),        # left
+            ]
+
+        for row, col in sides:
+            if _try_place_label(canvas, row, col, label, placed_labels):
+                return True
+        for offset in range(1, 4):
+            for row, col in sides:
+                if _try_place_label(canvas, row - offset, col, label, placed_labels):
+                    return True
+                if _try_place_label(canvas, row + offset, col, label, placed_labels):
+                    return True
+        return False
+
+    if y1 == y2:
+        # Horizontal segment — center label above/below
+        seg_len = abs(x2 - x1)
+        if seg_len >= label_len + 2:
+            mid = (min(x1, x2) + max(x1, x2)) // 2
+            start = mid - label_len // 2
+            if _try_place_label(canvas, y1 - 1, start, label, placed_labels):
+                return True
+            if _try_place_label(canvas, y1 + 1, start, label, placed_labels):
+                return True
+            return False
+
+    return False
+
+
 def _draw_edge_label(
     canvas: Canvas, re: RoutedEdge,
     placed_labels: list[tuple[int, int, int]],
 ) -> None:
     """Draw an edge label on the best segment of the path.
 
-    For horizontal segments: center the label on the edge line (overwrites
-    line characters).  For vertical segments: place beside the line.
+    Prefers segments after the last turn (the unique part of the edge path)
+    so labels appear on the branch, not on a shared trunk.
     Uses collision detection to avoid overlapping previously placed labels.
     """
     label = re.label
@@ -470,63 +581,52 @@ def _draw_edge_label(
         return
 
     label_len = len(label)
+    path = re.draw_path
 
-    # First try vertical segments (label placed beside the line)
-    for i in range(len(re.draw_path) - 1):
-        x1, y1 = re.draw_path[i]
-        x2, y2 = re.draw_path[i + 1]
-        if x1 == x2 and abs(y2 - y1) >= 2:
-            mid_y = (min(y1, y2) + max(y1, y2)) // 2
-            # Try right side first
-            if _try_place_label(canvas, mid_y, x1 + 1, label, placed_labels):
-                return
-            # Try left side
-            if _try_place_label(canvas, mid_y, x1 - label_len - 1, label, placed_labels):
-                return
-            # Try shifted up/down on right side
-            for offset in range(1, 4):
-                if _try_place_label(canvas, mid_y - offset, x1 + 1, label, placed_labels):
-                    return
-                if _try_place_label(canvas, mid_y + offset, x1 + 1, label, placed_labels):
-                    return
-            # Force place right side if all fallbacks failed
-            col_end = x1 + 1 + label_len
-            canvas.put_text(mid_y, x1 + 1, label, style="edge_label")
-            placed_labels.append((mid_y, x1 + 1, col_end))
+    # Build segment list ordered by preference: post-turn segments first,
+    # then remaining segments in reverse order (end segments are more unique)
+    n_segs = len(path) - 1
+    if n_segs <= 0:
+        return
+
+    last_turn = _find_last_turn(path)
+    preferred: list[int] = []
+    remaining: list[int] = []
+
+    if last_turn >= 0:
+        # Segments after the last turn (unique to this edge)
+        for i in range(last_turn, n_segs):
+            preferred.append(i)
+        # Then remaining segments in reverse
+        for i in range(last_turn - 1, -1, -1):
+            remaining.append(i)
+    else:
+        # No turns — straight path, use all segments
+        for i in range(n_segs):
+            remaining.append(i)
+
+    # For straight paths (no turns), prefer left side and bias toward target
+    # so the label doesn't land on the same row as sibling edges' turns
+    is_straight = last_turn < 0
+
+    # Try preferred segments first, then remaining
+    for i in preferred + remaining:
+        x1, y1 = path[i]
+        x2, y2 = path[i + 1]
+        prev = path[i - 1] if i > 0 else None
+        if _try_place_on_segment(
+            canvas, x1, y1, x2, y2, label, placed_labels,
+            prev_point=prev,
+            prefer_left=is_straight,
+            bias_target=is_straight,
+        ):
             return
 
-    # Try horizontal segments — center label above the line in the gap
-    for i in range(len(re.draw_path) - 1):
-        x1, y1 = re.draw_path[i]
-        x2, y2 = re.draw_path[i + 1]
-        if y1 == y2:
-            seg_len = abs(x2 - x1)
-            if seg_len >= label_len + 2:
-                mid = (min(x1, x2) + max(x1, x2)) // 2
-                start = mid - label_len // 2
-                # Try above the line
-                if _try_place_label(canvas, y1 - 1, start, label, placed_labels):
-                    return
-                # Try below the line
-                if _try_place_label(canvas, y1 + 1, start, label, placed_labels):
-                    return
-                # Force place above
-                col_end = start + label_len
-                canvas.put_text(y1 - 1, start, label, style="edge_label")
-                placed_labels.append((y1 - 1, start, col_end))
-                return
-
-    # Fallback: place at midpoint of path
-    if len(re.draw_path) >= 2:
-        mid_idx = len(re.draw_path) // 2
-        mx, my = re.draw_path[mid_idx]
-        if _try_place_label(canvas, my - 1, mx + 1, label, placed_labels):
-            return
-        if _try_place_label(canvas, my + 1, mx + 1, label, placed_labels):
-            return
-        # Force place
-        canvas.put_text(my - 1, mx + 1, label, style="edge_label")
-        placed_labels.append((my - 1, mx + 1, mx + 1 + label_len))
+    # Force place at midpoint of path
+    mid_idx = len(path) // 2
+    mx, my = path[mid_idx]
+    canvas.put_text(my - 1, mx + 1, label, style="edge_label")
+    placed_labels.append((my - 1, mx + 1, mx + 1 + label_len))
 
 
 def _draw_notes(canvas: Canvas, graph: Graph, layout: GridLayout, cs: CharSet) -> None:
