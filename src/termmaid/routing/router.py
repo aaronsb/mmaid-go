@@ -139,7 +139,9 @@ def _determine_directions(
         if tc > sc:
             preferred = (AttachDir.RIGHT, AttachDir.LEFT)
         elif tc < sc:
-            preferred = (AttachDir.LEFT, AttachDir.RIGHT)
+            # Back-edge: exit BOTTOM to separate from other back-edges entering TOP
+            preferred = (AttachDir.BOTTOM, AttachDir.BOTTOM)
+            return preferred, (AttachDir.BOTTOM, AttachDir.TOP)
         else:
             preferred = (AttachDir.BOTTOM, AttachDir.TOP) if tr > sr else (AttachDir.TOP, AttachDir.BOTTOM)
 
@@ -155,7 +157,9 @@ def _determine_directions(
         if tr > sr:
             preferred = (AttachDir.BOTTOM, AttachDir.TOP)
         elif tr < sr:
-            preferred = (AttachDir.TOP, AttachDir.BOTTOM)
+            # Back-edge: exit RIGHT to separate from other back-edges entering LEFT
+            preferred = (AttachDir.RIGHT, AttachDir.RIGHT)
+            return preferred, (AttachDir.RIGHT, AttachDir.LEFT)
         else:
             preferred = (AttachDir.RIGHT, AttachDir.LEFT) if tc > sc else (AttachDir.LEFT, AttachDir.RIGHT)
 
