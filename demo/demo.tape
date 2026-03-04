@@ -2,11 +2,11 @@ Output demo/termaid-demo.gif
 
 Set Shell "bash"
 Set FontSize 14
-Set Width 800
-Set Height 450
+Set Width 830
+Set Height 500
 Set Padding 15
-Set Margin 20
-Set MarginFill "#161622"
+Set Margin 15
+Set MarginFill "#FFFFFF"
 Set BorderRadius 10
 Set WindowBar Colorful
 Set TypingSpeed 32ms
