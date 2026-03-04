@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "termaid"
-version = "0.1.1"
+version = "0.1.2"
 description = "Render Mermaid diagram syntax as beautiful Unicode art in the terminal"
 readme = "README.md"
 license = "MIT"

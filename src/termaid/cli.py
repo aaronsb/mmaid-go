@@ -46,9 +46,14 @@ def main(argv: list[str] | None = None) -> int:
         help="Color theme. Requires 'rich' package (pip install termaid[rich]).",
     )
     parser.add_argument(
+        "--tui",
+        action="store_true",
+        help="Launch interactive TUI viewer. Requires 'textual' (pip install termaid[tui]).",
+    )
+    parser.add_argument(
         "--version",
         action="version",
-        version="%(prog)s 0.1.0",
+        version="%(prog)s 0.1.2",
     )
 
     args = parser.parse_args(argv)
@@ -79,6 +84,30 @@ def main(argv: list[str] | None = None) -> int:
     if not source:
         print("Error: Empty input.", file=sys.stderr)
         return 1
+
+    if args.tui:
+        try:
+            from textual.app import App, ComposeResult
+            from textual.widgets import Static
+            from termaid import render as _render
+        except ImportError:
+            print("Error: 'textual' package required for --tui. Install with: pip install termaid[tui]", file=sys.stderr)
+            return 1
+
+        class DiagramApp(App):
+            CSS = "Static { width: auto; height: auto; }"
+
+            def compose(self) -> ComposeResult:
+                yield Static(_render(
+                    source,
+                    use_ascii=args.ascii,
+                    padding_x=args.padding_x,
+                    padding_y=args.padding_y,
+                    rounded_edges=not args.sharp_edges,
+                ))
+
+        DiagramApp().run()
+        return 0
 
     try:
         from termaid import render, render_rich

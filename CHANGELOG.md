@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.2 (2026-03-04)
+
+- Add `--tui` flag to CLI for interactive TUI viewer
+
 ## 0.1.1 (2026-03-04)
 
 - Rename package from `termmaid` to `termaid`
