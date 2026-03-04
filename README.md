@@ -6,7 +6,7 @@ Terminal-native Mermaid rendering for Python.
   <img src="demo/termaid-demo.gif" alt="termaid demo" width="800">
 </p>
 
-Render [Mermaid](https://mermaid.js.org/) diagrams as Unicode art directly in your terminal. Pure Python, zero dependencies.
+Render [Mermaid](https://mermaid.js.org/) diagrams in your terminal or Python app.
 
 ## Features
 
