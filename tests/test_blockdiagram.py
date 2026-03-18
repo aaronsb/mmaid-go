@@ -176,3 +176,4 @@ class TestBlockDiagramRendering:
         )
         assert "Source" in output
         assert "Target" in output
+        assert "►" in output or ">" in output, "Arrow should be rendered between blocks"

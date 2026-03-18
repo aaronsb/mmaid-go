@@ -223,7 +223,7 @@ class TestEdgeCorners:
         has_rounded = any(c in output for c in "╭╮╰╯")
         # Rectangular nodes use ┌┐└┘ so this may be tricky — but edges should
         # definitely not have ╭╮╰╯ when rounded_edges=False
-        assert not has_rounded or True  # Nodes may use rounded chars for round shapes
+        assert not has_rounded, "rounded_edges=False should not produce ╭╮╰╯ on edges"
 
     def test_rounded_edges_explicit(self):
         """Explicit rounded_edges=True should use ╭╮╰╯."""

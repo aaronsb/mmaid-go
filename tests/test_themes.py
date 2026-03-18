@@ -109,7 +109,8 @@ class TestRichRendering:
     def test_render_rich_with_theme(self):
         from termaid import render_rich
         result = render_rich("graph LR\n  A --> B", theme="terra")
-        assert len(result.plain) > 0
+        assert "A" in result.plain
+        assert "B" in result.plain
 
     @pytest.mark.parametrize("theme", ["default", "terra", "neon", "mono", "amber", "phosphor"])
     def test_all_themes_render(self, theme: str):

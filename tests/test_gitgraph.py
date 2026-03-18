@@ -186,6 +186,7 @@ class TestGitGraphParser:
 
     def test_frontmatter_stripped(self):
         d = parse_git_graph(
+            '%%{init: {"gitGraph": {"showCommitLabel": true}}}%%\n'
             "gitGraph\n"
             "  commit"
         )
@@ -421,3 +422,4 @@ class TestGitGraphRendering:
     def test_empty_graph(self):
         output = render("gitGraph")
         assert isinstance(output, str)
+        assert output == ""

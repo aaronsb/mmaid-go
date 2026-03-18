@@ -131,37 +131,3 @@ class TestAsciiMode:
         )
 
 
-class TestEdgeStyles:
-    def test_dotted_uses_dotted_chars(self):
-        output = render("graph LR\n  A -.-> B")
-        assert "┄" in output or "." in output
-
-    def test_thick_uses_thick_chars(self):
-        output = render("graph LR\n  A ==> B")
-        assert "━" in output or "=" in output
-
-    def test_solid_uses_solid_chars(self):
-        output = render("graph LR\n  A --> B")
-        assert "─" in output or "-" in output
-
-
-class TestNodeShapes:
-    def test_rectangle_has_square_corners(self):
-        output = render("graph LR\n  A[Hello]")
-        assert "┌" in output
-        assert "┘" in output
-
-    def test_rounded_has_round_corners(self):
-        output = render("graph LR\n  A(Hello)")
-        assert "╭" in output
-        assert "╯" in output
-
-    def test_diamond_shape(self):
-        output = render("graph LR\n  A{Decision}")
-        # Diamond uses ◆ marker at top/bottom center
-        assert "◇" in output
-
-    def test_stadium_shape(self):
-        output = render("graph LR\n  A([Stadium])")
-        assert "(" in output
-        assert ")" in output

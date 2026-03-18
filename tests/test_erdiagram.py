@@ -217,5 +217,5 @@ class TestERDiagramRendering:
         )
         assert "A" in output
         assert "B" in output
-        # Dashed lines use dotted characters
-        assert "┄" in output or "." in output
+        # Dashed lines rendered with lifeline-style connector
+        assert "┆" in output, "Dashed relationship should use ┆ character"

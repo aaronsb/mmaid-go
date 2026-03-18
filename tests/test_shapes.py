@@ -97,14 +97,18 @@ class TestShapeRendering:
         assert "(" in output
         assert ")" in output
 
-    def test_hexagon_has_angle_brackets(self):
+    def test_hexagon_has_slashes(self):
         output = render("graph LR\n  A{{Hex}}")
-        assert "<" in output or "/" in output
+        assert "Hex" in output
+        assert "/" in output, "Hexagon should render with / character"
+        assert "\\" in output, "Hexagon should render with \\ character"
 
-    def test_cylinder_has_curve_chars(self):
+    def test_cylinder_has_rounded_top(self):
         output = render("graph LR\n  A[(DB)]")
-        # Cylinder should have some distinctive top/bottom
         assert "DB" in output
+        # Cylinder uses rounded corners for the curved top
+        assert "╭" in output, "Cylinder should have rounded top"
+        assert "╰" in output, "Cylinder should have rounded bottom"
 
     def test_all_shapes_in_one_graph(self):
         """All shapes in a single graph should render without errors."""

@@ -81,19 +81,19 @@ class TestAllDirections:
 
 class TestNodeShapes:
     def test_all_basic_shapes_render(self):
-        """Each shape type should render without errors."""
+        """Each shape type should render with its label visible."""
         shapes = [
-            "A[Rectangle]",
-            "B(Rounded)",
-            "C{Diamond}",
-            "D([Stadium])",
-            "E[[Subroutine]]",
-            "F((Circle))",
+            ("A[Rectangle]", "Rectangle"),
+            ("B(Rounded)", "Rounded"),
+            ("C{Diamond}", "Diamond"),
+            ("D([Stadium])", "Stadium"),
+            ("E[[Subroutine]]", "Subroutine"),
+            ("F((Circle))", "Circle"),
         ]
-        for shape_def in shapes:
+        for shape_def, label in shapes:
             source = f"graph LR\n  {shape_def}"
             output = render(source)
-            assert len(output) > 0, f"Failed to render shape: {shape_def}"
+            assert label in output, f"Shape {shape_def} should render label '{label}'"
 
     def test_mixed_shapes_in_graph(self):
         output = render(
@@ -113,11 +113,13 @@ class TestEdgeTypes:
 
     def test_dotted_arrow(self):
         output = render("graph LR\n  A -.-> B")
-        assert "┄" in output or "►" in output
+        assert "┄" in output, "Dotted arrow should use ┄ character"
+        assert "►" in output, "Dotted arrow should have arrowhead"
 
     def test_thick_arrow(self):
         output = render("graph LR\n  A ==> B")
-        assert "━" in output or "►" in output
+        assert "━" in output, "Thick arrow should use ━ character"
+        assert "►" in output, "Thick arrow should have arrowhead"
 
     def test_mixed_styles(self):
         output = render("graph LR\n  A --> B\n  B -.-> C\n  C ==> D")
@@ -126,15 +128,6 @@ class TestEdgeTypes:
 
 
 class TestEdgeLabels:
-    def test_labeled_edge(self):
-        output = render("graph LR\n  A -->|yes| B")
-        assert "yes" in output
-
-    def test_multiple_labels(self):
-        output = render("graph TD\n  A{Q} -->|yes| B\n  A -->|no| C")
-        assert "yes" in output
-        assert "no" in output
-
     def test_label_no_overlap(self):
         """Regression: parallel labeled edges should not truncate or overlap labels."""
         output = render(
@@ -318,18 +311,19 @@ class TestComplexGraphs:
             assert label in output
 
     def test_link_styles(self):
-        """Test all link styles from mermaid docs."""
-        output = render("flowchart LR\n    A-->B")
-        assert "A" in output
+        """Test all link styles render with correct line characters."""
+        output_solid = render("flowchart LR\n    A-->B")
+        assert "─" in output_solid, "Solid link should use ─"
 
-        output = render("flowchart LR\n    A --- B")
-        assert "A" in output
+        output_open = render("flowchart LR\n    A --- B")
+        assert "─" in output_open, "Open link should use ─"
+        assert "►" not in output_open, "Open link should not have arrowhead"
 
-        output = render("flowchart LR\n    A -.-> B")
-        assert "A" in output
+        output_dotted = render("flowchart LR\n    A -.-> B")
+        assert "┄" in output_dotted, "Dotted link should use ┄"
 
-        output = render("flowchart LR\n    A ==> B")
-        assert "A" in output
+        output_thick = render("flowchart LR\n    A ==> B")
+        assert "━" in output_thick, "Thick link should use ━"
 
     def test_chained_links(self):
         output = render("flowchart LR\n   A -- text --> B -- text2 --> C")

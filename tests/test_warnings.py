@@ -108,13 +108,15 @@ class TestErrorHandling:
     def test_render_does_not_crash_on_garbage(self):
         result = render("this is not valid mermaid at all 🗑️")
         assert isinstance(result, str)
+        assert result == ""
 
     def test_render_does_not_crash_on_empty(self):
         result = render("")
         assert isinstance(result, str)
+        assert result == ""
 
-    def test_render_error_message_on_bad_input(self):
-        """render() should return a friendly error string if it would crash."""
-        # This tests that even if internal code raises, we get a string back
+    def test_render_returns_empty_on_header_only_input(self):
+        """render() should return empty string for header-only input."""
         result = render("sequenceDiagram")
         assert isinstance(result, str)
+        assert result == ""

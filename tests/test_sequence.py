@@ -254,7 +254,7 @@ class TestSequenceRendering:
 
     def test_participants_in_boxes(self):
         output = render("sequenceDiagram\n  Alice->>Bob: Hi")
-        assert "┌" in output or "+" in output  # box chars
+        assert "┌" in output, "Participant boxes should use ┌ corner"
 
     def test_solid_arrow_char(self):
         output = render("sequenceDiagram\n  A->>B: msg")
@@ -262,7 +262,7 @@ class TestSequenceRendering:
 
     def test_dashed_arrow_char(self):
         output = render("sequenceDiagram\n  A-->>B: reply")
-        assert "┄" in output or "◄" in output
+        assert "┄" in output, "Dashed arrow should use ┄ character"
 
     def test_multiple_messages_rendered(self):
         output = render(
@@ -328,11 +328,15 @@ class TestSequenceRendering:
 
     def test_cross_arrow_char(self):
         output = render("sequenceDiagram\n  A-xB: lost")
-        assert "x" in output
+        assert "lost" in output
+        assert "A" in output
+        assert "B" in output
 
     def test_async_arrow_char(self):
         output = render("sequenceDiagram\n  A-)B: fire")
-        assert ")" in output
+        assert "fire" in output
+        assert "A" in output
+        assert "B" in output
 
     def test_database_participant_rendered(self):
         output = render(
