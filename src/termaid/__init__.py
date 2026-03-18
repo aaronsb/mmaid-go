@@ -90,6 +90,12 @@ def render(
             diagram = parse_git_graph(text)
             return render_git_graph(diagram, use_ascii=use_ascii).to_string()
 
+        if text.startswith("pie"):
+            from .parser.piechart import parse_pie_chart
+            from .renderer.piechart import render_pie_chart
+            diagram = parse_pie_chart(text)
+            return render_pie_chart(diagram, use_ascii=use_ascii).to_string()
+
         graph = parse(text)
         from .output.text import render_text
         return render_text(graph, use_ascii=use_ascii, padding_x=padding_x, padding_y=padding_y, rounded_edges=rounded_edges)
@@ -160,6 +166,14 @@ def render_rich(
             from .output.rich import render_sequence_rich
             diagram = parse_git_graph(text)
             canvas = render_git_graph(diagram, use_ascii=use_ascii)
+            return render_sequence_rich(canvas, theme=theme)
+
+        if text.startswith("pie"):
+            from .parser.piechart import parse_pie_chart
+            from .renderer.piechart import render_pie_chart
+            from .output.rich import render_sequence_rich
+            diagram = parse_pie_chart(text)
+            canvas = render_pie_chart(diagram, use_ascii=use_ascii)
             return render_sequence_rich(canvas, theme=theme)
 
         graph = parse(text)
