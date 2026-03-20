@@ -1,6 +1,6 @@
 """Renderer for pie chart diagrams as horizontal bar charts.
 
-Draws a horizontal stacked bar and per-slice bars with labels,
+Draws per-slice horizontal bars with right-aligned labels,
 percentages, and optional raw values.
 """
 from __future__ import annotations
@@ -22,7 +22,6 @@ def render_pie_chart(
     use_ascii: bool = False,
 ) -> Canvas:
     """Render a PieChart as a horizontal bar chart on a Canvas."""
-    cs = ASCII if use_ascii else UNICODE
 
     if not diagram.slices:
         canvas = Canvas(1, 1)
@@ -49,12 +48,8 @@ def render_pie_chart(
     canvas_w = bar_left + _BAR_WIDTH + max_suffix_len + _MARGIN
     title_rows = 2 if diagram.title else 0
 
-    # Stacked bar: 3 rows (border, bar, border)
-    # Per-slice bars: 1 row each
-    # Spacing
-    stacked_top = _MARGIN + title_rows
-    detail_top = stacked_top + 4  # border + bar + border + blank
-    canvas_h = detail_top + len(diagram.slices) + _MARGIN
+    bars_top = _MARGIN + title_rows
+    canvas_h = bars_top + len(diagram.slices) + _MARGIN
 
     canvas = Canvas(canvas_w, canvas_h)
 
@@ -63,38 +58,9 @@ def render_pie_chart(
         title_col = max(0, (canvas_w - len(diagram.title)) // 2)
         canvas.put_text(_MARGIN, title_col, diagram.title, style="label")
 
-    # ── Stacked overview bar ──────────────────────────────────────────────
-    # Top border
-    canvas.put(stacked_top, bar_left, cs.top_left, style="edge")
-    for c in range(1, _BAR_WIDTH + 1):
-        canvas.put(stacked_top, bar_left + c, cs.horizontal, style="edge")
-    canvas.put(stacked_top, bar_left + _BAR_WIDTH + 1, cs.top_right, style="edge")
-
-    # Bar content
-    bar_row = stacked_top + 1
-    canvas.put(bar_row, bar_left, cs.vertical, style="edge")
-    col = bar_left + 1
+    # ── Per-slice bars ────────────────────────────────────────────────────
     for i, s in enumerate(diagram.slices):
-        width = max(1, round(s.value / total * _BAR_WIDTH))
-        # Clamp so we don't overflow
-        width = min(width, bar_left + _BAR_WIDTH + 1 - col)
-        if width <= 0:
-            continue
-        fill = fills[i % len(fills)]
-        for c in range(width):
-            canvas.put(bar_row, col + c, fill, merge=False, style="node")
-        col += width
-    canvas.put(bar_row, bar_left + _BAR_WIDTH + 1, cs.vertical, style="edge")
-
-    # Bottom border
-    canvas.put(stacked_top + 2, bar_left, cs.bottom_left, style="edge")
-    for c in range(1, _BAR_WIDTH + 1):
-        canvas.put(stacked_top + 2, bar_left + c, cs.horizontal, style="edge")
-    canvas.put(stacked_top + 2, bar_left + _BAR_WIDTH + 1, cs.bottom_right, style="edge")
-
-    # ── Per-slice detail bars ─────────────────────────────────────────────
-    for i, s in enumerate(diagram.slices):
-        row = detail_top + i
+        row = bars_top + i
         pct = s.value / total * 100
         fill = fills[i % len(fills)]
         bar_len = max(1, round(s.value / total * _BAR_WIDTH))

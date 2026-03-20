@@ -162,16 +162,6 @@ class TestPieChartRendering:
         assert "75.0%" in output
         assert "25.0%" in output
 
-    def test_stacked_bar_has_borders(self):
-        output = render(
-            'pie\n'
-            '    "A" : 50\n'
-            '    "B" : 50'
-        )
-        assert "┌" in output
-        assert "┘" in output
-        assert "─" in output
-
     def test_distinct_fill_chars_per_slice(self):
         output = render(
             'pie\n'
