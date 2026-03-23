@@ -184,23 +184,23 @@ var Themes = map[string]Theme{
 	),
 	"blueprint": buildTheme("blueprint",
 		"bold #FFFFFF on #1A3A5C",   // node: white on dark blue
-		"#6699CC on #1A3A5C",        // edge: light blue on dark blue
-		"bold #FFD700 on #1A3A5C",   // arrow: gold on dark blue
-		"#4488AA on #1A3A5C",        // subgraph
-		"bold #FFFFFF on #1A3A5C",   // label
-		"italic #88BBDD on #1A3A5C", // edge_label
-		"bold #88CCFF on #1A3A5C",   // subgraph_label
-		"on #1A3A5C",               // default: just background
+		"#6699CC",                   // edge: light blue, terminal bg
+		"bold #FFD700",              // arrow: gold, terminal bg
+		"#4488AA",                   // subgraph
+		"bold #FFFFFF on #1A3A5C",   // label: white on dark blue (inside boxes)
+		"italic #88BBDD",            // edge_label: terminal bg
+		"bold #88CCFF",              // subgraph_label
+		"",                          // default: terminal background
 	),
 	"slate": buildTheme("slate",
 		"bold #E0E0E0 on #2D2D2D",   // node: light gray on dark gray
-		"#808080 on #2D2D2D",        // edge
-		"bold #FF6B35 on #2D2D2D",   // arrow: orange
-		"#666666 on #2D2D2D",        // subgraph
-		"bold #FFFFFF on #2D2D2D",   // label
-		"italic #999999 on #2D2D2D", // edge_label
-		"bold #BBBBBB on #2D2D2D",   // subgraph_label
-		"on #2D2D2D",               // default
+		"#808080",                   // edge: terminal bg
+		"bold #FF6B35",              // arrow: orange, terminal bg
+		"#666666",                   // subgraph
+		"bold #FFFFFF on #2D2D2D",   // label: white on dark gray
+		"italic #999999",            // edge_label: terminal bg
+		"bold #BBBBBB",              // subgraph_label
+		"",                          // default: terminal background
 	),
 	"phosphor": buildTheme("phosphor",
 		"bold #33FF33",  // node

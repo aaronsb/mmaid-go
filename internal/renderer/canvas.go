@@ -167,6 +167,16 @@ func (c *Canvas) ClearCell(row, col int) {
 	c.styleGrid[row][col] = "default"
 }
 
+// SetStyle sets the style key at (row, col) without changing the character.
+func (c *Canvas) SetStyle(row, col int, style string) {
+	if row < 0 || row >= c.Height || col < 0 || col >= c.Width {
+		return
+	}
+	if style != "" {
+		c.styleGrid[row][col] = style
+	}
+}
+
 // GetStyle returns the style key at (row, col).
 func (c *Canvas) GetStyle(row, col int) string {
 	if row < 0 || row >= c.Height || col < 0 || col >= c.Width {

@@ -33,6 +33,15 @@ func drawLabel(c *Canvas, x, y, width, height int, label string, style string) {
 	}
 }
 
+// fillInterior sets the style on all interior cells of a box (for background-color themes).
+func fillInterior(c *Canvas, x, y, width, height int, style string) {
+	for row := y + 1; row < y+height-1; row++ {
+		for col := x + 1; col < x+width-1; col++ {
+			c.SetStyle(row, col, style)
+		}
+	}
+}
+
 // isUnicode returns true if the charset is using Unicode box-drawing characters.
 func isUnicode(cs CharSet) bool {
 	return cs.Horizontal == '─'
@@ -54,10 +63,14 @@ func drawBox(c *Canvas, x, y, width, height int, tl, tr, bl, br rune, cs CharSet
 	}
 	c.Put(y+height-1, x+width-1, br, true, style)
 
-	// Side borders
+	// Side borders and interior fill (for background-color themes)
 	for row := y + 1; row < y+height-1; row++ {
 		c.Put(row, x, cs.Vertical, true, style)
 		c.Put(row, x+width-1, cs.Vertical, true, style)
+		// Fill interior spaces with the style so background colors render
+		for col := x + 1; col < x+width-1; col++ {
+			c.SetStyle(row, col, style)
+		}
 	}
 }
 
@@ -65,12 +78,14 @@ func drawBox(c *Canvas, x, y, width, height int, tl, tr, bl, br rune, cs CharSet
 // and a centered label.
 func DrawRectangle(c *Canvas, x, y, width, height int, label string, cs CharSet, style string) {
 	drawBox(c, x, y, width, height, cs.TopLeft, cs.TopRight, cs.BottomLeft, cs.BottomRight, cs, style)
+	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
 }
 
 // DrawRounded draws a box with rounded corners and a centered label.
 func DrawRounded(c *Canvas, x, y, width, height int, label string, cs CharSet, style string) {
 	drawBox(c, x, y, width, height, cs.RoundTopLeft, cs.RoundTopRight, cs.RoundBottomLeft, cs.RoundBottomRight, cs, style)
+	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
 }
 
@@ -96,6 +111,7 @@ func DrawStadium(c *Canvas, x, y, width, height int, label string, cs CharSet, s
 		c.Put(row, x+width-1, ')', false, style)
 	}
 
+	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
 }
 
@@ -109,6 +125,7 @@ func DrawSubroutine(c *Canvas, x, y, width, height int, label string, cs CharSet
 		c.Put(row, x+width-2, cs.Vertical, true, style)
 	}
 
+	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
 }
 
@@ -138,12 +155,16 @@ func DrawDiamond(c *Canvas, x, y, width, height int, label string, cs CharSet, s
 	c.Put(y+height-1, x+width-1, cs.BottomRight, true, style)
 	c.Put(y+height-1, cx, marker, false, style)
 
-	// Side borders
+	// Side borders + interior fill
 	for row := y + 1; row < y+height-1; row++ {
 		c.Put(row, x, cs.Vertical, true, style)
 		c.Put(row, x+width-1, cs.Vertical, true, style)
+		for col := x + 1; col < x+width-1; col++ {
+			c.SetStyle(row, col, style)
+		}
 	}
 
+	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
 }
 
@@ -169,6 +190,7 @@ func DrawHexagon(c *Canvas, x, y, width, height int, label string, cs CharSet, s
 		c.Put(row, x+width-1, cs.Vertical, true, style)
 	}
 
+	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
 }
 
@@ -189,6 +211,7 @@ func DrawCircle(c *Canvas, x, y, width, height int, label string, cs CharSet, st
 	c.Put(y, cx, marker, false, style)
 	c.Put(y+height-1, cx, marker, false, style)
 
+	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
 }
 
@@ -202,6 +225,7 @@ func DrawDoubleCircle(c *Canvas, x, y, width, height int, label string, cs CharS
 		drawBox(c, x+1, y+1, width-2, height-2, cs.RoundTopLeft, cs.RoundTopRight, cs.RoundBottomLeft, cs.RoundBottomRight, cs, style)
 	}
 
+	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
 }
 
@@ -233,6 +257,7 @@ func DrawAsymmetric(c *Canvas, x, y, width, height int, label string, cs CharSet
 		c.Put(y+height-1, col, cs.Horizontal, true, style)
 	}
 
+	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
 }
 
@@ -269,6 +294,7 @@ func DrawCylinder(c *Canvas, x, y, width, height int, label string, cs CharSet, 
 	}
 	c.Put(y+height-1, x+width-1, cs.RoundBottomRight, true, style)
 
+	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
 }
 
@@ -294,6 +320,7 @@ func DrawTrapezoid(c *Canvas, x, y, width, height int, label string, cs CharSet,
 		c.Put(row, x+width-1, cs.Vertical, true, style)
 	}
 
+	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
 }
 
@@ -320,6 +347,7 @@ func DrawTrapezoidAlt(c *Canvas, x, y, width, height int, label string, cs CharS
 		c.Put(row, x+width-1, cs.Vertical, true, style)
 	}
 
+	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
 }
 
@@ -345,6 +373,7 @@ func DrawParallelogram(c *Canvas, x, y, width, height int, label string, cs Char
 		c.Put(row, x+width-1, cs.Vertical, true, style)
 	}
 
+	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
 }
 
@@ -370,6 +399,7 @@ func DrawParallelogramAlt(c *Canvas, x, y, width, height int, label string, cs C
 		c.Put(row, x+width-1, cs.Vertical, true, style)
 	}
 
+	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
 }
 
