@@ -70,7 +70,10 @@ func main() {
 	}
 
 	if demo != "" {
-		runDemo(demo)
+		if theme == "" {
+			theme = "default"
+		}
+		runDemo(theme, demo)
 		os.Exit(0)
 	}
 
@@ -109,7 +112,7 @@ func printUsage() {
 	fmt.Fprintf(w, "    %s-t%s, %s--theme%s %sNAME%s    Color theme (use %s--themes%s to list)\n", ansiYellow, ansiReset, ansiYellow, ansiReset, ansiDim, ansiReset, ansiYellow, ansiReset)
 	fmt.Fprintf(w, "    %s-v%s, %s--version%s        Print version and exit\n", ansiYellow, ansiReset, ansiYellow, ansiReset)
 	fmt.Fprintf(w, "        %s--themes%s         List available color themes\n", ansiYellow, ansiReset)
-	fmt.Fprintf(w, "        %s--demo%s %sTHEME%s    Show sample diagrams with a theme\n", ansiYellow, ansiReset, ansiDim, ansiReset)
+	fmt.Fprintf(w, "        %s--demo%s %sTYPE%s     Show sample diagram (use with %s-t%s for theme)\n", ansiYellow, ansiReset, ansiDim, ansiReset, ansiYellow, ansiReset)
 	fmt.Fprintf(w, "        %s--padding-x%s %sN%s   Horizontal node padding (default: 4)\n", ansiYellow, ansiReset, ansiDim, ansiReset)
 	fmt.Fprintf(w, "        %s--padding-y%s %sN%s   Vertical node padding (default: 2)\n", ansiYellow, ansiReset, ansiDim, ansiReset)
 	fmt.Fprintf(w, "        %s--sharp-edges%s    Sharp corners on edge routing\n\n", ansiYellow, ansiReset)
@@ -200,29 +203,64 @@ var demoSamples = map[string]string{
         "Cache": 15`,
 }
 
-func runDemo(themeName string) {
+var demoTypes = []struct{ name, key string }{
+	{"Flowchart", "flowchart"},
+	{"Sequence Diagram", "sequence"},
+	{"Pie Chart", "pie"},
+	{"Gantt Chart", "gantt"},
+	{"Kanban Board", "kanban"},
+	{"Mindmap", "mindmap"},
+	{"Treemap", "treemap"},
+}
+
+func runDemo(themeName, diagramType string) {
 	if _, ok := renderer.Themes[themeName]; !ok {
 		fmt.Fprintf(os.Stderr, "%stermaid:%s unknown theme %q (use --themes to list)\n", ansiBold+ansiCyan, ansiReset, themeName)
 		os.Exit(1)
 	}
 
-	samples := []struct{ name, key string }{
-		{"Flowchart", "flowchart"},
-		{"Sequence Diagram", "sequence"},
-		{"Pie Chart", "pie"},
-		{"Gantt Chart", "gantt"},
-		{"Kanban Board", "kanban"},
-		{"Mindmap", "mindmap"},
-		{"Treemap", "treemap"},
-	}
-
 	fmt.Printf("\n  %sTheme: %s%s\n", ansiBold+ansiCyan, themeName, ansiReset)
 
-	for _, s := range samples {
-		fmt.Printf("\n  %s%s%s\n\n", ansiBold+ansiWhite, s.name, ansiReset)
-		result := termaid.Render(demoSamples[s.key], termaid.WithTheme(themeName))
-		fmt.Println(result)
+	if diagramType == "all" {
+		for _, s := range demoTypes {
+			fmt.Printf("\n  %s%s%s\n\n", ansiBold+ansiWhite, s.name, ansiReset)
+			result := termaid.Render(demoSamples[s.key], termaid.WithTheme(themeName))
+			fmt.Println(result)
+		}
+		return
 	}
+
+	// Find matching sample
+	source, ok := demoSamples[diagramType]
+	if !ok {
+		// Try matching by demo key aliases
+		aliases := map[string]string{
+			"flow": "flowchart", "seq": "sequence", "sequencediagram": "sequence",
+			"class": "flowchart", "er": "flowchart", "state": "flowchart",
+			"block": "flowchart", "block-beta": "flowchart",
+			"git": "flowchart", "gitgraph": "flowchart",
+			"xy": "flowchart", "xychart": "flowchart", "xychart-beta": "flowchart",
+			"timeline": "flowchart", "quadrant": "flowchart", "quadrantchart": "flowchart",
+		}
+		if mapped, ok2 := aliases[strings.ToLower(diagramType)]; ok2 {
+			source = demoSamples[mapped]
+		} else {
+			fmt.Fprintf(os.Stderr, "%stermaid:%s unknown demo type %q\n", ansiBold+ansiCyan, ansiReset, diagramType)
+			fmt.Fprintf(os.Stderr, "  available: all, %s\n", strings.Join(demoKeys(), ", "))
+			os.Exit(1)
+		}
+	}
+
+	result := termaid.Render(source, termaid.WithTheme(themeName))
+	fmt.Println(result)
+}
+
+func demoKeys() []string {
+	keys := make([]string, 0, len(demoSamples))
+	for k := range demoSamples {
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 func printThemes() {
