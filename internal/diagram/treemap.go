@@ -441,11 +441,13 @@ func tmDrawNode(c *renderer.Canvas, cs renderer.CharSet, node *treemapNode, x, y
 
 	// Determine styles — use region colors if theme supports it
 	var borderStyle, fillStyle, labelStyle, valueStyle string
-	if theme != nil && theme.HasDepthColors() {
-		borderStyle = theme.RegionBorderStyle(sectionIdx, depth)
-		fillStyle = theme.RegionStyle(sectionIdx, depth)
-		labelStyle = theme.RegionLabelStyle(sectionIdx, depth)
-		valueStyle = theme.RegionStyle(sectionIdx, depth)
+	useDirectANSI := theme != nil && theme.HasDepthColors()
+	if useDirectANSI {
+		// Wrap raw ANSI in _ansi: prefix so ToColorString uses them directly
+		fillStyle = "_ansi:" + theme.RegionStyle(sectionIdx, depth)
+		borderStyle = "_ansi:" + theme.RegionBorderStyle(sectionIdx, depth)
+		labelStyle = "_ansi:" + theme.RegionLabelStyle(sectionIdx, depth)
+		valueStyle = "_ansi:" + theme.RegionStyle(sectionIdx, depth)
 	} else {
 		if isSection {
 			borderStyle = "subgraph"
@@ -457,13 +459,11 @@ func tmDrawNode(c *renderer.Canvas, cs renderer.CharSet, node *treemapNode, x, y
 		valueStyle = "edge_label"
 	}
 
-	useDirectANSI := theme != nil && theme.HasDepthColors()
-
-	// Fill entire interior with background first (solid region fill)
+	// Fill entire box area (borders + interior) with the fill style
 	if useDirectANSI {
 		for row := y; row < y+h; row++ {
 			for col := x; col < x+w; col++ {
-				c.SetStyle(row, col, fmt.Sprintf("_ansi:%s", fillStyle))
+				c.SetStyle(row, col, fillStyle)
 			}
 		}
 	}
