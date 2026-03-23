@@ -656,8 +656,17 @@ func gitDrawLR(gg *gitGraph, c *renderer.Canvas, commitCol, branchRow map[string
 				continue
 			}
 			rMin, rMax := min(sourceRow, targetRow), max(sourceRow, targetRow)
-			for r := rMin; r <= rMax; r++ {
+			// Draw vertical line between branch rows (excluding endpoints)
+			for r := rMin + 1; r < rMax; r++ {
 				c.Put(r, col, vChar, true, "edge")
+			}
+			// Place T-junction characters where vertical meets horizontal branch lines
+			if !useASCII {
+				c.Put(rMin, col, '┬', false, "edge")
+				c.Put(rMax, col, '┴', false, "edge")
+			} else {
+				c.Put(rMin, col, '+', false, "edge")
+				c.Put(rMax, col, '+', false, "edge")
 			}
 		}
 	}
@@ -852,8 +861,17 @@ func gitDrawTB(gg *gitGraph, canvas *renderer.Canvas, useASCII bool, cs renderer
 				continue
 			}
 			cMin, cMax := min(sourceCol, targetCol), max(sourceCol, targetCol)
-			for cc := cMin; cc <= cMax; cc++ {
+			// Draw horizontal line between branch columns (excluding endpoints)
+			for cc := cMin + 1; cc < cMax; cc++ {
 				canvas.Put(row, cc, hChar, true, "edge")
+			}
+			// Place T-junction characters where horizontal meets vertical branch lines
+			if !useASCII {
+				canvas.Put(row, cMin, '├', false, "edge")
+				canvas.Put(row, cMax, '┤', false, "edge")
+			} else {
+				canvas.Put(row, cMin, '+', false, "edge")
+				canvas.Put(row, cMax, '+', false, "edge")
 			}
 		}
 	}
