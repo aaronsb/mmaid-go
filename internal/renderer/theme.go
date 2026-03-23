@@ -20,6 +20,7 @@ type Theme struct {
 	BoldLabel     string
 	ItalicLabel   string
 	Note          string
+	SubgraphFill  string // background-only style for subgraph interiors
 
 	// Depth-based region coloring (for treemaps, nested diagrams)
 	// BaseRGB is the darkest shade; each depth step lightens toward white.
@@ -182,13 +183,13 @@ func buildANSI(style string) string {
 	return strings.Join(codes, "")
 }
 
-func buildThemeWithDepth(name string, node, edge, arrow, subgraph, label, edgeLabel, sgLabel, def string) Theme {
-	t := buildTheme(name, node, edge, arrow, subgraph, label, edgeLabel, sgLabel, def)
+func buildThemeWithDepth(name string, node, edge, arrow, subgraph, label, edgeLabel, sgLabel, def, sgFill string) Theme {
+	t := buildTheme(name, node, edge, arrow, subgraph, label, edgeLabel, sgLabel, def, sgFill)
 	t.hasDepthColors = true
 	return t
 }
 
-func buildTheme(name string, node, edge, arrow, subgraph, label, edgeLabel, sgLabel, def string) Theme {
+func buildTheme(name string, node, edge, arrow, subgraph, label, edgeLabel, sgLabel, def, sgFill string) Theme {
 	return Theme{
 		Name:          name,
 		Node:          buildANSI(node),
@@ -202,6 +203,7 @@ func buildTheme(name string, node, edge, arrow, subgraph, label, edgeLabel, sgLa
 		BoldLabel:     buildANSI("bold " + label),
 		ItalicLabel:   buildANSI("italic " + label),
 		Note:          buildANSI(node),
+		SubgraphFill:  buildANSI(sgFill),
 	}
 }
 
@@ -216,76 +218,49 @@ var Themes = map[string]Theme{
 		"italic dim",       // edge_label
 		"bold cyan",        // subgraph_label
 		"",                 // default
+		"",                 // subgraph_fill
 	),
 	"terra": buildTheme("terra",
-		"bold #D4845A",  // node
-		"#8B7E6A",       // edge
-		"bold #E8A87C",  // arrow
-		"#A07858",       // subgraph
-		"#F5E6D3",       // label
-		"italic #B89A7A", // edge_label
-		"bold #E8A87C",  // subgraph_label
-		"",
+		"bold #D4845A", "#8B7E6A", "bold #E8A87C", "#A07858",
+		"#F5E6D3", "italic #B89A7A", "bold #E8A87C", "", "",
 	),
 	"neon": buildTheme("neon",
-		"bold magenta",  // node
-		"dim cyan",      // edge
-		"bold green",    // arrow
-		"dim magenta",   // subgraph
-		"bold white",    // label
-		"italic cyan",   // edge_label
-		"bold cyan",     // subgraph_label
-		"",
+		"bold magenta", "dim cyan", "bold green", "dim magenta",
+		"bold white", "italic cyan", "bold cyan", "", "",
 	),
 	"mono": buildTheme("mono",
-		"bold white",    // node
-		"dim",           // edge
-		"bold white",    // arrow
-		"dim",           // subgraph
-		"white",         // label
-		"italic dim",    // edge_label
-		"bold white",    // subgraph_label
-		"",
+		"bold white", "dim", "bold white", "dim",
+		"white", "italic dim", "bold white", "", "",
 	),
 	"amber": buildTheme("amber",
-		"bold #FFB000",  // node
-		"#806000",       // edge
-		"bold #FFD080",  // arrow
-		"#906800",       // subgraph
-		"#FFD580",       // label
-		"italic #B08030", // edge_label
-		"bold #FFC040",  // subgraph_label
-		"",
+		"bold #FFB000", "#806000", "bold #FFD080", "#906800",
+		"#FFD580", "italic #B08030", "bold #FFC040", "", "",
 	),
 	"blueprint": buildThemeWithDepth("blueprint",
-		"bold #FFFFFF on #1A3A5C",   // node: white on dark blue
-		"#6699CC",                   // edge: light blue, terminal bg
-		"bold #FFD700",              // arrow: gold, terminal bg
-		"#4488AA",                   // subgraph
-		"bold #FFFFFF on #1A3A5C",   // label: white on dark blue (inside boxes)
-		"italic #88BBDD",            // edge_label: terminal bg
+		"bold #FFFFFF on #1A3A5C",   // node
+		"#6699CC",                   // edge
+		"bold #FFD700",              // arrow
+		"#4488AA on #14304A",        // subgraph (border+bg)
+		"bold #FFFFFF on #1A3A5C",   // label
+		"italic #88BBDD",            // edge_label
 		"bold #88CCFF",              // subgraph_label
-		"",                          // default: terminal background
+		"",                          // default
+		"on #14304A",                // subgraph_fill: slightly darker blue
 	),
 	"slate": buildThemeWithDepth("slate",
-		"bold #E0E0E0 on #2D2D2D",   // node: light gray on dark gray
-		"#808080",                   // edge: terminal bg
-		"bold #FF6B35",              // arrow: orange, terminal bg
-		"#666666",                   // subgraph
-		"bold #FFFFFF on #2D2D2D",   // label: white on dark gray
-		"italic #999999",            // edge_label: terminal bg
+		"bold #E0E0E0 on #2D2D2D",   // node
+		"#808080",                   // edge
+		"bold #FF6B35",              // arrow
+		"#666666 on #222222",        // subgraph (border+bg)
+		"bold #FFFFFF on #2D2D2D",   // label
+		"italic #999999",            // edge_label
 		"bold #BBBBBB",              // subgraph_label
-		"",                          // default: terminal background
+		"",                          // default
+		"on #222222",                // subgraph_fill: slightly darker gray
 	),
 	"phosphor": buildTheme("phosphor",
-		"bold #33FF33",  // node
-		"#1A8C1A",       // edge
-		"bold #66FF66",  // arrow
-		"#228B22",       // subgraph
-		"#AAFFAA",       // label
-		"italic #339933", // edge_label
-		"bold #55DD55",  // subgraph_label
-		"",
+		"bold #33FF33", "#1A8C1A", "bold #66FF66", "#228B22",
+		"#AAFFAA", "italic #339933", "bold #55DD55", "", "",
 	),
 }
 
@@ -312,6 +287,7 @@ func (c *Canvas) ToColorString(theme Theme) string {
 		"bold_label":      theme.BoldLabel,
 		"italic_label":    theme.ItalicLabel,
 		"note":            theme.Note,
+		"subgraph_fill":   theme.SubgraphFill,
 	}
 
 	rst := reset()

@@ -102,6 +102,18 @@ func drawSubgraphBorders(canvas *Canvas, l *layout.GridLayout, cs CharSet) {
 			canvas.Put(r, x, cs.SGVertical, true, "subgraph")
 			canvas.Put(r, x+w-1, cs.SGVertical, true, "subgraph")
 		}
+
+		// Fill interior with background layer so themed renders
+		// show a colored region. Content drawn on top keeps its fg.
+		for r := y; r < y+h; r++ {
+			endC := x + w
+			if endC > canvas.Width {
+				endC = canvas.Width
+			}
+			for c := x; c < endC; c++ {
+				canvas.SetFill(r, c, "subgraph_fill")
+			}
+		}
 	}
 }
 
