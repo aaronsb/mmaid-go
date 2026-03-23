@@ -51,6 +51,10 @@ func RenderGraphCanvas(g *graph.Graph, useASCII bool, paddingX, paddingY int, ro
 	// Draw edges (lines, corners, arrows, T-junctions, labels)
 	drawEdges(canvas, g, l, routed, cs, roundedEdges)
 
+	// Restore node style on border cells where edge merging overwrote it.
+	// Junction chars (├┤┬┴) on box borders should have the node's bg, not the edge's.
+	restoreNodeBorderStyles(canvas, g, l)
+
 	// Draw subgraph labels (on top of borders)
 	drawSubgraphLabels(canvas, l, cs)
 
@@ -139,6 +143,36 @@ func drawSubgraphLabels(canvas *Canvas, l *layout.GridLayout, cs CharSet) {
 		if label != "" {
 			_ = h // bounds already checked above
 			canvas.PutText(y+1, x+2, label, "subgraph_label")
+		}
+	}
+}
+
+// restoreNodeBorderStyles re-applies node style to border cells where edge
+// junction merging overwrote the style. This ensures T-junctions (├┤┬┴) on
+// box borders keep the node's background color, not the edge's.
+func restoreNodeBorderStyles(canvas *Canvas, g *graph.Graph, l *layout.GridLayout) {
+	for _, nid := range g.NodeOrder {
+		node, ok := g.Nodes[nid]
+		if !ok {
+			continue
+		}
+		p, ok := l.Placements[nid]
+		if !ok {
+			continue
+		}
+
+		style := resolveNodeStyle(g, node)
+		x, y, w, h := p.DrawX, p.DrawY, p.DrawWidth, p.DrawHeight
+
+		// Top and bottom borders
+		for col := x; col < x+w; col++ {
+			canvas.SetStyle(y, col, style)
+			canvas.SetStyle(y+h-1, col, style)
+		}
+		// Left and right borders
+		for row := y; row < y+h; row++ {
+			canvas.SetStyle(row, x, style)
+			canvas.SetStyle(row, x+w-1, style)
 		}
 	}
 }
