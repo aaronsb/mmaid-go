@@ -288,16 +288,16 @@ func renderPieCircle(pc *pieChart) *renderer.Canvas {
 		c.Put(row, swatchCol, '█', false, "_ansi:"+blockAnsi)
 		c.Put(row, swatchCol+1, '█', false, "_ansi:"+blockAnsi)
 
-		// Label
-		c.PutText(row, swatchCol+3, s.label, "_ansi:\033[1m\033[38;2;255;255;255m")
+		// Label (regular weight, white text — inherits fill bg from legend box)
+		c.PutText(row, swatchCol+3, s.label, "_ansi:\033[38;2;255;255;255m")
 
-		// Percentage
+		// Percentage (dimmer)
 		pct := s.value / total * 100
 		suffix := fmt.Sprintf(" %.1f%%", pct)
 		if pc.showData {
 			suffix = fmt.Sprintf(" %.1f%% (%.0f)", pct, s.value)
 		}
-		c.PutText(row, swatchCol+3+maxLabelW, suffix, "label")
+		c.PutText(row, swatchCol+3+maxLabelW, suffix, "_ansi:\033[38;2;180;180;180m")
 	}
 
 	return c
