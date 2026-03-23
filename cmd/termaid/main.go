@@ -12,10 +12,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 
-	termaid "github.com/termaid/termaid-go"
-	"github.com/termaid/termaid-go/internal/renderer"
+	termaid "github.com/aaronsb/termaid-go"
+	"github.com/aaronsb/termaid-go/internal/renderer"
 )
 
 const version = "0.2.0"
@@ -42,6 +43,8 @@ func main() {
 		showVer    bool
 		listThemes bool
 		demo       string
+		markdown   bool
+		insert     string
 	)
 
 	flag.BoolVar(&ascii, "ascii", false, "")
@@ -55,6 +58,9 @@ func main() {
 	flag.BoolVar(&showVer, "v", false, "")
 	flag.BoolVar(&listThemes, "themes", false, "")
 	flag.StringVar(&demo, "demo", "", "")
+	flag.BoolVar(&markdown, "markdown", false, "")
+	flag.BoolVar(&markdown, "m", false, "")
+	flag.StringVar(&insert, "insert", "", "")
 
 	flag.Usage = func() { printUsage() }
 	flag.Parse()
@@ -98,7 +104,21 @@ func main() {
 	}
 
 	result := termaid.Render(input, opts...)
-	fmt.Println(result)
+
+	// Wrap in markdown code block if requested
+	if markdown {
+		result = "```\n" + result + "\n```"
+	}
+
+	// Insert into file or print to stdout
+	if insert != "" {
+		if err := insertIntoFile(insert, result); err != nil {
+			fmt.Fprintf(os.Stderr, "%stermaid:%s %v\n", ansiBold+ansiCyan, ansiReset, err)
+			os.Exit(1)
+		}
+	} else {
+		fmt.Println(result)
+	}
 }
 
 func printUsage() {
@@ -112,6 +132,8 @@ func printUsage() {
 	fmt.Fprintf(w, "    %s-t%s, %s--theme%s %sNAME%s    Color theme (use %s--themes%s to list)\n", ansiYellow, ansiReset, ansiYellow, ansiReset, ansiDim, ansiReset, ansiYellow, ansiReset)
 	fmt.Fprintf(w, "    %s-v%s, %s--version%s        Print version and exit\n", ansiYellow, ansiReset, ansiYellow, ansiReset)
 	fmt.Fprintf(w, "        %s--themes%s         List available color themes\n", ansiYellow, ansiReset)
+	fmt.Fprintf(w, "    %s-m%s, %s--markdown%s       Wrap output in a fenced code block\n", ansiYellow, ansiReset, ansiYellow, ansiReset)
+	fmt.Fprintf(w, "        %s--insert%s %sFILE:LINE%s  Insert output into file after line N\n", ansiYellow, ansiReset, ansiDim, ansiReset)
 	fmt.Fprintf(w, "        %s--demo%s %sTYPE%s     Show sample diagram (use with %s-t%s for theme)\n", ansiYellow, ansiReset, ansiDim, ansiReset, ansiYellow, ansiReset)
 	fmt.Fprintf(w, "        %s--padding-x%s %sN%s   Horizontal node padding (default: 4)\n", ansiYellow, ansiReset, ansiDim, ansiReset)
 	fmt.Fprintf(w, "        %s--padding-y%s %sN%s   Vertical node padding (default: 2)\n", ansiYellow, ansiReset, ansiDim, ansiReset)
@@ -201,6 +223,30 @@ var demoSamples = map[string]string{
     "Infra"
         "DB": 25
         "Cache": 15`,
+	"timeline": `timeline
+    title Project Milestones
+    2024 Q1 : Requirements
+    2024 Q2 : Design : Prototype
+    2024 Q3 : Development
+    2024 Q4 : Launch`,
+	"quadrant": `quadrantChart
+    title Priority Matrix
+    x-axis Low Effort --> High Effort
+    y-axis Low Impact --> High Impact
+    quadrant-1 Do First
+    quadrant-2 Schedule
+    quadrant-3 Delegate
+    quadrant-4 Eliminate
+    Feature A: [0.2, 0.8]
+    Feature B: [0.7, 0.9]
+    Feature C: [0.8, 0.3]
+    Feature D: [0.3, 0.4]`,
+	"xychart": `xychart-beta
+    title "Monthly Revenue"
+    x-axis [Jan, Feb, Mar, Apr, May]
+    y-axis "Revenue ($K)" 0 --> 100
+    bar [45, 52, 68, 73, 91]
+    line [45, 52, 68, 73, 91]`,
 }
 
 var demoTypes = []struct{ name, key string }{
@@ -208,8 +254,11 @@ var demoTypes = []struct{ name, key string }{
 	{"Sequence Diagram", "sequence"},
 	{"Pie Chart", "pie"},
 	{"Gantt Chart", "gantt"},
+	{"Timeline", "timeline"},
 	{"Kanban Board", "kanban"},
 	{"Mindmap", "mindmap"},
+	{"Quadrant Chart", "quadrant"},
+	{"XY Chart", "xychart"},
 	{"Treemap", "treemap"},
 }
 
@@ -275,6 +324,39 @@ func printThemes() {
 		fmt.Printf("    %s%s%s%s%s%s\n", ansiCyan, marker, ansiBold, name, ansiReset, extra)
 	}
 	fmt.Printf("\n  %s●%s = supports wallpaper fills and depth-based coloring\n\n", ansiCyan, ansiReset)
+}
+
+// insertIntoFile inserts text into a file after a specific line.
+// Format: "FILE:LINE" (e.g., "README.md:42")
+func insertIntoFile(spec, content string) error {
+	parts := strings.SplitN(spec, ":", 2)
+	if len(parts) != 2 {
+		return fmt.Errorf("--insert format: FILE:LINE (e.g., README.md:42)")
+	}
+	filename := parts[0]
+	lineNum, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return fmt.Errorf("invalid line number %q", parts[1])
+	}
+
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return fmt.Errorf("reading %s: %w", filename, err)
+	}
+
+	lines := strings.Split(string(data), "\n")
+	if lineNum < 0 || lineNum > len(lines) {
+		return fmt.Errorf("line %d out of range (file has %d lines)", lineNum, len(lines))
+	}
+
+	// Insert content after line N
+	contentLines := strings.Split(content, "\n")
+	result := make([]string, 0, len(lines)+len(contentLines))
+	result = append(result, lines[:lineNum]...)
+	result = append(result, contentLines...)
+	result = append(result, lines[lineNum:]...)
+
+	return os.WriteFile(filename, []byte(strings.Join(result, "\n")), 0644)
 }
 
 // readInput returns the mermaid source from a file argument or stdin.

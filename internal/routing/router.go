@@ -3,8 +3,8 @@ package routing
 import (
 	"math"
 
-	"github.com/termaid/termaid-go/internal/graph"
-	"github.com/termaid/termaid-go/internal/layout"
+	"github.com/aaronsb/termaid-go/internal/graph"
+	"github.com/aaronsb/termaid-go/internal/layout"
 )
 
 // AttachDir represents which side of a node an edge attaches to.

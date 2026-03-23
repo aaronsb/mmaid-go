@@ -3,7 +3,7 @@ package parser
 import (
 	"testing"
 
-	"github.com/termaid/termaid-go/internal/graph"
+	"github.com/aaronsb/termaid-go/internal/graph"
 )
 
 func TestParseSimpleLR(t *testing.T) {

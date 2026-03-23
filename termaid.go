@@ -6,10 +6,10 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/termaid/termaid-go/internal/diagram"
-	"github.com/termaid/termaid-go/internal/graph"
-	"github.com/termaid/termaid-go/internal/parser"
-	"github.com/termaid/termaid-go/internal/renderer"
+	"github.com/aaronsb/termaid-go/internal/diagram"
+	"github.com/aaronsb/termaid-go/internal/graph"
+	"github.com/aaronsb/termaid-go/internal/parser"
+	"github.com/aaronsb/termaid-go/internal/renderer"
 )
 
 // config holds rendering options.

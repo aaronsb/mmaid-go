@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/termaid/termaid-go/internal/renderer"
+	"github.com/aaronsb/termaid-go/internal/renderer"
 )
 
 // member represents a class member (field or method).

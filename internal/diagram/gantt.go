@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/termaid/termaid-go/internal/renderer"
+	"github.com/aaronsb/termaid-go/internal/renderer"
 )
 
 type ganttTask struct {

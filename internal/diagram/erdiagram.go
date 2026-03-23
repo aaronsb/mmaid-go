@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/termaid/termaid-go/internal/renderer"
+	"github.com/aaronsb/termaid-go/internal/renderer"
 )
 
 // erAttribute represents an attribute of an entity.

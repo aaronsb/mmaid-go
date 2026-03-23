@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/termaid/termaid-go/internal/renderer"
+	"github.com/aaronsb/termaid-go/internal/renderer"
 )
 
 // ── model ────────────────────────────────────────────────────────

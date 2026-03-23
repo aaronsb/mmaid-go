@@ -3,7 +3,7 @@ package diagram
 import (
 	"strings"
 
-	"github.com/termaid/termaid-go/internal/renderer"
+	"github.com/aaronsb/termaid-go/internal/renderer"
 )
 
 type mindmapNode struct {

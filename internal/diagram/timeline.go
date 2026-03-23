@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/termaid/termaid-go/internal/renderer"
+	"github.com/aaronsb/termaid-go/internal/renderer"
 )
 
 // timelineEvent holds one or more items at a time point.
