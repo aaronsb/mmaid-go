@@ -1,11 +1,5 @@
-.DS_Store
-__pycache__/
-*.pyc
-*.egg-info/
-dist/
-build/
-.venv/
-.pytest_cache/
-# Scratch diagram files in root
+# Binary
+/mmaid
+# Scratch diagram files
 /*.mmd
 termaid

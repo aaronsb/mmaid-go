@@ -1,4 +1,4 @@
-<h1 align="center">termaid</h1>
+<h1 align="center">mmaid</h1>
 
 <p align="center">Render Mermaid diagrams in your terminal. Single binary, zero dependencies.</p>
 
@@ -10,12 +10,12 @@
 - **Anti-aliased pie charts:** circular rendering with half-block characters and supersampled edges
 - **Braille fallback:** pie charts use distinct dot patterns when no color theme is active
 - **ASCII mode:** works on any terminal
-- **Pipe-friendly CLI:** `echo "graph LR; A-->B" | termaid` just works
+- **Pipe-friendly CLI:** `echo "graph LR; A-->B" | mmaid` just works
 
 ## Install
 
 ```bash
-go install github.com/aaronsb/termaid-go/cmd/termaid@latest
+go install github.com/aaronsb/termaid-go/cmd/mmaid@latest
 ```
 
 Or build from source:
@@ -30,16 +30,16 @@ make build
 
 ```bash
 # Render a diagram file
-termaid diagram.mmd
+mmaid diagram.mmd
 
 # Pipe from stdin
-echo "graph LR; A[Start] --> B{Check} --> C[Done]" | termaid
+echo "graph LR; A[Start] --> B{Check} --> C[Done]" | mmaid
 
 # With a color theme
-echo "graph LR; A --> B --> C" | termaid -t blueprint
+echo "graph LR; A --> B --> C" | mmaid -t blueprint
 
 # Preview a theme
-termaid --demo all -t monokai
+mmaid --demo all -t monokai
 ```
 
 ## Use cases
@@ -47,15 +47,15 @@ termaid --demo all -t monokai
 ```bash
 # Visualize disk usage as a treemap
 du -d1 -k /var/log | awk 'NR>1{printf "        \"%s\": %d\n",$2,$1}' | \
-  (echo 'treemap-beta'; echo '    "disk usage"'; cat) | termaid -t blueprint
+  (echo 'treemap-beta'; echo '    "disk usage"'; cat) | mmaid -t blueprint
 
 # Show Docker image layers
 docker history --no-trunc --format '{{.Size}}\t{{.CreatedBy}}' myimage | \
   head -8 | awk -F'\t' '{gsub(/[^0-9]/,"",$1); if($1+0>0) printf "        \"%s\": %s\n",substr($2,1,30),$1}' | \
-  (echo 'treemap-beta'; echo '    "layers"'; cat) | termaid -t gruvbox
+  (echo 'treemap-beta'; echo '    "layers"'; cat) | mmaid -t gruvbox
 
 # Quick architecture sketch
-cat <<'EOF' | termaid -t blueprint
+cat <<'EOF' | mmaid -t blueprint
 graph LR
     subgraph Frontend
         A[React App] --> B[API Client]
@@ -68,7 +68,7 @@ graph LR
 EOF
 
 # Inline in Claude Code sessions
-termaid -t blueprint <<'EOF'
+mmaid -t blueprint <<'EOF'
 sequenceDiagram
     participant User
     participant Claude
@@ -133,7 +133,7 @@ Shapes are visually distinct and carry a small indicator in the upper-left corne
 ## CLI
 
 ```
-termaid [flags] [file]
+mmaid [flags] [file]
 
 FLAGS
   -a, --ascii          ASCII-only output

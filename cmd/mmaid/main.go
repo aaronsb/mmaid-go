@@ -1,8 +1,8 @@
-// Command termaid renders Mermaid diagram syntax as terminal art.
+// Command mmaid renders Mermaid diagram syntax as terminal art.
 //
 // Usage:
 //
-//	termaid [flags] [file]
+//	mmaid [flags] [file]
 //
 // If no file is given and stdin is a pipe, input is read from stdin.
 package main
@@ -15,7 +15,7 @@ import (
 	"strconv"
 	"strings"
 
-	termaid "github.com/aaronsb/termaid-go"
+	mmaid "github.com/aaronsb/termaid-go"
 	"github.com/aaronsb/termaid-go/internal/renderer"
 )
 
@@ -66,7 +66,7 @@ func main() {
 	flag.Parse()
 
 	if showVer {
-		fmt.Printf("%stermaid%s %s%s%s\n", ansiBold+ansiCyan, ansiReset, ansiYellow, version, ansiReset)
+		fmt.Printf("%smmaid%s %s%s%s\n", ansiBold+ansiCyan, ansiReset, ansiYellow, version, ansiReset)
 		os.Exit(0)
 	}
 
@@ -89,21 +89,21 @@ func main() {
 		os.Exit(1)
 	}
 
-	var opts []termaid.Option
+	var opts []mmaid.Option
 	if ascii {
-		opts = append(opts, termaid.WithASCII())
+		opts = append(opts, mmaid.WithASCII())
 	}
 	if paddingX != 4 || paddingY != 2 {
-		opts = append(opts, termaid.WithPadding(paddingX, paddingY))
+		opts = append(opts, mmaid.WithPadding(paddingX, paddingY))
 	}
 	if sharpEdges {
-		opts = append(opts, termaid.WithSharpEdges())
+		opts = append(opts, mmaid.WithSharpEdges())
 	}
 	if theme != "" {
-		opts = append(opts, termaid.WithTheme(theme))
+		opts = append(opts, mmaid.WithTheme(theme))
 	}
 
-	result := termaid.Render(input, opts...)
+	result := mmaid.Render(input, opts...)
 
 	// Wrap in markdown code block if requested
 	if markdown {
@@ -123,10 +123,10 @@ func main() {
 
 func printUsage() {
 	w := os.Stderr
-	fmt.Fprintf(w, "\n  %stermaid%s — render Mermaid diagrams as terminal art\n\n", ansiBold+ansiCyan, ansiReset)
+	fmt.Fprintf(w, "\n  %smmaid%s — render Mermaid diagrams as terminal art\n\n", ansiBold+ansiCyan, ansiReset)
 	fmt.Fprintf(w, "  %sUSAGE%s\n", ansiBold+ansiWhite, ansiReset)
-	fmt.Fprintf(w, "    termaid [flags] [file]\n")
-	fmt.Fprintf(w, "    cat diagram.mmd | termaid -t blueprint\n\n")
+	fmt.Fprintf(w, "    mmaid [flags] [file]\n")
+	fmt.Fprintf(w, "    cat diagram.mmd | mmaid -t blueprint\n\n")
 	fmt.Fprintf(w, "  %sFLAGS%s\n", ansiBold+ansiWhite, ansiReset)
 	fmt.Fprintf(w, "    %s-a%s, %s--ascii%s          Use ASCII characters instead of Unicode\n", ansiYellow, ansiReset, ansiYellow, ansiReset)
 	fmt.Fprintf(w, "    %s-t%s, %s--theme%s %sNAME%s    Color theme (use %s--themes%s to list)\n", ansiYellow, ansiReset, ansiYellow, ansiReset, ansiDim, ansiReset, ansiYellow, ansiReset)
@@ -273,7 +273,7 @@ func runDemo(themeName, diagramType string) {
 	if diagramType == "all" {
 		for _, s := range demoTypes {
 			fmt.Printf("\n  %s%s%s\n\n", ansiBold+ansiWhite, s.name, ansiReset)
-			result := termaid.Render(demoSamples[s.key], termaid.WithTheme(themeName))
+			result := mmaid.Render(demoSamples[s.key], mmaid.WithTheme(themeName))
 			fmt.Println(result)
 		}
 		return
@@ -300,7 +300,7 @@ func runDemo(themeName, diagramType string) {
 		}
 	}
 
-	result := termaid.Render(source, termaid.WithTheme(themeName))
+	result := mmaid.Render(source, mmaid.WithTheme(themeName))
 	fmt.Println(result)
 }
 

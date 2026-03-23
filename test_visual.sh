@@ -9,12 +9,12 @@
 
 set -euo pipefail
 
-TERMAID="${TERMAID:-./termaid}"
+TERMAID="${TERMAID:-./mmaid}"
 THEME="${1:-}"
 
 # Always rebuild to pick up latest changes
 echo "Building termaid..."
-go build -o "$TERMAID" ./cmd/termaid
+go build -o "$TERMAID" ./cmd/mmaid
 
 THEME_FLAG=""
 THEME_LABEL="(no theme)"

@@ -1,13 +1,13 @@
 .PHONY: build test test-visual clean install lint vet
 
-BINARY := termaid
+BINARY := mmaid
 BUILD_DIR := .
 
 build:
-	go build -o $(BUILD_DIR)/$(BINARY) ./cmd/termaid
+	go build -o $(BUILD_DIR)/$(BINARY) ./cmd/mmaid
 
 install:
-	go install ./cmd/termaid
+	go install ./cmd/mmaid
 
 test:
 	go test ./... -v
