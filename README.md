@@ -1,438 +1,188 @@
-<h1 align="center">termaid</h1>
+<h1 align="center">mmaid</h1>
 
-<p align="center">Render Mermaid diagrams in your terminal or Python app.</p>
-
-<p align="center">
-  <img src="demo/termaid-demo.gif" alt="termaid demo" width="800">
-</p>
+<p align="center">Render Mermaid diagrams in your terminal. Single binary, zero dependencies.</p>
 
 ## Features
 
-- **9 diagram types:** flowcharts, sequence, class, ER, state, block, git graphs, pie charts, and treemaps
-- **Zero dependencies:** pure Python, nothing to install beyond the package itself
-- **Rich and Textual integration:** colored output and TUI widgets with optional extras
-- **6 color themes:** default, terra, neon, mono, amber, phosphor
-- **ASCII fallback:** works on any terminal, even the most basic ones
-- **Pipe-friendly CLI:** `cat diagram.mmd | termaid` just works
-
-## Why?
-
-Mermaid is great for documentation, but rendering it usually means spinning up a browser or calling an external service. termaid lets you render diagrams over SSH, in CI logs, inside TUI apps, or anywhere you have a Python environment. It was built because the existing tools in this space, like [mermaid-ascii](https://github.com/AlexanderGrooff/mermaid-ascii) (Go) and [beautiful-mermaid](https://github.com/lukilabs/beautiful-mermaid) (TypeScript), don't offer a native Python library you can import and call directly.
+- **16 diagram types:** flowcharts, sequence, class, ER, state, block, git graphs, pie charts, treemaps, gantt, timeline, kanban, mindmap, quadrant, XY charts
+- **Zero dependencies:** pure Go, single portable binary
+- **11 color themes:** including 5 solid-background themes with depth-based region coloring
+- **Anti-aliased pie charts:** circular rendering with half-block characters and supersampled edges
+- **Braille fallback:** pie charts use distinct dot patterns when no color theme is active
+- **ASCII mode:** works on any terminal
+- **Pipe-friendly CLI:** `echo "graph LR; A-->B" | mmaid` just works
 
 ## Install
 
 ```bash
-pip install termaid
+go install github.com/aaronsb/mmaid-go/cmd/mmaid@latest
 ```
 
-Or try it without installing:
+Or build from source:
 
 ```bash
-uvx termaid diagram.mmd
+git clone https://github.com/aaronsb/mmaid-go
+cd mmaid-go
+make build
 ```
 
 ## Quick start
 
-### CLI
+```bash
+# Render a diagram file
+mmaid diagram.mmd
+
+# Pipe from stdin
+echo "graph LR; A[Start] --> B{Check} --> C[Done]" | mmaid
+
+# With a color theme
+echo "graph LR; A --> B --> C" | mmaid -t blueprint
+
+# Preview a theme
+mmaid --demo all -t monokai
+```
+
+## Use cases
 
 ```bash
-termaid diagram.mmd
-echo "graph LR; A-->B-->C" | termaid
-termaid diagram.mmd --theme neon
-termaid diagram.mmd --ascii
+# Visualize disk usage as a treemap
+du -d1 -k /var/log | awk 'NR>1{printf "        \"%s\": %d\n",$2,$1}' | \
+  (echo 'treemap-beta'; echo '    "disk usage"'; cat) | mmaid -t blueprint
+
+# Show Docker image layers
+docker history --no-trunc --format '{{.Size}}\t{{.CreatedBy}}' myimage | \
+  head -8 | awk -F'\t' '{gsub(/[^0-9]/,"",$1); if($1+0>0) printf "        \"%s\": %s\n",substr($2,1,30),$1}' | \
+  (echo 'treemap-beta'; echo '    "layers"'; cat) | mmaid -t gruvbox
+
+# Quick architecture sketch
+cat <<'EOF' | mmaid -t blueprint
+graph LR
+    subgraph Frontend
+        A[React App] --> B[API Client]
+    end
+    subgraph Backend
+        C[REST API] --> D[(PostgreSQL)]
+        C --> E[(Redis)]
+    end
+    B --> C
+EOF
+
+# Inline in Claude Code sessions
+mmaid -t blueprint <<'EOF'
+sequenceDiagram
+    participant User
+    participant Claude
+    participant Tool
+    User->>Claude: Request
+    Claude->>Tool: mmaid render
+    Tool-->>Claude: Diagram output
+    Claude-->>User: Visual response
+EOF
 ```
 
-### Python
+## Go API
 
-```python
-from termaid import render
+```go
+import mmaid "github.com/aaronsb/mmaid-go"
 
-print(render("graph LR\n  A --> B --> C"))
-```
+// Plain text
+result := mmaid.Render("graph LR\n  A --> B --> C")
 
-```python
-# Colored output (requires: pip install termaid[rich])
-from termaid import render_rich
-from rich import print as rprint
-
-rprint(render_rich("graph LR\n  A --> B", theme="terra"))
-```
-
-```python
-# Textual TUI widget (requires: pip install termaid[textual])
-from termaid import MermaidWidget
-
-widget = MermaidWidget("graph LR\n  A --> B")
+// With options
+result := mmaid.Render(source,
+    mmaid.WithTheme("blueprint"),
+    mmaid.WithASCII(),
+    mmaid.WithPadding(6, 3),
+)
 ```
 
 ## Supported diagram types
 
-### Flowcharts
+| Type | Keyword | Description |
+|------|---------|-------------|
+| Flowchart | `graph` / `flowchart` | Directed graphs with shapes, subgraphs, styling |
+| Sequence | `sequenceDiagram` | Interaction sequences with lifelines and blocks |
+| Class | `classDiagram` | UML class relationships and members |
+| ER | `erDiagram` | Entity-relationship schemas with cardinality |
+| State | `stateDiagram-v2` | State machines with transitions |
+| Pie | `pie` | Circular charts (anti-aliased color or braille) |
+| Git Graph | `gitGraph` | Branch, commit, merge, cherry-pick flows |
+| Block | `block-beta` | Grid-based block layouts |
+| Gantt | `gantt` | Project schedules with sections and today marker |
+| Timeline | `timeline` | Chronological event sequences |
+| Kanban | `kanban` | Column-based task boards |
+| Mindmap | `mindmap` | Hierarchical concept maps |
+| Quadrant | `quadrantChart` | 2x2 matrix plots with data points |
+| XY Chart | `xychart-beta` | Bar and line charts on axes |
+| Treemap | `treemap-beta` | Proportional area treemaps |
 
-All directions supported: `LR`, `RL`, `TD`/`TB`, `BT`.
+### Node shapes
 
-```mermaid
-graph TD
-    A[Start] --> B{Is valid?}
-    B -->|Yes| C(Process)
-    C --> D([Done])
-    B -->|No| E[Error]
-```
+Shapes are visually distinct and carry a small indicator in the upper-left corner:
 
-```
-┌─────────────┐
-│             │
-│    Start    │
-│             │
-└──────┬──────┘
-       │
-       │
-       ▼
-┌──────◇──────┐
-│             │
-│  Is valid?  │
-│             │
-└──────◇──────┘
-       │
-       │
-       ╰──────────────────╮
-    Yes│                  │No
-       ▼                  ▼
-╭─────────────╮    ┌─────────────┐
-│             │    │             │
-│   Process   │    │    Error    │
-│             │    │             │
-╰──────┬──────╯    └─────────────┘
-       │
-       │
-       ▼
-╭─────────────╮
-(             )
-(    Done     )
-(             )
-╰─────────────╯
-```
+| Syntax | Shape | Indicator |
+|--------|-------|-----------|
+| `[text]` | Rectangle (sharp corners) | — |
+| `(text)` | Rounded rectangle | `◦` |
+| `{text}` | Diamond (chamfered `⟋⟍`) | `◇` |
+| `((text))` | Circle | `○` |
+| `([text])` | Stadium | `⊂` |
+| `{{text}}` | Hexagon | `⬡` |
+| `[[text]]` | Subroutine | `‖` |
 
-**Node shapes:** rectangle `[text]`, rounded `(text)`, diamond `{text}`, stadium `([text])`, subroutine `[[text]]`, circle `((text))`, double circle `(((text)))`, hexagon `{{text}}`, cylinder `[(text)]`, asymmetric `>text]`, parallelogram `[/text/]`, trapezoid `[/text\]`, and `@{shape}` syntax
-
-**Edge styles:** solid `-->`, dotted `-.->`, thick `==>`, bidirectional `<-->`, circle endpoint `--o`, cross endpoint `--x`, labeled `-->|text|`, variable length `--->`, `---->`
-
-**Styling:** `classDef`, `style`, `linkStyle` directives, `:::className` suffix
-
-**Subgraphs:** nesting, cross-boundary edges, per-subgraph `direction` override
-
-**Other:** `%%` comments, `;` line separators, Markdown labels `` "`**bold** *italic*`" ``, `&` operator (`A & B --> C`)
-
-### Sequence diagrams
-
-```mermaid
-sequenceDiagram
-    Alice->>Bob: Hello Bob
-    Bob-->>Alice: Hi Alice
-    Alice->>Bob: How are you?
-    Bob-->>Alice: Great!
-```
+## CLI
 
 ```
- ┌──────────┐      ┌──────────┐
- │  Alice   │      │   Bob    │
- └──────────┘      └──────────┘
-       ┆ Hello Bob       ┆
-       ──────────────────►
-       ┆ Hi Alice        ┆
-       ◄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
-       ┆ How are you?    ┆
-       ──────────────────►
-       ┆ Great!          ┆
-       ◄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
-       ┆                 ┆
-```
+mmaid [flags] [file]
 
-**Message types:** solid arrow `->>`, dashed arrow `-->>`, solid line `->`, dashed line `-->`
-
-**Participants:** `participant`, `actor`, aliases
-
-### Class diagrams
-
-```mermaid
-classDiagram
-    class Animal {
-        +String name
-        +int age
-        +makeSound()
-    }
-    class Dog {
-        +String breed
-        +fetch()
-    }
-    Animal <|-- Dog
-```
-
-```
-  ┌──────────────┐
-  │    Animal    │
-  ├──────────────┤
-  │ +String name │
-  │ +int age     │
-  ├──────────────┤
-  │ +makeSound() │
-  └──────────────┘
-          △
-          │
-          │
-          │
-  ┌───────────────┐
-  │      Dog      │
-  ├───────────────┤
-  │ +String breed │
-  ├───────────────┤
-  │ +fetch()      │
-  └───────────────┘
-```
-
-**Relationships:** inheritance `<|--`, composition `*--`, aggregation `o--`, association `--`, dependency `..>`, realization `..|>`
-
-**Members:** attributes and methods with visibility (`+` public, `-` private, `#` protected, `~` package)
-
-### ER diagrams
-
-```mermaid
-erDiagram
-    CUSTOMER ||--o{ ORDER : places
-    ORDER ||--|{ LINE-ITEM : contains
-```
-
-```
-  ┌──────────────┐
-  │   CUSTOMER   │
-  └──────────────┘
-          │1
-          │ places
-          │
-          │0..*
-  ┌──────────────┐
-  │    ORDER     │
-  └──────────────┘
-          │1
-          │ contains
-          │
-          │1..*
-  ┌──────────────┐
-  │  LINE-ITEM   │
-  └──────────────┘
-```
-
-**Cardinality:** `||` (exactly one), `o|` (zero or one), `}|` (one or more), `o{` (zero or more)
-
-**Line styles:** solid `--`, dashed `..`
-
-**Attributes:** type, name, keys (`PK`, `FK`, `UK`), comments
-
-### State diagrams
-
-```mermaid
-stateDiagram-v2
-    [*] --> Idle
-    Idle --> Processing : start
-    Processing --> Done : complete
-    Done --> [*]
-```
-
-```
-╭───────◯──────╮
-│              │
-│      ●       │
-│              │
-╰───────◯──────╯
-        │
-        │
-        ▼
-╭──────────────╮
-│              │
-│     Idle     │
-│              │
-╰───────┬──────╯
-        │
-   start│
-        ▼
-╭──────────────╮
-│              │
-│  Processing  │
-│              │
-╰───────┬──────╯
-        │
-complete│
-        ▼
-╭──────────────╮
-│              │
-│     Done     │
-│              │
-╰───────┬──────╯
-        │
-        │
-        ▼
-╭───────◯──────╮
-│              │
-│      ◉       │
-│              │
-╰───────◯──────╯
-```
-
-**Features:** `[*]` start/end states, transition labels, `state "name" as alias`, composite states (`state Parent { }`), stereotypes (`<<choice>>`, `<<fork>>`, `<<join>>`)
-
-### Block diagrams
-
-```mermaid
-block-beta
-    columns 3
-    A["Frontend"] B["API"] C["Database"]
-```
-
-```
-  ┌──────────┐    ┌──────────┐    ┌──────────┐
-  │          │    │          │    │          │
-  │ Frontend │    │   API    │    │ Database │
-  │          │    │          │    │          │
-  └──────────┘    └──────────┘    └──────────┘
-```
-
-**Features:** `columns N`, column spanning (`blockname:N`), links between blocks, nested blocks
-
-### Git graphs
-
-```mermaid
-gitGraph
-   commit id: "init"
-   commit id: "feat"
-   branch develop
-   commit id: "dev-1"
-   commit id: "dev-2"
-   checkout main
-   commit id: "fix"
-   merge develop id: "merge"
-```
-
-```
-  main    ───●─────●──────┼──────────────●──────●─
-           init  feat     │             fix   merge
-                          │                     │
-  develop                 ●───────●─────────────┼
-                        dev-1   dev-2
-```
-
-**Directions:** `LR` (default), `TB`, `BT`
-
-**Commands:** `commit` (with `id:`, `type:`, `tag:`), `branch` (with `order:`), `checkout`/`switch`, `merge`, `cherry-pick`
-
-**Commit types:** `NORMAL` (●), `REVERSE` (✖), `HIGHLIGHT` (■)
-
-**Config:** `%%{init: {"gitGraph": {"mainBranchName": "master"}}}%%`
-
-### Pie charts
-
-Yes, the syntax says `pie`. No, we don't draw a circle. I know. Have you ever tried to read a pie chart made of `█` and `▓`? Exactly. We render them as horizontal bar charts instead.
-
-```mermaid
-pie title Pets adopted by volunteers
-    "Dogs" : 386
-    "Cats" : 85
-    "Rats" : 15
-```
-
-```
-  Dogs┃████████████████████████████████  79.4%
-  Cats┃▓▓▓▓▓▓▓  17.5%
-  Rats┃░   3.1%
-```
-
-**Features:** `title`, `showData` (display raw values), `%%` comments
-
-### Treemaps
-
-```mermaid
-treemap-beta
-    "Frontend"
-        "React": 40
-        "CSS": 15
-    "Backend"
-        "API": 35
-        "Auth": 10
-```
-
-```
-┌┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┐ ┌┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┐
-┆             Frontend              ┆ ┆          Backend           ┆
-┆┌───────────────────────┐ ┌───────┐┆ ┆┌───────────────────┐ ┌────┐┆
-┆│         React         │ │  CSS  │┆ ┆│        API        │ │Auth│┆
-┆│          40           │ │  15   │┆ ┆│        35         │ │ 10 │┆
-┆│                       │ │       │┆ ┆│                   │ │    │┆
-┆└───────────────────────┘ └───────┘┆ ┆└───────────────────┘ └────┘┆
-└┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┘ └┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┘
-```
-
-**Features:** nested sections via indentation, `"label": value` syntax, proportional sizing, `%%` comments
-
-## CLI options
-
-| Flag | Description |
-|------|-------------|
-| `--tui` | Interactive TUI viewer (requires `pip install termaid[tui]`) |
-| `--ascii` | ASCII-only output (no Unicode box-drawing) |
-| `--theme NAME` | Color theme: `default`, `terra`, `neon`, `mono`, `amber`, `phosphor` (requires `pip install termaid[rich]`) |
-| `--padding-x N` | Horizontal padding inside boxes (default: 4) |
-| `--padding-y N` | Vertical padding inside boxes (default: 2) |
-| `--sharp-edges` | Sharp corners on edge turns instead of rounded |
-
-## Python API
-
-### `render(source, ...) -> str`
-
-Render a Mermaid diagram as a plain text string. Auto-detects diagram type.
-
-### `render_rich(source, ..., theme="default") -> rich.text.Text`
-
-Render as a [Rich](https://rich.readthedocs.io/) `Text` object with colors. Requires `pip install termaid[rich]`.
-
-### `MermaidWidget`
-
-A [Textual](https://textual.textualize.io/) widget with a reactive `source` attribute. Requires `pip install termaid[textual]`. Updates live when you change the `source` property.
-
-```python
-from termaid import MermaidWidget
-
-class MyApp(App):
-    def compose(self):
-        yield MermaidWidget("graph LR\n  A --> B")
+FLAGS
+  -a, --ascii          ASCII-only output
+  -t, --theme NAME     Color theme (use --themes to list)
+  -v, --version        Print version
+      --themes         List available themes
+      --demo TYPE      Preview diagrams (all, pie, gantt, flowchart, ...)
+      --padding-x N    Horizontal node padding (default: 4)
+      --padding-y N    Vertical node padding (default: 2)
+      --sharp-edges    Sharp corners on edge routing
 ```
 
 ## Themes
 
-Six built-in themes for `--theme` / `render_rich()`:
+| Theme | Type | Description |
+|-------|------|-------------|
+| `default` | text | Cyan nodes, yellow arrows, white labels |
+| `terra` | text | Warm earth tones |
+| `neon` | text | Magenta, green, cyan |
+| `mono` | text | White/gray monochrome |
+| `amber` | text | Amber CRT-style |
+| `phosphor` | text | Green phosphor terminal |
+| `blueprint` | **solid** | Deep blue backgrounds, depth-based region colors |
+| `slate` | **solid** | Dark gray backgrounds, orange accents |
+| `sunset` | **solid** | Deep rose backgrounds, gold arrows |
+| `gruvbox` | **solid** | Gruvbox dark palette |
+| `monokai` | **solid** | Monokai dark with pink/green accents |
 
-| Theme | Colors | Description |
-|-------|--------|-------------|
-| `default` | ![#00FFFF](https://placehold.co/12x12/00FFFF/00FFFF.png) ![#FFFF00](https://placehold.co/12x12/FFFF00/FFFF00.png) ![#FFFFFF](https://placehold.co/12x12/FFFFFF/FFFFFF.png) | Cyan nodes, yellow arrows, white labels |
-| `terra` | ![#D4845A](https://placehold.co/12x12/D4845A/D4845A.png) ![#E8A87C](https://placehold.co/12x12/E8A87C/E8A87C.png) ![#F5E6D3](https://placehold.co/12x12/F5E6D3/F5E6D3.png) | Warm earth tones (browns, oranges) |
-| `neon` | ![#FF00FF](https://placehold.co/12x12/FF00FF/FF00FF.png) ![#00FF00](https://placehold.co/12x12/00FF00/00FF00.png) ![#00FFFF](https://placehold.co/12x12/00FFFF/00FFFF.png) | Magenta nodes, green arrows, cyan edges |
-| `mono` | ![#FFFFFF](https://placehold.co/12x12/FFFFFF/FFFFFF.png) ![#AAAAAA](https://placehold.co/12x12/AAAAAA/AAAAAA.png) ![#666666](https://placehold.co/12x12/666666/666666.png) | White/gray monochrome |
-| `amber` | ![#FFB000](https://placehold.co/12x12/FFB000/FFB000.png) ![#FFD080](https://placehold.co/12x12/FFD080/FFD080.png) ![#FFD580](https://placehold.co/12x12/FFD580/FFD580.png) | Amber/gold CRT-style |
-| `phosphor` | ![#33FF33](https://placehold.co/12x12/33FF33/33FF33.png) ![#66FF66](https://placehold.co/12x12/66FF66/66FF66.png) ![#AAFFAA](https://placehold.co/12x12/AAFFAA/AAFFAA.png) | Green phosphor terminal-style |
+**Solid themes** include:
+- Wallpaper fills behind chart-type diagrams
+- Per-section hue with per-depth shade stepping
+- Fill layer compositing (foreground elements inherit region backgrounds)
+- Section-colored text labels for visual grouping
 
-## Optional extras
+## Rendering modes
 
-```bash
-pip install termaid[rich]      # Colored terminal output
-pip install termaid[textual]   # Textual TUI widget
-```
+Pie charts render in three modes depending on context:
 
-## Limitations
-
-- **Layout engine is approximate.** Node positioning uses a grid-based barycenter heuristic. Graphs with many cross-layer edges may still produce crossings.
-- **Manhattan-only edge routing.** Edges use A* pathfinding on a grid. Very dense graphs may have overlapping edges.
+| Mode | When | Rendering |
+|------|------|-----------|
+| Color circle | Any `--theme` | Half-block chars with 4x4 supersampled anti-aliasing |
+| Braille circle | No theme | Braille dot patterns per slice, bordered legend |
+| Bar chart | `--ascii` | Horizontal bars with fill characters |
 
 ## Acknowledgements
 
-Inspired by [mermaid-ascii](https://github.com/AlexanderGrooff/mermaid-ascii) by Alexander Grooff and [beautiful-mermaid](https://github.com/lukilabs/beautiful-mermaid) by Lukilabs.
+Originally inspired by [termaid](https://github.com/saikocat/termaid) (Python) by saikocat. Rewritten in Go for portability and single-binary distribution.
+
+Also inspired by [mermaid-ascii](https://github.com/AlexanderGrooff/mermaid-ascii) by Alexander Grooff.
 
 ## License
 
