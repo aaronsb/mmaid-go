@@ -158,6 +158,15 @@ type StyledSegment struct {
 	Style string
 }
 
+// ClearCell sets a cell back to a space with default style.
+func (c *Canvas) ClearCell(row, col int) {
+	if row < 0 || row >= c.Height || col < 0 || col >= c.Width {
+		return
+	}
+	c.grid[row][col] = ' '
+	c.styleGrid[row][col] = "default"
+}
+
 // GetStyle returns the style key at (row, col).
 func (c *Canvas) GetStyle(row, col int) string {
 	if row < 0 || row >= c.Height || col < 0 || col >= c.Width {

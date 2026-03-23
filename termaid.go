@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/termaid/termaid-go/internal/diagram"
 	"github.com/termaid/termaid-go/internal/graph"
 	"github.com/termaid/termaid-go/internal/parser"
 	"github.com/termaid/termaid-go/internal/renderer"
@@ -113,23 +114,39 @@ func Render(source string, opts ...Option) (result string) {
 
 	switch dtype {
 	case "sequence":
-		return "[termaid] Sequence diagrams not yet supported"
+		canvas := diagram.RenderSequence(source, cfg.useASCII)
+		if canvas == nil {
+			return ""
+		}
+		return canvas.ToString()
 	case "class":
-		return "[termaid] Class diagrams not yet supported"
+		canvas := diagram.RenderClassDiagram(source, cfg.useASCII)
+		if canvas == nil {
+			return ""
+		}
+		return canvas.ToString()
 	case "er":
-		return "[termaid] ER diagrams not yet supported"
+		canvas := diagram.RenderERDiagram(source, cfg.useASCII)
+		if canvas == nil {
+			return ""
+		}
+		return canvas.ToString()
+	case "pie":
+		canvas := diagram.RenderPieChart(source, cfg.useASCII)
+		if canvas == nil {
+			return ""
+		}
+		return canvas.ToString()
+	case "state":
+		g := diagram.ParseStateDiagram(source)
+		return renderer.RenderGraph(g, cfg.useASCII, cfg.paddingX, cfg.paddingY, cfg.roundedEdges)
 	case "block":
 		return "[termaid] Block diagrams not yet supported"
 	case "gitgraph":
 		return "[termaid] Git graphs not yet supported"
-	case "pie":
-		return "[termaid] Pie charts not yet supported"
 	case "treemap":
 		return "[termaid] Treemap diagrams not yet supported"
-	case "state":
-		return "[termaid] State diagrams not yet supported"
 	default:
-		// flowchart
 		g := parser.ParseFlowchart(source)
 		return renderer.RenderGraph(g, cfg.useASCII, cfg.paddingX, cfg.paddingY, cfg.roundedEdges)
 	}
