@@ -75,27 +75,32 @@ type Canvas struct {
 	Height    int
 	grid      [][]rune
 	styleGrid [][]string
+	fillGrid  [][]string // background fill layer (composed with styleGrid in ToColorString)
 }
 
 // NewCanvas creates a Canvas of the given width and height, filled with spaces.
 func NewCanvas(width, height int) *Canvas {
 	grid := make([][]rune, height)
 	styleGrid := make([][]string, height)
+	fillGrid := make([][]string, height)
 	for r := range height {
 		row := make([]rune, width)
 		srow := make([]string, width)
+		frow := make([]string, width)
 		for c := range width {
 			row[c] = ' '
 			srow[c] = "default"
 		}
 		grid[r] = row
 		styleGrid[r] = srow
+		fillGrid[r] = frow
 	}
 	return &Canvas{
 		Width:     width,
 		Height:    height,
 		grid:      grid,
 		styleGrid: styleGrid,
+		fillGrid:  fillGrid,
 	}
 }
 
@@ -167,6 +172,24 @@ func (c *Canvas) ClearCell(row, col int) {
 	c.styleGrid[row][col] = "default"
 }
 
+// SetFill sets a background fill style at (row, col).
+// This is a separate layer that composes with the cell's content style in ToColorString.
+// Content drawn on top keeps its foreground; the fill provides the background.
+func (c *Canvas) SetFill(row, col int, fill string) {
+	if row < 0 || row >= c.Height || col < 0 || col >= c.Width {
+		return
+	}
+	c.fillGrid[row][col] = fill
+}
+
+// GetFill returns the fill style at (row, col).
+func (c *Canvas) GetFill(row, col int) string {
+	if row < 0 || row >= c.Height || col < 0 || col >= c.Width {
+		return ""
+	}
+	return c.fillGrid[row][col]
+}
+
 // SetStyle sets the style key at (row, col) without changing the character.
 func (c *Canvas) SetStyle(row, col int, style string) {
 	if row < 0 || row >= c.Height || col < 0 || col >= c.Width {
@@ -219,18 +242,21 @@ func (c *Canvas) Resize(newWidth, newHeight int) {
 		for range w - c.Width {
 			c.grid[r] = append(c.grid[r], ' ')
 			c.styleGrid[r] = append(c.styleGrid[r], "default")
+			c.fillGrid[r] = append(c.fillGrid[r], "")
 		}
 	}
 	// Add new rows
 	for range h - c.Height {
 		row := make([]rune, w)
 		srow := make([]string, w)
+		frow := make([]string, w)
 		for i := range w {
 			row[i] = ' '
 			srow[i] = "default"
 		}
 		c.grid = append(c.grid, row)
 		c.styleGrid = append(c.styleGrid, srow)
+		c.fillGrid = append(c.fillGrid, frow)
 	}
 	c.Width = w
 	c.Height = h

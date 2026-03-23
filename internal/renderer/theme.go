@@ -344,6 +344,7 @@ func (c *Canvas) ToColorString(theme Theme) string {
 		for x := 0; x <= lastCol; x++ {
 			ch := c.grid[y][x]
 			styleKey := c.styleGrid[y][x]
+			fillKey := c.fillGrid[y][x]
 
 			// Direct ANSI: style keys starting with "_ansi:" contain raw escape sequences
 			var ansi string
@@ -351,6 +352,20 @@ func (c *Canvas) ToColorString(theme Theme) string {
 				ansi = styleKey[6:]
 			} else {
 				ansi = styleMap[styleKey]
+			}
+
+			// Compose with fill layer: if there's a fill style and the content
+			// style doesn't already have a background, prepend the fill's background
+			if fillKey != "" {
+				var fillAnsi string
+				if strings.HasPrefix(fillKey, "_ansi:") {
+					fillAnsi = fillKey[6:]
+				} else {
+					fillAnsi = styleMap[fillKey]
+				}
+				if fillAnsi != "" && !strings.Contains(ansi, "\033[48") {
+					ansi = fillAnsi + ansi
+				}
 			}
 
 			if ansi == "" {

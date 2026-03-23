@@ -1321,17 +1321,17 @@ func RenderSequence(source string, useASCII bool) *renderer.Canvas {
 			if len(blockBorderStack) > 0 {
 				entry := blockBorderStack[len(blockBorderStack)-1]
 				blockBorderStack = blockBorderStack[:len(blockBorderStack)-1]
-				// Fill block interior: set "node" style on any default-styled
-				// cells so background-color themes fill the region.
+				// Fill block interior: set "node" fill on all cells so
+				// background-color themes fill the region. Content styles
+				// (edge, arrow, etc.) keep their foreground; the fill
+				// provides the background layer underneath.
 				for r := entry.startRow; r <= row; r++ {
 					endCol := entry.right
 					if endCol >= canvas.Width {
 						endCol = canvas.Width - 1
 					}
 					for col := entry.left; col <= endCol; col++ {
-						if canvas.GetStyle(r, col) == "default" {
-							canvas.SetStyle(r, col, "node")
-						}
+						canvas.SetFill(r, col, "node")
 					}
 				}
 				// Draw side borders on top of fill
