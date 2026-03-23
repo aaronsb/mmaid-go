@@ -3,9 +3,9 @@ package renderer
 import (
 	"strings"
 
-	"github.com/aaronsb/termaid-go/internal/graph"
-	"github.com/aaronsb/termaid-go/internal/layout"
-	"github.com/aaronsb/termaid-go/internal/routing"
+	"github.com/aaronsb/mmaid-go/internal/graph"
+	"github.com/aaronsb/mmaid-go/internal/layout"
+	"github.com/aaronsb/mmaid-go/internal/routing"
 )
 
 // RenderGraph renders a graph to a string.

@@ -1,3 +1,3 @@
-module github.com/aaronsb/termaid-go
+module github.com/aaronsb/mmaid-go
 
 go 1.23

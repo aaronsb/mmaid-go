@@ -3,7 +3,7 @@ package layout
 import (
 	"testing"
 
-	"github.com/aaronsb/termaid-go/internal/graph"
+	"github.com/aaronsb/mmaid-go/internal/graph"
 )
 
 func TestComputeLayoutSimpleChain(t *testing.T) {

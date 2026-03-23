@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/aaronsb/termaid-go/internal/renderer"
+	"github.com/aaronsb/mmaid-go/internal/renderer"
 )
 
 type xyChartData struct {

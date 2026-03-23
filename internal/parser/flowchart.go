@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/aaronsb/termaid-go/internal/graph"
+	"github.com/aaronsb/mmaid-go/internal/graph"
 )
 
 // segment is a piece of a parsed line: either a node group or an arrow.

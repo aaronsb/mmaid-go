@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aaronsb/termaid-go/internal/renderer"
+	"github.com/aaronsb/mmaid-go/internal/renderer"
 )
 
 func assertCanvasContains(t *testing.T, c *renderer.Canvas, substr string) {

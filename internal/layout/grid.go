@@ -19,7 +19,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/aaronsb/termaid-go/internal/graph"
+	"github.com/aaronsb/mmaid-go/internal/graph"
 )
 
 const (

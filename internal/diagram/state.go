@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/aaronsb/termaid-go/internal/graph"
+	"github.com/aaronsb/mmaid-go/internal/graph"
 )
 
 // stateParser holds parsing state for a state diagram.

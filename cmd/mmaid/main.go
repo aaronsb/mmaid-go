@@ -15,8 +15,8 @@ import (
 	"strconv"
 	"strings"
 
-	mmaid "github.com/aaronsb/termaid-go"
-	"github.com/aaronsb/termaid-go/internal/renderer"
+	mmaid "github.com/aaronsb/mmaid-go"
+	"github.com/aaronsb/mmaid-go/internal/renderer"
 )
 
 const version = "0.2.0"

@@ -15,13 +15,13 @@
 ## Install
 
 ```bash
-go install github.com/aaronsb/termaid-go/cmd/mmaid@latest
+go install github.com/aaronsb/mmaid-go/cmd/mmaid@latest
 ```
 
 Or build from source:
 
 ```bash
-git clone https://github.com/aaronsb/termaid-go
+git clone https://github.com/aaronsb/mmaid-go
 cd termaid-go
 make build
 ```
@@ -83,7 +83,7 @@ EOF
 ## Go API
 
 ```go
-import termaid "github.com/aaronsb/termaid-go"
+import termaid "github.com/aaronsb/mmaid-go"
 
 // Plain text
 result := termaid.Render("graph LR\n  A --> B --> C")
