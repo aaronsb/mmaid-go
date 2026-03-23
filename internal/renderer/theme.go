@@ -26,6 +26,11 @@ type Theme struct {
 	// BaseRGB is the darkest shade; each depth step lightens toward white.
 	depthBaseR, depthBaseG, depthBaseB int
 	hasDepthColors                     bool
+
+	// PieBaseColor, if set, generates monochromatic pie shades from this hue
+	// instead of the default vibrant multi-color palette.
+	pieBaseR, pieBaseG, pieBaseB int
+	hasPieBase                   bool
 }
 
 // ansi helpers
@@ -220,6 +225,42 @@ func buildANSI(style string) string {
 	return strings.Join(codes, "")
 }
 
+// PieColors returns the pie chart color palette for this theme.
+// For monochromatic themes, generates n evenly-spaced shades from the base hue.
+// For other themes, returns the default vibrant multi-color palette.
+func (t Theme) PieColors(n int) [][3]int {
+	if !t.hasPieBase {
+		return nil // caller uses default vibrant palette
+	}
+	if n < 2 {
+		n = 2
+	}
+	shades := make([][3]int, n)
+	r, g, b := float64(t.pieBaseR), float64(t.pieBaseG), float64(t.pieBaseB)
+	for i := range n {
+		// Spread from 35% to 100% brightness, evenly across n slices
+		factor := 0.35 + 0.65*float64(i)/float64(n-1)
+		shades[i] = [3]int{
+			min(255, int(r*factor)),
+			min(255, int(g*factor)),
+			min(255, int(b*factor)),
+		}
+	}
+	return shades
+}
+
+// HasPieBase reports whether this theme uses monochromatic pie shading.
+func (t Theme) HasPieBase() bool {
+	return t.hasPieBase
+}
+
+func buildThemeMono(name string, node, edge, arrow, subgraph, label, edgeLabel, sgLabel, def, sgFill string, pr, pg, pb int) Theme {
+	t := buildTheme(name, node, edge, arrow, subgraph, label, edgeLabel, sgLabel, def, sgFill)
+	t.pieBaseR, t.pieBaseG, t.pieBaseB = pr, pg, pb
+	t.hasPieBase = true
+	return t
+}
+
 func buildThemeWithDepth(name string, node, edge, arrow, subgraph, label, edgeLabel, sgLabel, def, sgFill string) Theme {
 	t := buildTheme(name, node, edge, arrow, subgraph, label, edgeLabel, sgLabel, def, sgFill)
 	t.hasDepthColors = true
@@ -257,21 +298,24 @@ var Themes = map[string]Theme{
 		"",                 // default
 		"",                 // subgraph_fill
 	),
-	"terra": buildTheme("terra",
+	"terra": buildThemeMono("terra",
 		"bold #D4845A", "#8B7E6A", "bold #E8A87C", "#A07858",
 		"#F5E6D3", "italic #B89A7A", "bold #E8A87C", "", "",
+		0xD4, 0x84, 0x5A, // warm brown
 	),
 	"neon": buildTheme("neon",
 		"bold magenta", "dim cyan", "bold green", "dim magenta",
 		"bold white", "italic cyan", "bold cyan", "", "",
 	),
-	"mono": buildTheme("mono",
+	"mono": buildThemeMono("mono",
 		"bold white", "dim", "bold white", "dim",
 		"white", "italic dim", "bold white", "", "",
+		0xCC, 0xCC, 0xCC, // gray
 	),
-	"amber": buildTheme("amber",
+	"amber": buildThemeMono("amber",
 		"bold #FFB000", "#806000", "bold #FFD080", "#906800",
 		"#FFD580", "italic #B08030", "bold #FFC040", "", "",
+		0xFF, 0xB0, 0x00, // amber
 	),
 	"blueprint": buildThemeWithDepth("blueprint",
 		"bold #FFFFFF on #1A3A5C",   // node
@@ -295,9 +339,10 @@ var Themes = map[string]Theme{
 		"",                          // default
 		"on #222222",                // subgraph_fill: slightly darker gray
 	),
-	"phosphor": buildTheme("phosphor",
+	"phosphor": buildThemeMono("phosphor",
 		"bold #33FF33", "#1A8C1A", "bold #66FF66", "#228B22",
 		"#AAFFAA", "italic #339933", "bold #55DD55", "", "",
+		0x33, 0xFF, 0x33, // green phosphor
 	),
 	"sunset": buildThemeWithDepth("sunset",
 		"bold #FFFFFF on #5C1A2A",   // node: deep rose

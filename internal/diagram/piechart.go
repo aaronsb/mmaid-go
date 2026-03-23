@@ -100,7 +100,7 @@ func parsePieChart(source string) *pieChart {
 
 // RenderPieChart parses and renders a Mermaid pie chart.
 // Three modes: color circle (useColor), braille circle (plain), bar chart (ASCII).
-func RenderPieChart(source string, useASCII bool, useColor bool) *renderer.Canvas {
+func RenderPieChart(source string, useASCII bool, useColor bool, theme *renderer.Theme) *renderer.Canvas {
 	pc := parsePieChart(source)
 	if len(pc.slices) == 0 {
 		c := renderer.NewCanvas(30, 1)
@@ -112,7 +112,12 @@ func RenderPieChart(source string, useASCII bool, useColor bool) *renderer.Canva
 		return renderPieBarChart(pc, true)
 	}
 	if useColor {
-		return renderPieCircle(pc)
+		// Use monochromatic shades if theme provides a base hue
+		colors := pieColors
+		if theme != nil && theme.HasPieBase() {
+			colors = theme.PieColors(len(pc.slices))
+		}
+		return renderPieCircle(pc, colors)
 	}
 	return renderPieBraille(pc)
 }
@@ -124,7 +129,7 @@ type pieSliceAngle struct {
 }
 
 // renderPieCircle renders a circular pie chart using half-block characters.
-func renderPieCircle(pc *pieChart) *renderer.Canvas {
+func renderPieCircle(pc *pieChart, colors [][3]int) *renderer.Canvas {
 	radius := pieRadius
 	diameter := radius*2 + 1
 
@@ -200,8 +205,8 @@ func renderPieCircle(pc *pieChart) *renderer.Canvas {
 	const aaSamples = 4 // 4x4 grid per half-pixel
 	for row := 0; row < circleRows; row++ {
 		for col := 0; col < circleCols; col++ {
-			topColor := pieBlendHalfPixel(float64(col), float64(row*2), cx, cy, float64(radius), angles, aaSamples)
-			botColor := pieBlendHalfPixel(float64(col), float64(row*2+1), cx, cy, float64(radius), angles, aaSamples)
+			topColor := pieBlendHalfPixel(float64(col), float64(row*2), cx, cy, float64(radius), angles, aaSamples, colors)
+			botColor := pieBlendHalfPixel(float64(col), float64(row*2+1), cx, cy, float64(radius), angles, aaSamples, colors)
 
 			topInside := topColor[3] > 0
 			botInside := botColor[3] > 0
@@ -277,7 +282,7 @@ func renderPieCircle(pc *pieChart) *renderer.Canvas {
 			break
 		}
 
-		clr := pieColors[i%len(pieColors)]
+		clr := colors[i%len(colors)]
 		blockAnsi := fmt.Sprintf("\033[38;2;%d;%d;%dm", clr[0], clr[1], clr[2])
 
 		// Color swatch
@@ -324,7 +329,7 @@ func pieSliceAt(px, py, cx, cy, radius float64, angles []pieSliceAngle) int {
 // Uses dominant-slice coloring: the majority slice wins each half-pixel,
 // so small wedges keep their identity. Brightness is scaled by coverage
 // to anti-alias circle edges (blending toward black).
-func pieBlendHalfPixel(px, py, cx, cy, radius float64, angles []pieSliceAngle, samples int) [4]int {
+func pieBlendHalfPixel(px, py, cx, cy, radius float64, angles []pieSliceAngle, samples int, colors [][3]int) [4]int {
 	totalSamples := samples * samples
 	counts := make(map[int]int)
 	insideCount := 0
@@ -357,7 +362,7 @@ func pieBlendHalfPixel(px, py, cx, cy, radius float64, angles []pieSliceAngle, s
 	}
 
 	// Use dominant slice color, scale brightness by coverage for edge AA
-	clr := pieColors[bestIdx%len(pieColors)]
+	clr := colors[bestIdx%len(colors)]
 	coverage := float64(insideCount) / float64(totalSamples)
 	r := int(float64(clr[0]) * coverage)
 	g := int(float64(clr[1]) * coverage)

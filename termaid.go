@@ -141,7 +141,7 @@ func Render(source string, opts ...Option) (result string) {
 	case "er":
 		canvas = diagram.RenderERDiagram(source, cfg.useASCII)
 	case "pie":
-		canvas = diagram.RenderPieChart(source, cfg.useASCII, cfg.theme != "")
+		canvas = diagram.RenderPieChart(source, cfg.useASCII, cfg.theme != "", getThemePtr(cfg.theme))
 	case "state":
 		g := diagram.ParseStateDiagram(source)
 		canvas = renderer.RenderGraphCanvas(g, cfg.useASCII, cfg.paddingX, cfg.paddingY, cfg.roundedEdges)
