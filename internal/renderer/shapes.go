@@ -129,40 +129,38 @@ func DrawSubroutine(c *Canvas, x, y, width, height int, label string, cs CharSet
 	drawLabel(c, x, y, width, height, label, style)
 }
 
-// DrawDiamond draws a rectangle with diamond markers at the top and bottom center.
+// DrawDiamond draws a diamond shape with chamfered /\ corners.
 func DrawDiamond(c *Canvas, x, y, width, height int, label string, cs CharSet, style string) {
-	cx := x + width/2
-	var marker rune
-	if isUnicode(cs) {
-		marker = '◇'
-	} else {
-		marker = '*'
+	chamferTL := '╱'
+	chamferTR := '╲'
+	chamferBL := '╲'
+	chamferBR := '╱'
+	if !isUnicode(cs) {
+		chamferTL = '/'
+		chamferTR = '\\'
+		chamferBL = '\\'
+		chamferBR = '/'
 	}
 
-	// Top border
-	c.Put(y, x, cs.TopLeft, true, style)
+	// Top row: /──────\
+	c.Put(y, x, chamferTL, false, style)
 	for col := x + 1; col < x+width-1; col++ {
 		c.Put(y, col, cs.Horizontal, true, style)
 	}
-	c.Put(y, x+width-1, cs.TopRight, true, style)
-	c.Put(y, cx, marker, false, style)
+	c.Put(y, x+width-1, chamferTR, false, style)
 
-	// Bottom border
-	c.Put(y+height-1, x, cs.BottomLeft, true, style)
-	for col := x + 1; col < x+width-1; col++ {
-		c.Put(y+height-1, col, cs.Horizontal, true, style)
-	}
-	c.Put(y+height-1, x+width-1, cs.BottomRight, true, style)
-	c.Put(y+height-1, cx, marker, false, style)
-
-	// Side borders + interior fill
+	// Side borders
 	for row := y + 1; row < y+height-1; row++ {
 		c.Put(row, x, cs.Vertical, true, style)
 		c.Put(row, x+width-1, cs.Vertical, true, style)
-		for col := x + 1; col < x+width-1; col++ {
-			c.SetStyle(row, col, style)
-		}
 	}
+
+	// Bottom row: \──────/
+	c.Put(y+height-1, x, chamferBL, false, style)
+	for col := x + 1; col < x+width-1; col++ {
+		c.Put(y+height-1, col, cs.Horizontal, true, style)
+	}
+	c.Put(y+height-1, x+width-1, chamferBR, false, style)
 
 	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
