@@ -20,6 +20,11 @@ type Theme struct {
 	BoldLabel     string
 	ItalicLabel   string
 	Note          string
+
+	// Depth-based region coloring (for treemaps, nested diagrams)
+	// BaseRGB is the darkest shade; each depth step lightens toward white.
+	depthBaseR, depthBaseG, depthBaseB int
+	hasDepthColors                     bool
 }
 
 // ansi helpers
@@ -40,6 +45,70 @@ func bg256(r, g, b int) string {
 func hexBgColor(hex string) string {
 	r, g, b := parseHex(hex)
 	return bg256(r, g, b)
+}
+
+// Palette of distinct hues for top-level sections.
+// Each is a dark base RGB that lightens per depth.
+var regionPalette = [][3]int{
+	{26, 58, 92},   // deep blue
+	{26, 82, 52},   // deep green
+	{82, 36, 82},   // deep purple
+	{82, 56, 26},   // deep amber
+	{26, 72, 82},   // deep teal
+	{82, 26, 42},   // deep rose
+	{52, 72, 26},   // deep olive
+	{62, 42, 82},   // deep violet
+}
+
+// RegionStyle returns an ANSI fg+bg string for a region identified by
+// its top-level section index and nesting depth within that section.
+// Each section gets a distinct hue; depth lightens the shade.
+// Returns empty string if the theme has no depth colors.
+func (t Theme) RegionStyle(sectionIdx, depth int) string {
+	if !t.hasDepthColors {
+		return ""
+	}
+	base := regionPalette[sectionIdx%len(regionPalette)]
+	step := 20
+	r := min(235, base[0]+depth*step)
+	g := min(235, base[1]+depth*step)
+	b := min(235, base[2]+depth*step)
+	return fg256(255, 255, 255) + bg256(r, g, b)
+}
+
+// RegionBorderStyle returns a brighter fg with the region bg for borders.
+func (t Theme) RegionBorderStyle(sectionIdx, depth int) string {
+	if !t.hasDepthColors {
+		return ""
+	}
+	base := regionPalette[sectionIdx%len(regionPalette)]
+	step := 20
+	r := min(235, base[0]+depth*step)
+	g := min(235, base[1]+depth*step)
+	b := min(235, base[2]+depth*step)
+	// Brighter fg for borders
+	fr := min(255, r+60)
+	fg := min(255, g+60)
+	fb := min(255, b+60)
+	return fg256(fr, fg, fb) + bg256(r, g, b)
+}
+
+// RegionLabelStyle returns bold white fg on the region bg for labels.
+func (t Theme) RegionLabelStyle(sectionIdx, depth int) string {
+	if !t.hasDepthColors {
+		return ""
+	}
+	base := regionPalette[sectionIdx%len(regionPalette)]
+	step := 20
+	r := min(235, base[0]+depth*step)
+	g := min(235, base[1]+depth*step)
+	b := min(235, base[2]+depth*step)
+	return "\033[1m" + fg256(255, 255, 255) + bg256(r, g, b)
+}
+
+// HasDepthColors reports whether this theme supports depth-based region coloring.
+func (t Theme) HasDepthColors() bool {
+	return t.hasDepthColors
 }
 
 func parseHex(hex string) (int, int, int) {
@@ -113,6 +182,12 @@ func buildANSI(style string) string {
 	return strings.Join(codes, "")
 }
 
+func buildThemeWithDepth(name string, node, edge, arrow, subgraph, label, edgeLabel, sgLabel, def string) Theme {
+	t := buildTheme(name, node, edge, arrow, subgraph, label, edgeLabel, sgLabel, def)
+	t.hasDepthColors = true
+	return t
+}
+
 func buildTheme(name string, node, edge, arrow, subgraph, label, edgeLabel, sgLabel, def string) Theme {
 	return Theme{
 		Name:          name,
@@ -182,7 +257,7 @@ var Themes = map[string]Theme{
 		"bold #FFC040",  // subgraph_label
 		"",
 	),
-	"blueprint": buildTheme("blueprint",
+	"blueprint": buildThemeWithDepth("blueprint",
 		"bold #FFFFFF on #1A3A5C",   // node: white on dark blue
 		"#6699CC",                   // edge: light blue, terminal bg
 		"bold #FFD700",              // arrow: gold, terminal bg
@@ -192,7 +267,7 @@ var Themes = map[string]Theme{
 		"bold #88CCFF",              // subgraph_label
 		"",                          // default: terminal background
 	),
-	"slate": buildTheme("slate",
+	"slate": buildThemeWithDepth("slate",
 		"bold #E0E0E0 on #2D2D2D",   // node: light gray on dark gray
 		"#808080",                   // edge: terminal bg
 		"bold #FF6B35",              // arrow: orange, terminal bg
@@ -269,7 +344,14 @@ func (c *Canvas) ToColorString(theme Theme) string {
 		for x := 0; x <= lastCol; x++ {
 			ch := c.grid[y][x]
 			styleKey := c.styleGrid[y][x]
-			ansi := styleMap[styleKey]
+
+			// Direct ANSI: style keys starting with "_ansi:" contain raw escape sequences
+			var ansi string
+			if strings.HasPrefix(styleKey, "_ansi:") {
+				ansi = styleKey[6:]
+			} else {
+				ansi = styleMap[styleKey]
+			}
 
 			if ansi == "" {
 				if prevStyle != "" {

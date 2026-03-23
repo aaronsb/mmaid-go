@@ -138,7 +138,12 @@ func Render(source string, opts ...Option) (result string) {
 	case "gitgraph":
 		canvas = diagram.RenderGitGraph(source, cfg.useASCII)
 	case "treemap":
-		canvas = diagram.RenderTreemap(source, cfg.useASCII)
+		var tmTheme *renderer.Theme
+		if cfg.theme != "" {
+			t := renderer.GetTheme(cfg.theme)
+			tmTheme = &t
+		}
+		canvas = diagram.RenderTreemap(source, cfg.useASCII, tmTheme)
 	default:
 		g := parser.ParseFlowchart(source)
 		canvas = renderer.RenderGraphCanvas(g, cfg.useASCII, cfg.paddingX, cfg.paddingY, cfg.roundedEdges)

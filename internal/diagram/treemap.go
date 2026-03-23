@@ -55,9 +55,9 @@ const (
 var reTreemapNode = regexp.MustCompile(`^(\s*)"([^"]+)"(?:\s*:\s*([0-9]+(?:\.[0-9]*)?))?`)
 
 // RenderTreemap parses and renders a Mermaid treemap diagram.
-func RenderTreemap(source string, useASCII bool) *renderer.Canvas {
+func RenderTreemap(source string, useASCII bool, theme *renderer.Theme) *renderer.Canvas {
 	tm := parseTreemap(source)
-	return renderTreemap(tm, useASCII)
+	return renderTreemap(tm, useASCII, theme)
 }
 
 func parseTreemap(source string) *treemap {
@@ -132,7 +132,7 @@ func parseTreemap(source string) *treemap {
 
 // ── renderer ─────────────────────────────────────────────────────
 
-func renderTreemap(tm *treemap, useASCII bool) *renderer.Canvas {
+func renderTreemap(tm *treemap, useASCII bool, theme *renderer.Theme) *renderer.Canvas {
 	cs := renderer.UNICODE
 	if useASCII {
 		cs = renderer.ASCII
@@ -156,8 +156,101 @@ func renderTreemap(tm *treemap, useASCII bool) *renderer.Canvas {
 	canvasW := max(minW, min(termW-2, max(60, int(float64(minW)*1.6))))
 
 	c := renderer.NewCanvas(canvasW, canvasH)
-	tmLayoutNodes(c, cs, tm.roots, 0, 0, canvasW, canvasH, 0)
+
+	// Render each root with its own section index for per-hue coloring
+	tmLayoutRoots(c, cs, tm.roots, 0, 0, canvasW, canvasH, theme)
 	return c
+}
+
+// tmLayoutRoots distributes top-level nodes and assigns each a unique section index.
+func tmLayoutRoots(c *renderer.Canvas, cs renderer.CharSet, nodes []treemapNode, x, y, w, h int, theme *renderer.Theme) {
+	if len(nodes) == 0 || w < tmMinBoxW || h < tmMinBoxH {
+		return
+	}
+
+	total := 0.0
+	for i := range nodes {
+		total += nodes[i].totalValue()
+	}
+	if total <= 0 {
+		return
+	}
+
+	// Compute widths (same proportional logic as tmSliceLayout)
+	nGaps := len(nodes) - 1
+	totalGapW := tmGap * nGaps
+	usableW := w - totalGapW
+
+	minWidths := make([]int, len(nodes))
+	for i := range nodes {
+		if len(nodes[i].children) > 0 {
+			minWidths[i] = tmComputeMinWidth(nodes[i].children) + 2
+		} else {
+			labelW := len(nodes[i].label) + 2
+			minWidths[i] = max(tmMinBoxW, labelW)
+		}
+	}
+
+	sizes := make([]float64, len(nodes))
+	for i := range nodes {
+		sizes[i] = nodes[i].totalValue() / total * float64(usableW)
+	}
+	for iter := 0; iter < 3; iter++ {
+		deficit := 0.0
+		surplusTotal := 0.0
+		for i := range sizes {
+			if sizes[i] < float64(minWidths[i]) {
+				deficit += float64(minWidths[i]) - sizes[i]
+				sizes[i] = float64(minWidths[i])
+			} else {
+				surplusTotal += sizes[i] - float64(minWidths[i])
+			}
+		}
+		if deficit > 0 && surplusTotal > 0 {
+			scale := math.Max(0, 1-deficit/surplusTotal)
+			for i := range sizes {
+				if sizes[i] > float64(minWidths[i]) {
+					excess := sizes[i] - float64(minWidths[i])
+					sizes[i] = float64(minWidths[i]) + excess*scale
+				}
+			}
+		}
+	}
+
+	intSizes := make([]int, len(sizes))
+	for i := range sizes {
+		intSizes[i] = max(minWidths[i], int(math.Round(sizes[i])))
+	}
+	currentTotal := 0
+	for _, s := range intSizes {
+		currentTotal += s
+	}
+	if currentTotal != usableW {
+		diff := usableW - currentTotal
+		largestIdx := 0
+		for i := range intSizes {
+			if intSizes[i] > intSizes[largestIdx] {
+				largestIdx = i
+			}
+		}
+		intSizes[largestIdx] = max(minWidths[largestIdx], intSizes[largestIdx]+diff)
+	}
+
+	posX := x
+	for i := range nodes {
+		bw := intSizes[i]
+		if bw > x+w-posX {
+			bw = x + w - posX
+		}
+		if bw < tmMinBoxW {
+			break
+		}
+		tmDrawNode(c, cs, &nodes[i], posX, y, bw, h, 0, i, theme)
+		posX += bw
+		if i < nGaps {
+			posX += tmGap
+		}
+	}
 }
 
 func tmComputeHeight(nodes []treemapNode) int {
@@ -195,7 +288,7 @@ func tmComputeMinWidth(nodes []treemapNode) int {
 	return total
 }
 
-func tmLayoutNodes(c *renderer.Canvas, cs renderer.CharSet, nodes []treemapNode, x, y, w, h, depth int) {
+func tmLayoutNodes(c *renderer.Canvas, cs renderer.CharSet, nodes []treemapNode, x, y, w, h, depth, sectionIdx int, theme *renderer.Theme) {
 	if len(nodes) == 0 || w < tmMinBoxW || h < tmMinBoxH {
 		return
 	}
@@ -213,7 +306,6 @@ func tmLayoutNodes(c *renderer.Canvas, cs renderer.CharSet, nodes []treemapNode,
 	for i := range sorted {
 		sorted[i] = i
 	}
-	// Insertion sort by total value descending
 	for i := 1; i < len(sorted); i++ {
 		for j := i; j > 0; j-- {
 			if nodes[sorted[j]].totalValue() > nodes[sorted[j-1]].totalValue() {
@@ -229,10 +321,10 @@ func tmLayoutNodes(c *renderer.Canvas, cs renderer.CharSet, nodes []treemapNode,
 		sortedNodes[i] = nodes[idx]
 	}
 
-	tmSliceLayout(c, cs, sortedNodes, x, y, w, h, total, depth)
+	tmSliceLayout(c, cs, sortedNodes, x, y, w, h, total, depth, sectionIdx, theme)
 }
 
-func tmSliceLayout(c *renderer.Canvas, cs renderer.CharSet, nodes []treemapNode, x, y, w, h int, total float64, depth int) {
+func tmSliceLayout(c *renderer.Canvas, cs renderer.CharSet, nodes []treemapNode, x, y, w, h int, total float64, depth, sectionIdx int, theme *renderer.Theme) {
 	nGaps := len(nodes) - 1
 	totalGapW := tmGap * nGaps
 	usableW := w - totalGapW
@@ -318,7 +410,7 @@ func tmSliceLayout(c *renderer.Canvas, cs renderer.CharSet, nodes []treemapNode,
 		if bw < tmMinBoxW {
 			break
 		}
-		tmDrawNode(c, cs, &nodes[i], posX, y, bw, h, depth)
+		tmDrawNode(c, cs, &nodes[i], posX, y, bw, h, depth, sectionIdx, theme)
 		posX += bw
 		if i < nGaps {
 			posX += tmGap
@@ -326,7 +418,7 @@ func tmSliceLayout(c *renderer.Canvas, cs renderer.CharSet, nodes []treemapNode,
 	}
 }
 
-func tmDrawNode(c *renderer.Canvas, cs renderer.CharSet, node *treemapNode, x, y, w, h, depth int) {
+func tmDrawNode(c *renderer.Canvas, cs renderer.CharSet, node *treemapNode, x, y, w, h, depth, sectionIdx int, theme *renderer.Theme) {
 	if w < tmMinBoxW || h < tmMinBoxH {
 		return
 	}
@@ -347,29 +439,58 @@ func tmDrawNode(c *renderer.Canvas, cs renderer.CharSet, node *treemapNode, x, y
 	bl := cs.BottomLeft
 	br := cs.BottomRight
 
-	style := "node"
-	if isSection {
-		style = "subgraph"
+	// Determine styles — use region colors if theme supports it
+	var borderStyle, fillStyle, labelStyle, valueStyle string
+	if theme != nil && theme.HasDepthColors() {
+		borderStyle = theme.RegionBorderStyle(sectionIdx, depth)
+		fillStyle = theme.RegionStyle(sectionIdx, depth)
+		labelStyle = theme.RegionLabelStyle(sectionIdx, depth)
+		valueStyle = theme.RegionStyle(sectionIdx, depth)
+	} else {
+		if isSection {
+			borderStyle = "subgraph"
+		} else {
+			borderStyle = "node"
+		}
+		fillStyle = borderStyle
+		labelStyle = "label"
+		valueStyle = "edge_label"
+	}
+
+	useDirectANSI := theme != nil && theme.HasDepthColors()
+
+	// Fill entire interior with background first (solid region fill)
+	if useDirectANSI {
+		for row := y; row < y+h; row++ {
+			for col := x; col < x+w; col++ {
+				c.SetStyle(row, col, fmt.Sprintf("_ansi:%s", fillStyle))
+			}
+		}
 	}
 
 	// Top border
-	c.Put(y, x, tl, false, style)
+	c.Put(y, x, tl, false, borderStyle)
 	for col := x + 1; col < x+w-1; col++ {
-		c.Put(y, col, hz, false, style)
+		c.Put(y, col, hz, false, borderStyle)
 	}
-	c.Put(y, x+w-1, tr, false, style)
+	c.Put(y, x+w-1, tr, false, borderStyle)
 
 	// Bottom border
-	c.Put(y+h-1, x, bl, false, style)
+	c.Put(y+h-1, x, bl, false, borderStyle)
 	for col := x + 1; col < x+w-1; col++ {
-		c.Put(y+h-1, col, hz, false, style)
+		c.Put(y+h-1, col, hz, false, borderStyle)
 	}
-	c.Put(y+h-1, x+w-1, br, false, style)
+	c.Put(y+h-1, x+w-1, br, false, borderStyle)
 
-	// Side borders
+	// Side borders + interior fill
 	for row := y + 1; row < y+h-1; row++ {
-		c.Put(row, x, vt, false, style)
-		c.Put(row, x+w-1, vt, false, style)
+		c.Put(row, x, vt, false, borderStyle)
+		c.Put(row, x+w-1, vt, false, borderStyle)
+		if !useDirectANSI {
+			for col := x + 1; col < x+w-1; col++ {
+				c.SetStyle(row, col, fillStyle)
+			}
+		}
 	}
 
 	// Label -- centered on the first inner row
@@ -377,13 +498,13 @@ func tmDrawNode(c *renderer.Canvas, cs renderer.CharSet, node *treemapNode, x, y
 	innerW := w - 2
 	if len(label) > innerW {
 		if innerW > 1 {
-			label = label[:innerW-1] + "\u2026" // "..."
+			label = label[:innerW-1] + "\u2026"
 		} else {
 			label = label[:innerW]
 		}
 	}
 	labelCol := x + 1 + max(0, (innerW-len(label))/2)
-	c.PutText(y+1, labelCol, label, "label")
+	c.PutText(y+1, labelCol, label, labelStyle)
 
 	// Value (for leaves only)
 	if !isSection && node.value > 0 && h >= 4 {
@@ -392,18 +513,18 @@ func tmDrawNode(c *renderer.Canvas, cs renderer.CharSet, node *treemapNode, x, y
 			valStr = valStr[:innerW]
 		}
 		valCol := x + 1 + max(0, (innerW-len(valStr))/2)
-		c.PutText(y+2, valCol, valStr, "edge_label")
+		c.PutText(y+2, valCol, valStr, valueStyle)
 	}
 
 	// Recurse into children
 	if isSection {
 		innerX := x + 1
-		innerY := y + 2 // skip border + label
+		innerY := y + 2
 		innerWVal := w - 2
-		innerH := h - 3 // top border + label + bottom border
+		innerH := h - 3
 
 		if innerWVal >= tmMinBoxW && innerH >= tmMinBoxH {
-			tmLayoutNodes(c, cs, node.children, innerX, innerY, innerWVal, innerH, depth+1)
+			tmLayoutNodes(c, cs, node.children, innerX, innerY, innerWVal, innerH, depth+1, sectionIdx, theme)
 		}
 	}
 }
