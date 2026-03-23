@@ -141,11 +141,23 @@ func Render(source string, opts ...Option) (result string) {
 		g := diagram.ParseStateDiagram(source)
 		return renderer.RenderGraph(g, cfg.useASCII, cfg.paddingX, cfg.paddingY, cfg.roundedEdges)
 	case "block":
-		return "[termaid] Block diagrams not yet supported"
+		canvas := diagram.RenderBlockDiagram(source, cfg.useASCII)
+		if canvas == nil {
+			return ""
+		}
+		return canvas.ToString()
 	case "gitgraph":
-		return "[termaid] Git graphs not yet supported"
+		canvas := diagram.RenderGitGraph(source, cfg.useASCII)
+		if canvas == nil {
+			return ""
+		}
+		return canvas.ToString()
 	case "treemap":
-		return "[termaid] Treemap diagrams not yet supported"
+		canvas := diagram.RenderTreemap(source, cfg.useASCII)
+		if canvas == nil {
+			return ""
+		}
+		return canvas.ToString()
 	default:
 		g := parser.ParseFlowchart(source)
 		return renderer.RenderGraph(g, cfg.useASCII, cfg.paddingX, cfg.paddingY, cfg.roundedEdges)
