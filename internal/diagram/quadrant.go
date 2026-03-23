@@ -1,7 +1,6 @@
 package diagram
 
 import (
-	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -252,20 +251,33 @@ func RenderQuadrantChart(source string, useASCII bool, theme *renderer.Theme) *r
 		c.PutText(row, col, qd.yAxisBottom, "label")
 	}
 
-	// Plot points
+	// Plot points — draw dots first, then labels (so labels don't get overwritten)
+	type plotted struct {
+		px, py int
+		label  string
+	}
+	var points []plotted
 	for _, p := range qd.points {
-		// Map [0,1] to plot coordinates
 		px := plotStartX + int(p.x*float64(plotW-1))
 		py := plotEndY - int(p.y*float64(plotH-1))
 		if px >= plotStartX && px < plotStartX+plotW && py >= plotStartY && py <= plotEndY {
 			c.Put(py, px, dot, false, "arrow")
-			// Label to the right (or left if too close to edge)
-			lbl := fmt.Sprintf(" %s", p.label)
-			if px+len(lbl)+1 < canvasWidth {
-				c.PutText(py, px+1, lbl, "label")
-			} else {
-				c.PutText(py, px-len(p.label)-1, p.label, "label")
+			points = append(points, plotted{px, py, p.label})
+		}
+	}
+	for _, p := range points {
+		// Label with solid connector: ●─Label (right) or Label─● (left)
+		rightSpace := canvasWidth - p.px - 2
+		if rightSpace >= len(p.label)+1 {
+			c.Put(p.py, p.px+1, '─', false, "arrow")
+			c.PutText(p.py, p.px+2, p.label, "label")
+		} else {
+			labelStart := p.px - len(p.label) - 2
+			if labelStart < plotStartX {
+				labelStart = plotStartX
 			}
+			c.PutText(p.py, labelStart, p.label, "label")
+			c.Put(p.py, p.px-1, '─', false, "arrow")
 		}
 	}
 
