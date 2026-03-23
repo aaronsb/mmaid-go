@@ -18,6 +18,7 @@ type config struct {
 	paddingX     int
 	paddingY     int
 	roundedEdges bool
+	theme        string // "" = no color, "default", "terra", etc.
 }
 
 func defaultConfig() config {
@@ -47,6 +48,12 @@ func WithPadding(x, y int) Option {
 // WithSharpEdges disables rounded corners on edge turns.
 func WithSharpEdges() Option {
 	return func(c *config) { c.roundedEdges = false }
+}
+
+// WithTheme enables colored output with the given theme name.
+// Available themes: default, terra, neon, mono, amber, phosphor.
+func WithTheme(name string) Option {
+	return func(c *config) { c.theme = name }
 }
 
 // frontmatterRe matches YAML frontmatter at the start of a document.
@@ -112,56 +119,41 @@ func Render(source string, opts ...Option) (result string) {
 	source = stripFrontmatter(source)
 	dtype := detectDiagramType(source)
 
+	// Get a canvas for any diagram type
+	var canvas *renderer.Canvas
 	switch dtype {
 	case "sequence":
-		canvas := diagram.RenderSequence(source, cfg.useASCII)
-		if canvas == nil {
-			return ""
-		}
-		return canvas.ToString()
+		canvas = diagram.RenderSequence(source, cfg.useASCII)
 	case "class":
-		canvas := diagram.RenderClassDiagram(source, cfg.useASCII)
-		if canvas == nil {
-			return ""
-		}
-		return canvas.ToString()
+		canvas = diagram.RenderClassDiagram(source, cfg.useASCII)
 	case "er":
-		canvas := diagram.RenderERDiagram(source, cfg.useASCII)
-		if canvas == nil {
-			return ""
-		}
-		return canvas.ToString()
+		canvas = diagram.RenderERDiagram(source, cfg.useASCII)
 	case "pie":
-		canvas := diagram.RenderPieChart(source, cfg.useASCII)
-		if canvas == nil {
-			return ""
-		}
-		return canvas.ToString()
+		canvas = diagram.RenderPieChart(source, cfg.useASCII)
 	case "state":
 		g := diagram.ParseStateDiagram(source)
-		return renderer.RenderGraph(g, cfg.useASCII, cfg.paddingX, cfg.paddingY, cfg.roundedEdges)
+		canvas = renderer.RenderGraphCanvas(g, cfg.useASCII, cfg.paddingX, cfg.paddingY, cfg.roundedEdges)
 	case "block":
-		canvas := diagram.RenderBlockDiagram(source, cfg.useASCII)
-		if canvas == nil {
-			return ""
-		}
-		return canvas.ToString()
+		canvas = diagram.RenderBlockDiagram(source, cfg.useASCII)
 	case "gitgraph":
-		canvas := diagram.RenderGitGraph(source, cfg.useASCII)
-		if canvas == nil {
-			return ""
-		}
-		return canvas.ToString()
+		canvas = diagram.RenderGitGraph(source, cfg.useASCII)
 	case "treemap":
-		canvas := diagram.RenderTreemap(source, cfg.useASCII)
-		if canvas == nil {
-			return ""
-		}
-		return canvas.ToString()
+		canvas = diagram.RenderTreemap(source, cfg.useASCII)
 	default:
 		g := parser.ParseFlowchart(source)
-		return renderer.RenderGraph(g, cfg.useASCII, cfg.paddingX, cfg.paddingY, cfg.roundedEdges)
+		canvas = renderer.RenderGraphCanvas(g, cfg.useASCII, cfg.paddingX, cfg.paddingY, cfg.roundedEdges)
 	}
+
+	if canvas == nil {
+		return ""
+	}
+
+	// Apply theme if set, otherwise plain text
+	if cfg.theme != "" {
+		theme := renderer.GetTheme(cfg.theme)
+		return canvas.ToColorString(theme)
+	}
+	return canvas.ToString()
 }
 
 // Parse parses mermaid syntax and returns a Graph model.

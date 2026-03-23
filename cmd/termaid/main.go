@@ -23,6 +23,7 @@ func main() {
 	paddingX := flag.Int("padding-x", 4, "Horizontal padding inside node boxes")
 	paddingY := flag.Int("padding-y", 2, "Vertical padding inside node boxes")
 	sharpEdges := flag.Bool("sharp-edges", false, "Use sharp corners on edge turns")
+	theme := flag.String("theme", "", "Color theme: default, terra, neon, mono, amber, phosphor")
 	showVersion := flag.Bool("version", false, "Print version and exit")
 
 	flag.Usage = func() {
@@ -52,9 +53,12 @@ func main() {
 	if *sharpEdges {
 		opts = append(opts, termaid.WithSharpEdges())
 	}
+	if *theme != "" {
+		opts = append(opts, termaid.WithTheme(*theme))
+	}
 
 	result := termaid.Render(input, opts...)
-	fmt.Print(result)
+	fmt.Println(result)
 }
 
 // readInput returns the mermaid source from a file argument or stdin.
