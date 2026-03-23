@@ -267,14 +267,21 @@ func RenderQuadrantChart(source string, useASCII bool, theme *renderer.Theme) *r
 	}
 	for _, p := range points {
 		// Label with solid connector: ●─Label (right) or Label─● (left)
+		// Clear cells first so spaces in labels overwrite underlying text
 		rightSpace := canvasWidth - p.px - 2
 		if rightSpace >= len(p.label)+1 {
+			for i := 0; i < len(p.label)+1; i++ {
+				c.ClearCell(p.py, p.px+1+i)
+			}
 			c.Put(p.py, p.px+1, '─', false, "arrow")
 			c.PutText(p.py, p.px+2, p.label, "label")
 		} else {
 			labelStart := p.px - len(p.label) - 2
 			if labelStart < plotStartX {
 				labelStart = plotStartX
+			}
+			for i := 0; i < len(p.label)+1; i++ {
+				c.ClearCell(p.py, labelStart+i)
 			}
 			c.PutText(p.py, labelStart, p.label, "label")
 			c.Put(p.py, p.px-1, '─', false, "arrow")
