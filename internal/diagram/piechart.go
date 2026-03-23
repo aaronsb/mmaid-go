@@ -263,13 +263,10 @@ func renderPieCircle(pc *pieChart) *renderer.Canvas {
 	c.DrawHorizontal(legendBoxTop+legendBoxH-1, legendBoxLeft+1, legendBoxLeft+legendBoxW-2, '─', "node")
 	c.Put(legendBoxTop+legendBoxH-1, legendBoxLeft+legendBoxW-1, '┘', false, "node")
 
-	// Fill legend interior
+	// Fill legend interior — use fill layer only so all cells share the same bg
 	for row := legendBoxTop; row < legendBoxTop+legendBoxH; row++ {
 		for col := legendBoxLeft; col < legendBoxLeft+legendBoxW; col++ {
 			c.SetFill(row, col, "subgraph_fill")
-			if c.Get(row, col) == ' ' {
-				c.SetStyle(row, col, "node")
-			}
 		}
 	}
 
