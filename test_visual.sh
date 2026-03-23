@@ -1,32 +1,44 @@
 #!/usr/bin/env bash
 # Visual test suite for termaid-go
-# Run: ./test_visual.sh
-# Review each diagram and check the noted details.
+# Run: ./test_visual.sh [theme]
+# Examples:
+#   ./test_visual.sh              # no theme (plain)
+#   ./test_visual.sh blueprint    # blueprint theme (solid colored regions)
+#   ./test_visual.sh slate        # slate theme (gray tones)
+#   ./test_visual.sh default      # default theme (colored text, no backgrounds)
 
 set -euo pipefail
 
-TERMAID="${1:-./termaid}"
+TERMAID="${TERMAID:-./termaid}"
+THEME="${1:-}"
 
-if [[ ! -x "$TERMAID" ]]; then
-  echo "Building termaid..."
-  go build -o "$TERMAID" ./cmd/termaid
+# Always rebuild to pick up latest changes
+echo "Building termaid..."
+go build -o "$TERMAID" ./cmd/termaid
+
+THEME_FLAG=""
+THEME_LABEL="(no theme)"
+if [[ -n "$THEME" ]]; then
+  THEME_FLAG="--theme $THEME"
+  THEME_LABEL="theme: $THEME"
 fi
 
 pass=0
-fail=0
+total=0
 
 run_test() {
   local name="$1"
   local check="$2"
   local input="$3"
 
+  total=$((total + 1))
   echo ""
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  echo "TEST: $name"
+  echo "TEST $total: $name [$THEME_LABEL]"
   echo "CHECK: $check"
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   echo ""
-  echo "$input" | "$TERMAID"
+  echo "$input" | $TERMAID $THEME_FLAG
   echo ""
 }
 
@@ -97,7 +109,7 @@ run_test "Sequence: Multiple participants" \
     Server-->>Client: Response'
 
 run_test "Sequence: Notes and blocks" \
-  "A note box (rectangle) appears to the right of Alice. A loop block with [loop] label and dashed section divider encloses messages." \
+  "A note box appears to the right of Alice. A loop block with [loop] label and dashed divider encloses messages." \
   'sequenceDiagram
     Alice->>Bob: Start
     Note right of Alice: Important!
@@ -138,7 +150,7 @@ run_test "Class diagram: Interface annotation" \
 # ── ER DIAGRAM TESTS ────────────────────────────────────────────────────────
 
 run_test "ER diagram: Basic relationships" \
-  "Two entity boxes (CUSTOMER, ORDER) with attributes listed. Connecting line with cardinality text (1, 0..*, etc.) near endpoints. Label 'places' on the relationship line." \
+  "Two entity boxes (CUSTOMER, ORDER) with attributes listed. Connecting line with cardinality. Label 'places' on the relationship line." \
   'erDiagram
     CUSTOMER ||--o{ ORDER : places
     CUSTOMER {
@@ -162,14 +174,25 @@ run_test "State diagram: Basic transitions" \
 
 # ── PIE CHART TESTS ─────────────────────────────────────────────────────────
 
-run_test "Pie chart: Basic" \
-  "Horizontal bar chart with right-aligned labels. Different fill patterns (█▓░▒). Percentages shown. Bars proportional to values." \
+run_test "Pie chart: Circular" \
+  "Circular pie with colored wedges (or braille patterns without theme). Legend on the right with color swatches and percentages." \
   'pie title Browser Market Share
     "Chrome" : 65
     "Firefox" : 15
     "Safari" : 10
     "Edge" : 8
     "Other" : 2'
+
+run_test "Pie chart: showData" \
+  "Circular pie with both percentages and raw values in the legend." \
+  'pie showData
+    title Project Hours
+    "Development" : 45
+    "Testing" : 20
+    "Design" : 15
+    "Management" : 10
+    "Ops" : 7
+    "Docs" : 3'
 
 # ── GIT GRAPH TESTS ─────────────────────────────────────────────────────────
 
@@ -216,7 +239,7 @@ run_test "Block diagram: Grid layout" \
 # ── TREEMAP TESTS ────────────────────────────────────────────────────────────
 
 run_test "Treemap: Nested sections" \
-  "Two section boxes with DASHED borders (┄). Each contains leaf boxes with SOLID borders. Leaf boxes show label and numeric value. Wider boxes for larger values." \
+  "Two section boxes with DASHED borders (┄). Each contains leaf boxes with SOLID borders. With theme: per-section hue + depth shading." \
   'treemap-beta
     "Code"
         "Go": 50
@@ -225,23 +248,132 @@ run_test "Treemap: Nested sections" \
         "README": 10
         "API": 10'
 
+# ── TIMELINE TESTS ──────────────────────────────────────────────────────────
+
+run_test "Timeline: Social media history" \
+  "Horizontal axis with dots (●). Period labels below axis. Event boxes stacked above each dot." \
+  'timeline
+    title History of Social Media
+    2002 : LinkedIn
+    2004 : Facebook : Google
+    2005 : YouTube
+    2006 : Twitter'
+
+# ── KANBAN TESTS ─────────────────────────────────────────────────────────────
+
+run_test "Kanban: Task board" \
+  "Three columns (Todo, In Progress, Done) with cards inside. With theme: each column has distinct hue, cards lighter shade." \
+  'kanban
+  col1[Todo]
+    t1[Design API]
+    t2[Write tests]
+  col2[In Progress]
+    t3[Implement parser]
+  col3[Done]
+    t4[Setup CI]
+    t5[Deploy v1]'
+
+# ── MINDMAP TESTS ────────────────────────────────────────────────────────────
+
+run_test "Mindmap: Project structure" \
+  "Root node on left, children branching right. Horizontal and vertical edge connectors. Boxes around each node." \
+  'mindmap
+  root((Project))
+    Frontend
+      React
+      CSS
+    Backend
+      Go
+      PostgreSQL
+    DevOps
+      Docker
+      K8s'
+
+# ── QUADRANT CHART TESTS ────────────────────────────────────────────────────
+
+run_test "Quadrant: Campaign analysis" \
+  "2×2 grid with dashed center lines. Quadrant labels in each section. Points plotted with ● and labeled." \
+  'quadrantChart
+    title Reach and engagement
+    x-axis Low Reach --> High Reach
+    y-axis Low Engagement --> High Engagement
+    quadrant-1 We should expand
+    quadrant-2 Need to promote
+    quadrant-3 Re-evaluate
+    quadrant-4 May be improved
+    Campaign A: [0.3, 0.6]
+    Campaign B: [0.45, 0.23]
+    Campaign C: [0.8, 0.9]
+    Campaign D: [0.7, 0.3]'
+
+# ── XY CHART TESTS ──────────────────────────────────────────────────────────
+
+run_test "XY Chart: Sales revenue" \
+  "Bar chart with line overlay. Y-axis labels and title. X-axis category labels. Bars (█) with line dots (●) connected." \
+  'xychart-beta
+    title "Sales Revenue"
+    x-axis [jan, feb, mar, apr, may, jun]
+    y-axis "Revenue" 0 --> 12000
+    bar [5000, 6000, 7500, 8200, 9800, 11000]
+    line [5000, 6000, 7500, 8200, 9800, 11000]'
+
+# ── GANTT CHART TESTS ───────────────────────────────────────────────────────
+
+run_test "Gantt: Cloud migration" \
+  "5 sections with overlapping tasks. Red today marker (┆) if date is in range. Section color strips on bar area only. Bold section headers, regular task labels." \
+  'gantt
+    title Cloud Migration Program
+    dateFormat YYYY-MM-DD
+    section Discovery
+        Inventory audit       :d1, 2026-03-10, 7d
+        Dependency mapping    :d2, 2026-03-12, 10d
+        Risk assessment       :d3, after d1, 5d
+        Cost modeling         :d4, after d2, 4d
+    section Infrastructure
+        Network setup         :i1, after d2, 8d
+        IAM policies          :i2, after d3, 6d
+        Terraform modules     :i3, after i1, 12d
+        Monitoring stack      :i4, after i2, 10d
+    section Migration
+        Database migration    :m1, after i1, 14d
+        App containerization  :m2, after i3, 10d
+        Data sync pipeline    :m3, after m1, 7d
+        Service mesh config   :m4, after i3, 8d
+    section Validation
+        Load testing          :v1, after m2, 6d
+        Security scan         :v2, after m1, 5d
+        DR drill              :v3, after v1, 4d
+        Compliance audit      :v4, after v2, 7d
+    section Cutover
+        DNS switchover        :c1, after v3, 2d
+        Traffic migration     :c2, after c1, 3d
+        Legacy decommission   :c3, after c2, 5d'
+
 # ── ASCII MODE TEST ──────────────────────────────────────────────────────────
 
-run_test "ASCII mode: Flowchart" \
-  "All box-drawing uses +, -, | characters. Arrows use > < v ^. No Unicode characters anywhere." \
-  'graph LR; A[Start] --> B{Check} --> C[Done]'
-
-# Re-run the last one in ASCII
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "TEST: ASCII mode: Flowchart (--ascii flag)"
 echo "CHECK: All box-drawing uses +, -, | characters. Arrows use > < v ^. No Unicode characters anywhere."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
-echo 'graph LR; A[Start] --> B{Check} --> C[Done]' | "$TERMAID" --ascii
+echo 'graph LR; A[Start] --> B{Check} --> C[Done]' | $TERMAID --ascii
+echo ""
+
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "TEST: ASCII mode: Pie chart (--ascii flag)"
+echo "CHECK: Horizontal bar chart with different fill characters (#, *, +, etc). No circle."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo 'pie title Languages
+    "Go" : 40
+    "Python" : 30
+    "Rust" : 20
+    "Other" : 10' | $TERMAID --ascii
 echo ""
 
 echo ""
 echo "════════════════════════════════════════════════════════════════════════"
-echo "Visual test suite complete. Review each diagram above."
+echo "Visual test suite complete — $total tests [$THEME_LABEL]"
 echo "════════════════════════════════════════════════════════════════════════"

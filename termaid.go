@@ -91,6 +91,18 @@ func detectDiagramType(source string) string {
 			return "treemap"
 		case strings.HasPrefix(lower, "statediagram"):
 			return "state"
+		case strings.HasPrefix(lower, "gantt"):
+			return "gantt"
+		case strings.HasPrefix(lower, "timeline"):
+			return "timeline"
+		case strings.HasPrefix(lower, "mindmap"):
+			return "mindmap"
+		case strings.HasPrefix(lower, "quadrantchart"):
+			return "quadrant"
+		case strings.HasPrefix(lower, "xychart"):
+			return "xychart"
+		case strings.HasPrefix(lower, "kanban"):
+			return "kanban"
 		default:
 			return "flowchart"
 		}
@@ -129,7 +141,7 @@ func Render(source string, opts ...Option) (result string) {
 	case "er":
 		canvas = diagram.RenderERDiagram(source, cfg.useASCII)
 	case "pie":
-		canvas = diagram.RenderPieChart(source, cfg.useASCII)
+		canvas = diagram.RenderPieChart(source, cfg.useASCII, cfg.theme != "")
 	case "state":
 		g := diagram.ParseStateDiagram(source)
 		canvas = renderer.RenderGraphCanvas(g, cfg.useASCII, cfg.paddingX, cfg.paddingY, cfg.roundedEdges)
@@ -138,12 +150,19 @@ func Render(source string, opts ...Option) (result string) {
 	case "gitgraph":
 		canvas = diagram.RenderGitGraph(source, cfg.useASCII)
 	case "treemap":
-		var tmTheme *renderer.Theme
-		if cfg.theme != "" {
-			t := renderer.GetTheme(cfg.theme)
-			tmTheme = &t
-		}
-		canvas = diagram.RenderTreemap(source, cfg.useASCII, tmTheme)
+		canvas = diagram.RenderTreemap(source, cfg.useASCII, getThemePtr(cfg.theme))
+	case "gantt":
+		canvas = diagram.RenderGantt(source, cfg.useASCII, getThemePtr(cfg.theme))
+	case "timeline":
+		canvas = diagram.RenderTimeline(source, cfg.useASCII, getThemePtr(cfg.theme))
+	case "mindmap":
+		canvas = diagram.RenderMindmap(source, cfg.useASCII)
+	case "quadrant":
+		canvas = diagram.RenderQuadrantChart(source, cfg.useASCII, getThemePtr(cfg.theme))
+	case "xychart":
+		canvas = diagram.RenderXYChart(source, cfg.useASCII, getThemePtr(cfg.theme))
+	case "kanban":
+		canvas = diagram.RenderKanban(source, cfg.useASCII, getThemePtr(cfg.theme))
 	default:
 		g := parser.ParseFlowchart(source)
 		canvas = renderer.RenderGraphCanvas(g, cfg.useASCII, cfg.paddingX, cfg.paddingY, cfg.roundedEdges)
@@ -159,6 +178,14 @@ func Render(source string, opts ...Option) (result string) {
 		return canvas.ToColorString(theme)
 	}
 	return canvas.ToString()
+}
+
+func getThemePtr(name string) *renderer.Theme {
+	if name == "" {
+		return nil
+	}
+	t := renderer.GetTheme(name)
+	return &t
 }
 
 // Parse parses mermaid syntax and returns a Graph model.

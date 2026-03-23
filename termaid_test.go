@@ -278,7 +278,7 @@ func TestPieChartBasic(t *testing.T) {
     "Cats" : 30`)
 	assertContains(t, out, "Dogs")
 	assertContains(t, out, "Cats")
-	assertContains(t, out, "█")
+	assertContains(t, out, "⣿") // braille solid pattern (no-theme mode)
 }
 
 func TestPieChartShowData(t *testing.T) {

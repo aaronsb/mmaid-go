@@ -107,6 +107,43 @@ func (t Theme) RegionLabelStyle(sectionIdx, depth int) string {
 	return "\033[1m" + fg256(255, 255, 255) + bg256(r, g, b)
 }
 
+// RegionTextStyle returns a bright fg color matching the section hue (no background).
+// Use for labels that should hint at their section without a full colored background.
+func (t Theme) RegionTextStyle(sectionIdx, depth int) string {
+	if !t.hasDepthColors {
+		return ""
+	}
+	base := regionPalette[sectionIdx%len(regionPalette)]
+	step := 20
+	// Bright version: lighten significantly for readability on dark wallpaper
+	r := min(255, base[0]+depth*step+120)
+	g := min(255, base[1]+depth*step+120)
+	b := min(255, base[2]+depth*step+120)
+	if depth == 0 {
+		return "\033[1m" + fg256(r, g, b)
+	}
+	return fg256(r, g, b)
+}
+
+// RegionBarStyle returns a style for bar/chart elements — section color as fg,
+// slightly brighter as bg. With ▓/▒ characters this shows the section color
+// prominently rather than white.
+func (t Theme) RegionBarStyle(sectionIdx, depth int) string {
+	if !t.hasDepthColors {
+		return ""
+	}
+	base := regionPalette[sectionIdx%len(regionPalette)]
+	step := 20
+	r := min(235, base[0]+depth*step)
+	g := min(235, base[1]+depth*step)
+	b := min(235, base[2]+depth*step)
+	// Brighter bg so ▓ blends section color (fg) with a lighter shade (bg)
+	br := min(255, r+50)
+	bg := min(255, g+50)
+	bb := min(255, b+50)
+	return fg256(r, g, b) + bg256(br, bg, bb)
+}
+
 // HasDepthColors reports whether this theme supports depth-based region coloring.
 func (t Theme) HasDepthColors() bool {
 	return t.hasDepthColors
@@ -298,7 +335,7 @@ func (c *Canvas) ToColorString(theme Theme) string {
 	for lastNonEmpty >= 0 {
 		empty := true
 		for x := range c.Width {
-			if c.grid[lastNonEmpty][x] != ' ' {
+			if c.grid[lastNonEmpty][x] != ' ' || c.fillGrid[lastNonEmpty][x] != "" {
 				empty = false
 				break
 			}
@@ -310,9 +347,9 @@ func (c *Canvas) ToColorString(theme Theme) string {
 	}
 
 	for y := 0; y <= lastNonEmpty; y++ {
-		// Find last non-space column for trimming
+		// Find last non-space column for trimming (preserve cells with fill)
 		lastCol := c.Width - 1
-		for lastCol >= 0 && c.grid[y][lastCol] == ' ' {
+		for lastCol >= 0 && c.grid[y][lastCol] == ' ' && c.fillGrid[y][lastCol] == "" {
 			lastCol--
 		}
 
