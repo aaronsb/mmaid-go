@@ -406,8 +406,9 @@ func TestWithPadding(t *testing.T) {
 
 func TestWithSharpEdges(t *testing.T) {
 	out := Render("graph TD\n  A --> B --> C\n  A --> D --> C", WithSharpEdges())
-	// Sharp edges option should still produce valid output with routing
-	assertContains(t, out, "│") // edges still routed
+	// Sharp edges: routing uses ┌└ instead of ╭╰
+	assertContains(t, out, "└")
+	assertNotContains(t, out, "╰")
 }
 
 // ── Diagram type detection tests ────────────────────────────────────────────
