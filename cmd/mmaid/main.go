@@ -85,7 +85,7 @@ func main() {
 
 	input, err := readInput(flag.Args())
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%stermaid:%s %v\n", ansiBold+ansiCyan, ansiReset, err)
+		fmt.Fprintf(os.Stderr, "%smmaid:%s %v\n", ansiBold+ansiCyan, ansiReset, err)
 		os.Exit(1)
 	}
 
@@ -113,7 +113,7 @@ func main() {
 	// Insert into file or print to stdout
 	if insert != "" {
 		if err := insertIntoFile(insert, result); err != nil {
-			fmt.Fprintf(os.Stderr, "%stermaid:%s %v\n", ansiBold+ansiCyan, ansiReset, err)
+			fmt.Fprintf(os.Stderr, "%smmaid:%s %v\n", ansiBold+ansiCyan, ansiReset, err)
 			os.Exit(1)
 		}
 	} else {
@@ -264,7 +264,7 @@ var demoTypes = []struct{ name, key string }{
 
 func runDemo(themeName, diagramType string) {
 	if _, ok := renderer.Themes[themeName]; !ok {
-		fmt.Fprintf(os.Stderr, "%stermaid:%s unknown theme %q (use --themes to list)\n", ansiBold+ansiCyan, ansiReset, themeName)
+		fmt.Fprintf(os.Stderr, "%smmaid:%s unknown theme %q (use --themes to list)\n", ansiBold+ansiCyan, ansiReset, themeName)
 		os.Exit(1)
 	}
 
@@ -294,7 +294,7 @@ func runDemo(themeName, diagramType string) {
 		if mapped, ok2 := aliases[strings.ToLower(diagramType)]; ok2 {
 			source = demoSamples[mapped]
 		} else {
-			fmt.Fprintf(os.Stderr, "%stermaid:%s unknown demo type %q\n", ansiBold+ansiCyan, ansiReset, diagramType)
+			fmt.Fprintf(os.Stderr, "%smmaid:%s unknown demo type %q\n", ansiBold+ansiCyan, ansiReset, diagramType)
 			fmt.Fprintf(os.Stderr, "  available: all, %s\n", strings.Join(demoKeys(), ", "))
 			os.Exit(1)
 		}

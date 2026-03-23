@@ -22,7 +22,7 @@ Or build from source:
 
 ```bash
 git clone https://github.com/aaronsb/mmaid-go
-cd termaid-go
+cd mmaid-go
 make build
 ```
 
@@ -74,7 +74,7 @@ sequenceDiagram
     participant Claude
     participant Tool
     User->>Claude: Request
-    Claude->>Tool: termaid render
+    Claude->>Tool: mmaid render
     Tool-->>Claude: Diagram output
     Claude-->>User: Visual response
 EOF
@@ -83,16 +83,16 @@ EOF
 ## Go API
 
 ```go
-import termaid "github.com/aaronsb/mmaid-go"
+import mmaid "github.com/aaronsb/mmaid-go"
 
 // Plain text
-result := termaid.Render("graph LR\n  A --> B --> C")
+result := mmaid.Render("graph LR\n  A --> B --> C")
 
 // With options
-result := termaid.Render(source,
-    termaid.WithTheme("blueprint"),
-    termaid.WithASCII(),
-    termaid.WithPadding(6, 3),
+result := mmaid.Render(source,
+    mmaid.WithTheme("blueprint"),
+    mmaid.WithASCII(),
+    mmaid.WithPadding(6, 3),
 )
 ```
 

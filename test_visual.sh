@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Visual test suite for termaid-go
+# Visual test suite for mmaid-go
 # Run: ./test_visual.sh [theme]
 # Examples:
 #   ./test_visual.sh              # no theme (plain)
@@ -13,7 +13,7 @@ TERMAID="${TERMAID:-./mmaid}"
 THEME="${1:-}"
 
 # Always rebuild to pick up latest changes
-echo "Building termaid..."
+echo "Building mmaid..."
 go build -o "$TERMAID" ./cmd/mmaid
 
 THEME_FLAG=""

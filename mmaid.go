@@ -1,5 +1,5 @@
-// Package termaid renders Mermaid diagram syntax as Unicode (or ASCII) terminal art.
-package termaid
+// Package mmaid renders Mermaid diagram syntax as Unicode (or ASCII) terminal art.
+package mmaid
 
 import (
 	"fmt"
@@ -119,7 +119,7 @@ func Render(source string, opts ...Option) (result string) {
 	// Recover from panics in parser/renderer and return an error message.
 	defer func() {
 		if r := recover(); r != nil {
-			result = fmt.Sprintf("[termaid] internal error: %v", r)
+			result = fmt.Sprintf("[mmaid] internal error: %v", r)
 		}
 	}()
 

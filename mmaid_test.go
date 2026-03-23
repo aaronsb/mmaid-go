@@ -1,4 +1,4 @@
-package termaid
+package mmaid
 
 import (
 	"strings"
