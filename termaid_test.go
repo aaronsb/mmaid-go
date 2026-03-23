@@ -95,7 +95,7 @@ func TestFlowchartSingleNode(t *testing.T) {
 func TestFlowchartDiamond(t *testing.T) {
 	out := Render("graph LR\n  A{Decision}")
 	assertContains(t, out, "Decision")
-	assertContains(t, out, "╱") // chamfered diamond corners
+	assertContains(t, out, "⟋") // chamfered diamond corners
 }
 
 func TestFlowchartRounded(t *testing.T) {
@@ -406,9 +406,8 @@ func TestWithPadding(t *testing.T) {
 
 func TestWithSharpEdges(t *testing.T) {
 	out := Render("graph TD\n  A --> B --> C\n  A --> D --> C", WithSharpEdges())
-	// Should not have rounded corners
-	assertNotContains(t, out, "╭")
-	assertNotContains(t, out, "╯")
+	// Edge routing should use sharp corners (└┐) instead of rounded (╰╮)
+	assertContains(t, out, "└")
 }
 
 // ── Diagram type detection tests ────────────────────────────────────────────

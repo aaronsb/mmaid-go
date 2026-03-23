@@ -55,7 +55,7 @@ type CharSet struct {
 
 // UNICODE is the default character set using Unicode box-drawing characters.
 var UNICODE = CharSet{
-	TopLeft: '┌', TopRight: '┐', BottomLeft: '└', BottomRight: '┘',
+	TopLeft: '╭', TopRight: '╮', BottomLeft: '╰', BottomRight: '╯',
 	Horizontal: '─', Vertical: '│',
 	RoundTopLeft: '╭', RoundTopRight: '╮',
 	RoundBottomLeft: '╰', RoundBottomRight: '╯',

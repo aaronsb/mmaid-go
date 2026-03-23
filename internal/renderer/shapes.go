@@ -74,6 +74,11 @@ func drawBox(c *Canvas, x, y, width, height int, tl, tr, bl, br rune, cs CharSet
 	}
 }
 
+// shapeIndicator places a small shape-type symbol inside the upper-left corner.
+func shapeIndicator(c *Canvas, x, y int, indicator rune, style string) {
+	c.Put(y+1, x+1, indicator, false, style)
+}
+
 // DrawRectangle draws a standard box with corners, horizontal/vertical borders,
 // and a centered label.
 func DrawRectangle(c *Canvas, x, y, width, height int, label string, cs CharSet, style string) {
@@ -87,6 +92,7 @@ func DrawRounded(c *Canvas, x, y, width, height int, label string, cs CharSet, s
 	drawBox(c, x, y, width, height, cs.RoundTopLeft, cs.RoundTopRight, cs.RoundBottomLeft, cs.RoundBottomRight, cs, style)
 	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
+	shapeIndicator(c, x, y, '◦', style) // rounded
 }
 
 // DrawStadium draws a stadium shape: rounded top/bottom with parentheses on sides.
@@ -113,6 +119,7 @@ func DrawStadium(c *Canvas, x, y, width, height int, label string, cs CharSet, s
 
 	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
+	shapeIndicator(c, x, y, '⊂', style) // stadium
 }
 
 // DrawSubroutine draws a rectangle with inner vertical lines at x+1 and x+width-2.
@@ -127,14 +134,15 @@ func DrawSubroutine(c *Canvas, x, y, width, height int, label string, cs CharSet
 
 	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
+	shapeIndicator(c, x, y+1, '‖', style) // subroutine (offset since inner borders at x+1)
 }
 
 // DrawDiamond draws a diamond shape with chamfered /\ corners.
 func DrawDiamond(c *Canvas, x, y, width, height int, label string, cs CharSet, style string) {
-	chamferTL := '╱'
-	chamferTR := '╲'
-	chamferBL := '╲'
-	chamferBR := '╱'
+	chamferTL := '⟋'
+	chamferTR := '⟍'
+	chamferBL := '⟍'
+	chamferBR := '⟋'
 	if !isUnicode(cs) {
 		chamferTL = '/'
 		chamferTR = '\\'
@@ -164,6 +172,7 @@ func DrawDiamond(c *Canvas, x, y, width, height int, label string, cs CharSet, s
 
 	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
+	shapeIndicator(c, x, y, '◇', style) // diamond
 }
 
 // DrawHexagon draws a hexagon shape with / \ top corners and \ / bottom corners.
@@ -190,6 +199,7 @@ func DrawHexagon(c *Canvas, x, y, width, height int, label string, cs CharSet, s
 
 	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
+	shapeIndicator(c, x, y, '⬡', style) // hexagon
 }
 
 // DrawCircle draws a rounded box with circle markers at the top and bottom center.
@@ -211,6 +221,7 @@ func DrawCircle(c *Canvas, x, y, width, height int, label string, cs CharSet, st
 
 	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
+	shapeIndicator(c, x, y, '○', style) // circle
 }
 
 // DrawDoubleCircle draws a rounded box with an inner border.
@@ -225,6 +236,7 @@ func DrawDoubleCircle(c *Canvas, x, y, width, height int, label string, cs CharS
 
 	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
+	shapeIndicator(c, x+1, y+1, '◎', style) // double circle (offset for inner border)
 }
 
 // DrawAsymmetric draws a flag shape: > on the left side, straight right side.
