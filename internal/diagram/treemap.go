@@ -151,7 +151,9 @@ func renderTreemap(tm *treemap, useASCII bool) *renderer.Canvas {
 	minW := tmComputeMinWidth(tm.roots)
 
 	// Scale width: proportional for small diagrams, tight for large ones
-	canvasW := max(minW, min(120, max(60, int(float64(minW)*1.6))))
+	// Use terminal width to decide layout, but never truncate labels
+	termW := getTerminalWidth()
+	canvasW := max(minW, min(termW-2, max(60, int(float64(minW)*1.6))))
 
 	c := renderer.NewCanvas(canvasW, canvasH)
 	tmLayoutNodes(c, cs, tm.roots, 0, 0, canvasW, canvasH, 0)
@@ -241,13 +243,14 @@ func tmSliceLayout(c *renderer.Canvas, cs renderer.CharSet, nodes []treemapNode,
 		nGaps = 0
 	}
 
-	// Compute minimum widths for each node
+	// Compute minimum widths for each node (must fit labels without truncation)
 	minWidths := make([]int, len(nodes))
 	for i := range nodes {
 		if len(nodes[i].children) > 0 {
 			minWidths[i] = tmComputeMinWidth(nodes[i].children) + 2
 		} else {
-			minWidths[i] = tmMinBoxW
+			labelW := len(nodes[i].label) + 2 // borders
+			minWidths[i] = max(tmMinBoxW, labelW)
 		}
 	}
 
