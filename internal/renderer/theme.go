@@ -299,6 +299,39 @@ var Themes = map[string]Theme{
 		"bold #33FF33", "#1A8C1A", "bold #66FF66", "#228B22",
 		"#AAFFAA", "italic #339933", "bold #55DD55", "", "",
 	),
+	"sunset": buildThemeWithDepth("sunset",
+		"bold #FFFFFF on #5C1A2A",   // node: deep rose
+		"#CC6677",                   // edge: dusty pink
+		"bold #FFD700",              // arrow: gold
+		"#AA4455 on #4A1422",        // subgraph
+		"bold #FFFFFF on #5C1A2A",   // label
+		"italic #DD8899",            // edge_label
+		"bold #FF8899",              // subgraph_label
+		"",                          // default
+		"on #4A1422",                // subgraph_fill: darker rose
+	),
+	"gruvbox": buildThemeWithDepth("gruvbox",
+		"bold #EBDBB2 on #3C3836",   // node: gruvbox fg on bg1
+		"#928374",                   // edge: gray
+		"bold #FABD2F",              // arrow: yellow
+		"#7C6F64 on #282828",        // subgraph
+		"bold #EBDBB2 on #3C3836",   // label
+		"italic #A89984",            // edge_label
+		"bold #D5C4A1",              // subgraph_label
+		"",                          // default
+		"on #282828",                // subgraph_fill: gruvbox bg0
+	),
+	"monokai": buildThemeWithDepth("monokai",
+		"bold #F8F8F2 on #3E3D32",   // node: monokai fg on subtle bg
+		"#75715E",                   // edge: comment gray
+		"bold #F92672",              // arrow: monokai pink
+		"#75715E on #272822",        // subgraph
+		"bold #F8F8F2 on #3E3D32",   // label
+		"italic #A6E22E",            // edge_label: green
+		"bold #66D9EF",              // subgraph_label: cyan
+		"",                          // default
+		"on #272822",                // subgraph_fill: monokai bg
+	),
 }
 
 // GetTheme returns a theme by name, falling back to "default".
