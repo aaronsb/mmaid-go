@@ -44,7 +44,6 @@ var pieColors = [][3]int{
 const (
 	pieBarWidth = 40
 	pieMargin   = 2
-	pieRadius   = 14 // sub-pixel radius for circular mode
 )
 
 // Regex patterns for pie chart parsing.
@@ -122,6 +121,44 @@ func RenderPieChart(source string, useASCII bool, useColor bool, theme *renderer
 	return renderPieBraille(pc)
 }
 
+// pieLegendWidth computes the total legend box width for a pie chart.
+func pieLegendWidth(pc *pieChart, total float64) int {
+	maxLabelW := 0
+	for _, s := range pc.slices {
+		if len(s.label) > maxLabelW {
+			maxLabelW = len(s.label)
+		}
+	}
+	maxSuffixW := 0
+	for _, s := range pc.slices {
+		pct := s.value / total * 100
+		suffix := fmt.Sprintf(" %.1f%%", pct)
+		if pc.showData {
+			suffix = fmt.Sprintf(" %.1f%% (%.0f)", pct, s.value)
+		}
+		if len(suffix) > maxSuffixW {
+			maxSuffixW = len(suffix)
+		}
+	}
+	legendInnerW := 1 + 2 + 1 + maxLabelW + maxSuffixW + 1
+	return legendInnerW + 2 // +2 for borders
+}
+
+// piScaledRadius computes the pie circle radius scaled to available width.
+func piScaledRadius(pc *pieChart, total float64) int {
+	legendW := pieLegendWidth(pc, total)
+	legendOverhead := 3 + legendW + 1 // legendGap + legendW + margin
+	availableForCircle := usableWidth() - legendOverhead
+	radius := (availableForCircle - 1) / 2
+	if radius < 8 {
+		radius = 8
+	}
+	if radius > 30 {
+		radius = 30
+	}
+	return radius
+}
+
 // pieSliceAngle defines the angular range for a pie slice.
 type pieSliceAngle struct {
 	start, end float64
@@ -130,9 +167,6 @@ type pieSliceAngle struct {
 
 // renderPieCircle renders a circular pie chart using half-block characters.
 func renderPieCircle(pc *pieChart, colors [][3]int) *renderer.Canvas {
-	radius := pieRadius
-	diameter := radius*2 + 1
-
 	// Compute slice angles
 	total := 0.0
 	for _, s := range pc.slices {
@@ -150,11 +184,7 @@ func renderPieCircle(pc *pieChart, colors [][3]int) *renderer.Canvas {
 		cur += span
 	}
 
-	// Canvas rows: each cell = 2 sub-pixels vertically
-	circleRows := (diameter + 1) / 2
-	circleCols := diameter
-
-	// Legend dimensions
+	// Legend dimensions (compute first to size the radius)
 	legendGap := 3
 	maxLabelW := 0
 	for _, s := range pc.slices {
@@ -182,6 +212,22 @@ func renderPieCircle(pc *pieChart, colors [][3]int) *renderer.Canvas {
 	if pc.title != "" {
 		startRow = 2
 	}
+
+	// Scale radius to available width: diameter = available - legend - gap - 1
+	legendOverhead := legendGap + legendW + 1
+	availableForCircle := usableWidth() - legendOverhead
+	radius := (availableForCircle - 1) / 2
+	if radius < 8 {
+		radius = 8
+	}
+	if radius > 30 {
+		radius = 30
+	}
+	diameter := radius*2 + 1
+
+	// Canvas rows: each cell = 2 sub-pixels vertically
+	circleRows := (diameter + 1) / 2
+	circleCols := diameter
 
 	canvasWidth := circleCols + legendGap + legendW + 1
 	canvasHeight := startRow + max(circleRows, len(pc.slices)+2) + 1 // +2 for legend borders
@@ -413,8 +459,6 @@ func pieBraillePattern(sliceIdx, globalRow, globalCol int) bool {
 // renderPieBraille renders a circular pie chart using braille characters.
 // Each slice uses a distinct dot pattern so slices are distinguishable without color.
 func renderPieBraille(pc *pieChart) *renderer.Canvas {
-	radius := pieRadius
-
 	// Compute slice angles
 	total := 0.0
 	for _, s := range pc.slices {
@@ -431,6 +475,9 @@ func renderPieBraille(pc *pieChart) *renderer.Canvas {
 		angles[i] = pieSliceAngle{cur, cur + span, i}
 		cur += span
 	}
+
+	// Scale radius to available width (compute legend overhead first)
+	radius := piScaledRadius(pc, total)
 
 	// Braille: 2 dots wide × 4 dots tall per cell.
 	// Terminal chars are ~2:1 aspect, so each dot is roughly square.
