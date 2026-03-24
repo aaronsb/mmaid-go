@@ -1,7 +1,9 @@
-.PHONY: build test test-visual clean install lint vet
+.PHONY: build test test-visual clean install lint vet release aur aur-push
 
 BINARY := mmaid
 BUILD_DIR := .
+AUR_REPO_DIR ?= $(HOME)/Projects/aur/mmaid
+GITHUB_REPO := aaronsb/mmaid-go
 
 build:
 	go build -o $(BUILD_DIR)/$(BINARY) ./cmd/mmaid
@@ -28,3 +30,47 @@ clean:
 	rm -f $(BINARY)
 
 all: clean build test
+
+# --- AUR packaging ---
+
+# Detect version from latest git tag
+VERSION ?= $(shell git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')
+
+# Update PKGBUILD with latest version and checksum, copy to AUR repo
+aur:
+	@if [ -z "$(VERSION)" ]; then echo "ERROR: No git tag found. Tag a release first."; exit 1; fi
+	@echo "Updating PKGBUILD for v$(VERSION)..."
+	@TARBALL_URL="https://github.com/$(GITHUB_REPO)/archive/v$(VERSION).tar.gz"; \
+	SHA256=$$(curl -sL "$$TARBALL_URL" | sha256sum | awk '{print $$1}'); \
+	sed -i "s/^pkgver=.*/pkgver=$(VERSION)/" PKGBUILD; \
+	sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD; \
+	sed -i "s/^sha256sums=.*/sha256sums=('$$SHA256')/" PKGBUILD; \
+	echo "SHA256: $$SHA256"
+	@echo "PKGBUILD updated."
+	@if [ ! -d "$(AUR_REPO_DIR)" ]; then \
+		echo "AUR repo not found at $(AUR_REPO_DIR), cloning..."; \
+		mkdir -p "$$(dirname "$(AUR_REPO_DIR)")"; \
+		git clone "ssh://aur@aur.archlinux.org/mmaid.git" "$(AUR_REPO_DIR)"; \
+	fi
+	@cp PKGBUILD "$(AUR_REPO_DIR)/"
+	@cd "$(AUR_REPO_DIR)" && makepkg --printsrcinfo > .SRCINFO
+	@echo "Copied PKGBUILD and generated .SRCINFO in $(AUR_REPO_DIR)"
+
+# Commit and push AUR repo
+aur-push: aur
+	@cd "$(AUR_REPO_DIR)" && \
+	git add PKGBUILD .SRCINFO && \
+	git diff --cached --quiet && echo "No changes to push." && exit 0 || true; \
+	cd "$(AUR_REPO_DIR)" && \
+	git commit -m "Update to $(VERSION)" && \
+	git push && \
+	echo "Pushed to AUR. Users can install with: yay -S mmaid"
+
+# Full release: tag + GitHub release + AUR
+release:
+ifndef VERSION
+	$(error VERSION is required. Usage: make release VERSION=x.y.z)
+endif
+	@echo "Creating GitHub release v$(VERSION)..."
+	gh release create "v$(VERSION)" --title "v$(VERSION)" --generate-notes
+	@$(MAKE) aur-push

@@ -3,3 +3,9 @@
 # Scratch diagram files
 /*.mmd
 termaid
+# makepkg build artifacts
+/pkg/
+/src/
+*.pkg.tar.zst
+# Cross-compiled binaries
+/dist/
