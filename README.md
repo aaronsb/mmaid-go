@@ -2,6 +2,10 @@
 
 <p align="center">Render Mermaid diagrams in your terminal. Single binary, zero dependencies.</p>
 
+<p align="center">
+  <img src="demo/mmaid-demo.gif" alt="mmaid demo" width="800">
+</p>
+
 ## Features
 
 - **16 diagram types:** flowcharts, sequence, class, ER, state, block, git graphs, pie charts, treemaps, gantt, timeline, kanban, mindmap, quadrant, XY charts
@@ -10,6 +14,7 @@
 - **Anti-aliased pie charts:** circular rendering with half-block characters and supersampled edges
 - **Braille fallback:** pie charts use distinct dot patterns when no color theme is active
 - **ASCII mode:** works on any terminal
+- **JSON ingest:** pipe structured data directly — `lsblk -Jb | mmaid --json treemap`
 - **Pipe-friendly CLI:** `echo "graph LR; A-->B" | mmaid` just works
 
 ## Install
