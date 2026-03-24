@@ -174,6 +174,10 @@ func restoreNodeBorderStyles(canvas *Canvas, g *graph.Graph, l *layout.GridLayou
 		if !ok {
 			continue
 		}
+		// Start/end state markers are single characters — no border to restore.
+		if node.Shape == graph.ShapeStartState || node.Shape == graph.ShapeEndState {
+			continue
+		}
 		p, ok := l.Placements[nid]
 		if !ok {
 			continue
