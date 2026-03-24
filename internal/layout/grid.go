@@ -172,10 +172,10 @@ func ComputeLayout(g *graph.Graph, paddingX, paddingY, maxWidth int) *GridLayout
 	// Step 6: Compute drawing coordinates
 	computeDrawCoords(layout)
 
-	// Step 6b: Scale gap columns to target width (before subgraph bounds)
+	// Step 6b: Scale node columns to fill target width (before subgraph bounds)
 	if maxWidth > 0 {
-		scaleGapColumns(layout, maxWidth)
-		// Recompute draw coords after gap scaling
+		scaleNodeColumns(layout, maxWidth)
+		// Recompute draw coords after scaling
 		computeDrawCoords(layout)
 	}
 
@@ -215,62 +215,48 @@ func computeCanvasSize(layout *GridLayout) {
 	layout.CanvasHeight = maxY
 }
 
-// scaleGapColumns proportionally scales gap columns (those not occupied by nodes)
-// to make the canvas closer to targetWidth. Only adjusts ColWidths — caller must
-// recompute draw coordinates after.
-func scaleGapColumns(layout *GridLayout, targetWidth int) {
+// scaleNodeColumns proportionally scales node columns (center column of each
+// node's 3×3 block) to fill targetWidth. Gap columns stay fixed so edges
+// remain correctly attached at node boundaries.
+func scaleNodeColumns(layout *GridLayout, targetWidth int) {
 	// Compute current canvas width from column widths
 	currentW := 0
 	for _, w := range layout.ColWidths {
 		currentW += w
 	}
 
-	// Identify gap columns (columns with no node placement)
+	slack := targetWidth - currentW
+	if slack <= 0 {
+		return // don't compress — content-driven width is the minimum
+	}
+
+	// Identify node columns
 	nodeCols := map[int]bool{}
 	for _, p := range layout.Placements {
 		nodeCols[p.Grid.Col] = true
 	}
 
-	var gapCols []int
+	var scalable []int
 	for c := range layout.ColWidths {
-		if !nodeCols[c] {
-			gapCols = append(gapCols, c)
+		if nodeCols[c] {
+			scalable = append(scalable, c)
 		}
 	}
-	if len(gapCols) == 0 {
+	if len(scalable) == 0 {
 		return
 	}
 
-	slack := targetWidth - currentW
-	n := len(gapCols)
-	for i, c := range gapCols {
+	// Distribute slack evenly across node columns
+	n := len(scalable)
+	for i, c := range scalable {
 		share := slack / n
-		// Distribute remainder evenly (works for both positive and negative slack)
-		rem := slack % n
-		if rem != 0 && i < abs(rem) {
-			if slack > 0 {
-				share++
-			} else {
-				share--
-			}
+		if i < slack%n {
+			share++
 		}
-		newW := layout.ColWidths[c] + share
-		if newW < 2 {
-			newW = 2
-		}
-		if newW > 20 {
-			newW = 20
-		}
-		layout.ColWidths[c] = newW
+		layout.ColWidths[c] += share
 	}
 }
 
-func abs(x int) int {
-	if x < 0 {
-		return -x
-	}
-	return x
-}
 
 // edgeKey is a source-target pair used as a map key.
 type edgeKey struct{ src, tgt string }
