@@ -17,6 +17,7 @@ import (
 
 	mmaid "github.com/aaronsb/mmaid-go"
 	"github.com/aaronsb/mmaid-go/internal/diagram"
+	"github.com/aaronsb/mmaid-go/internal/ingest"
 	"github.com/aaronsb/mmaid-go/internal/renderer"
 )
 
@@ -46,7 +47,12 @@ func main() {
 		demo       string
 		markdown   bool
 		insert     string
-		width      int
+		width       int
+		jsonMode    string
+		showTmpl    bool
+		nameKey     string
+		valueKey    string
+		childrenKey string
 	)
 
 	flag.BoolVar(&ascii, "ascii", false, "")
@@ -65,6 +71,11 @@ func main() {
 	flag.StringVar(&insert, "insert", "", "")
 	flag.IntVar(&width, "width", 0, "")
 	flag.IntVar(&width, "w", 0, "")
+	flag.StringVar(&jsonMode, "json", "", "")
+	flag.BoolVar(&showTmpl, "template", false, "")
+	flag.StringVar(&nameKey, "name-key", "", "")
+	flag.StringVar(&valueKey, "value-key", "", "")
+	flag.StringVar(&childrenKey, "children-key", "", "")
 
 	flag.Usage = func() { printUsage() }
 	flag.Parse()
@@ -91,12 +102,60 @@ func main() {
 		os.Exit(0)
 	}
 
+	// JSON ingest mode
+	if jsonMode != "" || showTmpl {
+		cfg := ingest.DefaultConfig()
+		if nameKey != "" {
+			cfg.NameKey = nameKey
+		}
+		if valueKey != "" {
+			cfg.ValueKey = valueKey
+		}
+		if childrenKey != "" {
+			cfg.ChildrenKey = childrenKey
+		}
+
+		if showTmpl {
+			if jsonMode == "" {
+				fmt.Fprintf(os.Stderr, "%smmaid:%s --template requires --json MODE\n", ansiBold+ansiCyan, ansiReset)
+				os.Exit(1)
+			}
+			tmpl, err := ingest.Template(jsonMode, cfg)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%smmaid:%s %v\n", ansiBold+ansiCyan, ansiReset, err)
+				os.Exit(1)
+			}
+			fmt.Print(tmpl)
+			os.Exit(0)
+		}
+
+		// Read JSON from stdin.
+		data, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%smmaid:%s reading stdin: %v\n", ansiBold+ansiCyan, ansiReset, err)
+			os.Exit(1)
+		}
+		mermaidSrc, err := ingest.Convert(jsonMode, data, cfg)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%smmaid:%s %v\n", ansiBold+ansiCyan, ansiReset, err)
+			os.Exit(1)
+		}
+
+		// Render the generated Mermaid syntax.
+		renderAndOutput(mermaidSrc, ascii, paddingX, paddingY, sharpEdges, theme, markdown, insert)
+		os.Exit(0)
+	}
+
 	input, err := readInput(flag.Args())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%smmaid:%s %v\n", ansiBold+ansiCyan, ansiReset, err)
 		os.Exit(1)
 	}
 
+	renderAndOutput(input, ascii, paddingX, paddingY, sharpEdges, theme, markdown, insert)
+}
+
+func renderAndOutput(source string, ascii bool, paddingX, paddingY int, sharpEdges bool, theme string, markdown bool, insert string) {
 	var opts []mmaid.Option
 	if ascii {
 		opts = append(opts, mmaid.WithASCII())
@@ -111,14 +170,12 @@ func main() {
 		opts = append(opts, mmaid.WithTheme(theme))
 	}
 
-	result := mmaid.Render(input, opts...)
+	result := mmaid.Render(source, opts...)
 
-	// Wrap in markdown code block if requested
 	if markdown {
 		result = "```\n" + result + "\n```"
 	}
 
-	// Insert into file or print to stdout
 	if insert != "" {
 		if err := insertIntoFile(insert, result); err != nil {
 			fmt.Fprintf(os.Stderr, "%smmaid:%s %v\n", ansiBold+ansiCyan, ansiReset, err)
@@ -134,7 +191,8 @@ func printUsage() {
 	fmt.Fprintf(w, "\n  %smmaid%s — render Mermaid diagrams as terminal art\n\n", ansiBold+ansiCyan, ansiReset)
 	fmt.Fprintf(w, "  %sUSAGE%s\n", ansiBold+ansiWhite, ansiReset)
 	fmt.Fprintf(w, "    mmaid [flags] [file]\n")
-	fmt.Fprintf(w, "    cat diagram.mmd | mmaid -t blueprint\n\n")
+	fmt.Fprintf(w, "    cat diagram.mmd | mmaid -t blueprint\n")
+	fmt.Fprintf(w, "    lsblk -Jb | mmaid --json treemap -t blueprint\n\n")
 	fmt.Fprintf(w, "  %sFLAGS%s\n", ansiBold+ansiWhite, ansiReset)
 	fmt.Fprintf(w, "    %s-a%s, %s--ascii%s          Use ASCII characters instead of Unicode\n", ansiYellow, ansiReset, ansiYellow, ansiReset)
 	fmt.Fprintf(w, "    %s-t%s, %s--theme%s %sNAME%s    Color theme (use %s--themes%s to list)\n", ansiYellow, ansiReset, ansiYellow, ansiReset, ansiDim, ansiReset, ansiYellow, ansiReset)
@@ -147,6 +205,12 @@ func printUsage() {
 	fmt.Fprintf(w, "        %s--padding-y%s %sN%s   Vertical node padding (default: 2)\n", ansiYellow, ansiReset, ansiDim, ansiReset)
 	fmt.Fprintf(w, "    %s-w%s, %s--width%s %sN%s      Override diagram width (columns)\n", ansiYellow, ansiReset, ansiYellow, ansiReset, ansiDim, ansiReset)
 	fmt.Fprintf(w, "        %s--sharp-edges%s    Sharp corners on edge routing\n\n", ansiYellow, ansiReset)
+	fmt.Fprintf(w, "  %sJSON INGEST%s\n", ansiBold+ansiWhite, ansiReset)
+	fmt.Fprintf(w, "        %s--json%s %sMODE%s     Read JSON from stdin, render as MODE (treemap, pie)\n", ansiYellow, ansiReset, ansiDim, ansiReset)
+	fmt.Fprintf(w, "        %s--template%s       Print minimum valid JSON for the given --json mode\n", ansiYellow, ansiReset)
+	fmt.Fprintf(w, "        %s--name-key%s %sKEY%s  JSON field for node labels (default: name)\n", ansiYellow, ansiReset, ansiDim, ansiReset)
+	fmt.Fprintf(w, "        %s--value-key%s %sKEY%s JSON field for leaf weights (default: size)\n", ansiYellow, ansiReset, ansiDim, ansiReset)
+	fmt.Fprintf(w, "        %s--children-key%s %sKEY%s JSON field for child arrays (default: children)\n\n", ansiYellow, ansiReset, ansiDim, ansiReset)
 	fmt.Fprintf(w, "  %sDIAGRAM TYPES%s\n", ansiBold+ansiWhite, ansiReset)
 	types := []struct{ keyword, desc string }{
 		{"flowchart", "Flowcharts and directed graphs"},
