@@ -123,6 +123,32 @@ func TestTimelineBasic(t *testing.T) {
 	assertCanvasContains(t, c, "●")
 }
 
+func TestTimelineVerticalLayout(t *testing.T) {
+	// Directly test vertical layout path with many events
+	td := parseTimeline("timeline\n  title Computing\n  1940 : ENIAC\n  1950 : UNIVAC\n  1960 : Mainframes\n  1970 : Minicomputers : UNIX\n  1980 : PCs\n  1990 : Web\n  2000 : Cloud\n  2010 : Mobile\n  2020 : AI")
+	c := renderTimelineVertical(td, false, nil)
+	assertCanvasNotEmpty(t, c)
+	assertCanvasContains(t, c, "Computing")
+	assertCanvasContains(t, c, "ENIAC")
+	assertCanvasContains(t, c, "UNIX")
+	assertCanvasContains(t, c, "AI")
+	// Vertical layout should have period labels stacked vertically
+	out := c.ToString()
+	lines := strings.Split(out, "\n")
+	if len(lines) < 20 {
+		t.Errorf("vertical layout should be tall, got %d lines", len(lines))
+	}
+}
+
+func TestTimelineVerticalASCII(t *testing.T) {
+	td := parseTimeline("timeline\n  2020 : Alpha\n  2021 : Beta\n  2022 : Release")
+	c := renderTimelineVertical(td, true, nil)
+	assertCanvasNotEmpty(t, c)
+	assertCanvasContains(t, c, "Alpha")
+	assertCanvasContains(t, c, "|")
+	assertCanvasContains(t, c, "o")
+}
+
 // ── Kanban ──────────────────────────────────────────────────────────────────
 
 func TestKanbanBasic(t *testing.T) {
