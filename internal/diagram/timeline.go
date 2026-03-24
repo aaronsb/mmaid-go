@@ -72,7 +72,36 @@ func parseTimeline(source string) *timelineData {
 	return td
 }
 
+// timelineChars holds the box-drawing characters for timeline rendering.
+type timelineChars struct {
+	hLine, dot, tl, tr, bl, br, vLine rune
+}
+
+func getTimelineChars(useASCII bool) timelineChars {
+	if useASCII {
+		return timelineChars{'-', 'o', '+', '+', '+', '+', '|'}
+	}
+	return timelineChars{'─', '●', '╭', '╮', '╰', '╯', '│'}
+}
+
+// computeTimelineColWidth returns the column width needed for horizontal layout.
+func computeTimelineColWidth(td *timelineData) int {
+	colWidth := 0
+	for _, e := range td.events {
+		if len(e.period) > colWidth {
+			colWidth = len(e.period)
+		}
+		for _, item := range e.items {
+			if len(item)+4 > colWidth {
+				colWidth = len(item) + 4
+			}
+		}
+	}
+	return colWidth + 2
+}
+
 // RenderTimeline parses and renders a Mermaid timeline diagram.
+// Automatically switches to vertical layout when horizontal won't fit in the terminal.
 func RenderTimeline(source string, useASCII bool, theme *renderer.Theme) *renderer.Canvas {
 	td := parseTimeline(source)
 	if len(td.events) == 0 {
@@ -81,22 +110,20 @@ func RenderTimeline(source string, useASCII bool, theme *renderer.Theme) *render
 		return c
 	}
 
-	// Layout: horizontal axis with events spaced evenly.
-	// Each event is a column with the period on the axis and items above/below.
-	colWidth := 0
-	for _, e := range td.events {
-		if len(e.period) > colWidth {
-			colWidth = len(e.period)
-		}
-		for _, item := range e.items {
-			if len(item)+4 > colWidth { // +4 for box padding
-				colWidth = len(item) + 4
-			}
-		}
-	}
-	colWidth += 2 // spacing between columns
+	colWidth := computeTimelineColWidth(td)
+	horizontalWidth := len(td.events)*colWidth + 2
+	termW := getTerminalWidth()
 
-	// Determine max items per event (for height)
+	if horizontalWidth > termW {
+		return renderTimelineVertical(td, useASCII, theme)
+	}
+	return renderTimelineHorizontal(td, useASCII, theme, colWidth)
+}
+
+// renderTimelineHorizontal renders the timeline with a horizontal axis.
+func renderTimelineHorizontal(td *timelineData, useASCII bool, theme *renderer.Theme, colWidth int) *renderer.Canvas {
+	ch := getTimelineChars(useASCII)
+
 	maxItems := 0
 	for _, e := range td.events {
 		if len(e.items) > maxItems {
@@ -104,17 +131,11 @@ func RenderTimeline(source string, useASCII bool, theme *renderer.Theme) *render
 		}
 	}
 
-	// Canvas layout:
-	// row 0: title (optional)
-	// rows: item boxes (each takes 3 rows: border, text, border)
-	// axis row: ───●───────●───────●───
-	// period row: period labels
-
 	titleRows := 0
 	if td.title != "" {
 		titleRows = 2
 	}
-	itemHeight := maxItems * 3 // each item: top border, text, bottom border
+	itemHeight := maxItems * 3
 	axisRow := titleRows + itemHeight
 	periodRow := axisRow + 1
 
@@ -122,9 +143,9 @@ func RenderTimeline(source string, useASCII bool, theme *renderer.Theme) *render
 	canvasHeight := periodRow + 2
 
 	c := renderer.NewCanvas(canvasWidth, canvasHeight)
+	useRegion := theme != nil && theme.HasDepthColors()
 
-	// Wallpaper: base background behind entire diagram
-	if theme != nil && theme.HasDepthColors() {
+	if useRegion {
 		for r := 0; r < canvasHeight; r++ {
 			for col := 0; col < canvasWidth; col++ {
 				c.SetFill(r, col, "subgraph_fill")
@@ -132,7 +153,6 @@ func RenderTimeline(source string, useASCII bool, theme *renderer.Theme) *render
 		}
 	}
 
-	// Title
 	if td.title != "" {
 		titleCol := (canvasWidth - len(td.title)) / 2
 		if titleCol < 0 {
@@ -141,37 +161,16 @@ func RenderTimeline(source string, useASCII bool, theme *renderer.Theme) *render
 		c.PutText(0, titleCol, td.title, "bold_label")
 	}
 
-	hLine := '─'
-	dot := '●'
-	tl := '╭'
-	tr := '╮'
-	bl := '╰'
-	br := '╯'
-	vLine := '│'
-	if useASCII {
-		hLine = '-'
-		dot = 'o'
-		tl = '+'
-		tr = '+'
-		bl = '+'
-		br = '+'
-		vLine = '|'
-	}
-
 	// Draw axis line
 	for x := 0; x < canvasWidth; x++ {
-		c.Put(axisRow, x, hLine, false, "edge")
+		c.Put(axisRow, x, ch.hLine, false, "edge")
 	}
 
-	// Draw each event
-	useRegion := theme != nil && theme.HasDepthColors()
 	for i, e := range td.events {
 		centerX := i*colWidth + colWidth/2
 
-		// Dot on axis
-		c.Put(axisRow, centerX, dot, false, "arrow")
+		c.Put(axisRow, centerX, ch.dot, false, "arrow")
 
-		// Period label below axis — colored text, no bg
 		periodStyle := "label"
 		if useRegion {
 			periodStyle = "_ansi:" + theme.RegionTextStyle(i, 0)
@@ -182,14 +181,12 @@ func RenderTimeline(source string, useASCII bool, theme *renderer.Theme) *render
 		}
 		c.PutText(periodRow, labelX, e.period, periodStyle)
 
-		// Item boxes above axis
 		for j, item := range e.items {
 			boxW := len(item) + 2
 			boxX := centerX - boxW/2
 			if boxX < 0 {
 				boxX = 0
 			}
-			// Stack items upward from axis
 			boxBottom := axisRow - 1 - j*3
 			boxTop := boxBottom - 2
 
@@ -200,20 +197,18 @@ func RenderTimeline(source string, useASCII bool, theme *renderer.Theme) *render
 				labelStyle = "_ansi:" + theme.RegionLabelStyle(i, 1)
 			}
 
-			// Draw box
-			c.Put(boxTop, boxX, tl, false, borderStyle)
-			c.DrawHorizontal(boxTop, boxX+1, boxX+boxW-1, hLine, borderStyle)
-			c.Put(boxTop, boxX+boxW, tr, false, borderStyle)
+			c.Put(boxTop, boxX, ch.tl, false, borderStyle)
+			c.DrawHorizontal(boxTop, boxX+1, boxX+boxW-1, ch.hLine, borderStyle)
+			c.Put(boxTop, boxX+boxW, ch.tr, false, borderStyle)
 
-			c.Put(boxTop+1, boxX, vLine, false, borderStyle)
+			c.Put(boxTop+1, boxX, ch.vLine, false, borderStyle)
 			c.PutText(boxTop+1, boxX+1, " "+item+" ", labelStyle)
-			c.Put(boxTop+1, boxX+boxW, vLine, false, borderStyle)
+			c.Put(boxTop+1, boxX+boxW, ch.vLine, false, borderStyle)
 
-			c.Put(boxTop+2, boxX, bl, false, borderStyle)
-			c.DrawHorizontal(boxTop+2, boxX+1, boxX+boxW-1, hLine, borderStyle)
-			c.Put(boxTop+2, boxX+boxW, br, false, borderStyle)
+			c.Put(boxTop+2, boxX, ch.bl, false, borderStyle)
+			c.DrawHorizontal(boxTop+2, boxX+1, boxX+boxW-1, ch.hLine, borderStyle)
+			c.Put(boxTop+2, boxX+boxW, ch.br, false, borderStyle)
 
-			// Fill box interior for solid background
 			if useRegion {
 				fillStyle := "_ansi:" + theme.RegionStyle(i, 1)
 				for row := boxTop; row <= boxTop+2; row++ {
@@ -228,11 +223,155 @@ func RenderTimeline(source string, useASCII bool, theme *renderer.Theme) *render
 				}
 			}
 
-			// Connector from box to axis
 			if boxBottom < axisRow-1 {
-				c.Put(axisRow-1, centerX, vLine, false, "edge")
+				c.Put(axisRow-1, centerX, ch.vLine, false, "edge")
 			}
 		}
+	}
+
+	return c
+}
+
+// renderTimelineVertical renders the timeline with a vertical axis.
+// Used when horizontal layout would exceed terminal width.
+func renderTimelineVertical(td *timelineData, useASCII bool, theme *renderer.Theme) *renderer.Canvas {
+	ch := getTimelineChars(useASCII)
+	useRegion := theme != nil && theme.HasDepthColors()
+
+	// Compute layout dimensions
+	maxPeriodW := 0
+	maxItemW := 0
+	for _, e := range td.events {
+		if len(e.period) > maxPeriodW {
+			maxPeriodW = len(e.period)
+		}
+		for _, item := range e.items {
+			if len(item) > maxItemW {
+				maxItemW = len(item)
+			}
+		}
+	}
+
+	// Layout columns:
+	// [period label right-aligned] [gap] [axis dot] [gap] [item boxes]
+	periodCol := maxPeriodW // right edge of period labels
+	axisCol := periodCol + 2
+	boxStartCol := axisCol + 2
+	boxInnerW := maxItemW + 2 // +2 for padding spaces inside box
+	canvasWidth := boxStartCol + boxInnerW + 2 // +2 for box borders
+
+	// Height: title + each event takes 3 rows (box height) * max(1, items) + 1 gap
+	titleRows := 0
+	if td.title != "" {
+		titleRows = 2
+	}
+
+	totalRows := titleRows
+	for _, e := range td.events {
+		items := len(e.items)
+		if items == 0 {
+			items = 1
+		}
+		totalRows += items*3 + 1 // each item box is 3 rows, +1 gap between events
+	}
+	totalRows++ // trailing space
+
+	c := renderer.NewCanvas(canvasWidth, totalRows)
+
+	if useRegion {
+		for r := 0; r < totalRows; r++ {
+			for col := 0; col < canvasWidth; col++ {
+				c.SetFill(r, col, "subgraph_fill")
+			}
+		}
+	}
+
+	if td.title != "" {
+		titleX := (canvasWidth - len(td.title)) / 2
+		if titleX < 0 {
+			titleX = 0
+		}
+		c.PutText(0, titleX, td.title, "bold_label")
+	}
+
+	// Draw vertical axis line
+	for r := titleRows; r < totalRows-1; r++ {
+		c.Put(r, axisCol, ch.vLine, false, "edge")
+	}
+
+	// Draw each event
+	row := titleRows
+	for i, e := range td.events {
+		items := e.items
+		if len(items) == 0 {
+			items = []string{}
+		}
+		eventHeight := len(items) * 3
+		if eventHeight == 0 {
+			eventHeight = 1
+		}
+
+		// Dot on axis at the vertical center of this event's boxes
+		dotRow := row + eventHeight/2
+		c.Put(dotRow, axisCol, ch.dot, false, "arrow")
+
+		// Period label to the left of the axis, right-aligned
+		periodStyle := "label"
+		if useRegion {
+			periodStyle = "_ansi:" + theme.RegionTextStyle(i, 0)
+		}
+		labelX := periodCol - len(e.period)
+		if labelX < 0 {
+			labelX = 0
+		}
+		c.PutText(dotRow, labelX, e.period, periodStyle)
+
+		// Item boxes to the right of the axis
+		for j, item := range e.items {
+			boxTop := row + j*3
+			boxX := boxStartCol
+			boxW := len(item) + 2
+
+			borderStyle := "node"
+			labelStyle := "label"
+			if useRegion {
+				borderStyle = "_ansi:" + theme.RegionBorderStyle(i, 1)
+				labelStyle = "_ansi:" + theme.RegionLabelStyle(i, 1)
+			}
+
+			c.Put(boxTop, boxX, ch.tl, false, borderStyle)
+			c.DrawHorizontal(boxTop, boxX+1, boxX+boxW-1, ch.hLine, borderStyle)
+			c.Put(boxTop, boxX+boxW, ch.tr, false, borderStyle)
+
+			c.Put(boxTop+1, boxX, ch.vLine, false, borderStyle)
+			c.PutText(boxTop+1, boxX+1, " "+item+" ", labelStyle)
+			c.Put(boxTop+1, boxX+boxW, ch.vLine, false, borderStyle)
+
+			c.Put(boxTop+2, boxX, ch.bl, false, borderStyle)
+			c.DrawHorizontal(boxTop+2, boxX+1, boxX+boxW-1, ch.hLine, borderStyle)
+			c.Put(boxTop+2, boxX+boxW, ch.br, false, borderStyle)
+
+			if useRegion {
+				fillStyle := "_ansi:" + theme.RegionStyle(i, 1)
+				for fr := boxTop; fr <= boxTop+2; fr++ {
+					for fc := boxX; fc <= boxX+boxW; fc++ {
+						c.SetFill(fr, fc, fillStyle)
+					}
+				}
+			}
+			for col := boxX + 1; col < boxX+boxW; col++ {
+				if c.Get(boxTop+1, col) == ' ' {
+					c.SetStyle(boxTop+1, col, borderStyle)
+				}
+			}
+
+			// Horizontal connector from axis to box
+			for cx := axisCol + 1; cx < boxX; cx++ {
+				c.Put(boxTop+1, cx, ch.hLine, false, "edge")
+			}
+		}
+
+		row += eventHeight + 1
 	}
 
 	return c
