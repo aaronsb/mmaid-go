@@ -320,11 +320,55 @@ var demoSamples = map[string]string{
     y-axis "Revenue ($K)" 0 --> 100
     bar [45, 52, 68, 73, 91]
     line [45, 52, 68, 73, 91]`,
+	"class": `classDiagram
+    class Animal {
+        +String name
+        +int age
+        +makeSound()
+    }
+    class Dog {
+        +fetch()
+    }
+    class Cat {
+        +purr()
+    }
+    Animal <|-- Dog
+    Animal <|-- Cat`,
+	"er": `erDiagram
+    CUSTOMER ||--o{ ORDER : places
+    ORDER ||--|{ LINE_ITEM : contains
+    PRODUCT ||--o{ LINE_ITEM : "ordered in"`,
+	"state": `stateDiagram-v2
+    [*] --> Idle
+    Idle --> Processing : submit
+    Processing --> Review : complete
+    Review --> Idle : reject
+    Review --> Done : approve
+    Done --> [*]`,
+	"gitgraph": `gitGraph
+    commit
+    commit
+    branch develop
+    checkout develop
+    commit
+    commit
+    checkout main
+    merge develop
+    commit`,
+	"block": `block-beta
+    columns 3
+    A["Frontend"] B["API"] C["Database"]
+    D["Cache"]:2 E["Queue"]`,
 }
 
 var demoTypes = []struct{ name, key string }{
 	{"Flowchart", "flowchart"},
 	{"Sequence Diagram", "sequence"},
+	{"Class Diagram", "class"},
+	{"ER Diagram", "er"},
+	{"State Diagram", "state"},
+	{"Git Graph", "gitgraph"},
+	{"Block Diagram", "block"},
 	{"Pie Chart", "pie"},
 	{"Gantt Chart", "gantt"},
 	{"Timeline", "timeline"},
@@ -358,11 +402,11 @@ func runDemo(themeName, diagramType string) {
 		// Try matching by demo key aliases
 		aliases := map[string]string{
 			"flow": "flowchart", "seq": "sequence", "sequencediagram": "sequence",
-			"class": "flowchart", "er": "flowchart", "state": "flowchart",
-			"block": "flowchart", "block-beta": "flowchart",
-			"git": "flowchart", "gitgraph": "flowchart",
-			"xy": "flowchart", "xychart": "flowchart", "xychart-beta": "flowchart",
-			"timeline": "flowchart", "quadrant": "flowchart", "quadrantchart": "flowchart",
+			"classdiagram": "class", "erdiagram": "er",
+			"statediagram": "state", "statediagram-v2": "state",
+			"block-beta": "block", "git": "gitgraph",
+			"xy": "xychart", "xychart-beta": "xychart",
+			"quadrantchart": "quadrant",
 		}
 		if mapped, ok2 := aliases[strings.ToLower(diagramType)]; ok2 {
 			source = demoSamples[mapped]
