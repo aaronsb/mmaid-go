@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 )
 
@@ -51,10 +52,16 @@ func treemapFromRoot(root map[string]json.RawMessage, cfg Config) (string, error
 		}
 	}
 
-	// No name field — find the first array field and use it as the node list.
-	for _, v := range root {
+	// No name field — find the first array field (sorted keys for determinism)
+	// and use it as the node list.
+	rootKeys := make([]string, 0, len(root))
+	for k := range root {
+		rootKeys = append(rootKeys, k)
+	}
+	sort.Strings(rootKeys)
+	for _, k := range rootKeys {
 		var arr []map[string]json.RawMessage
-		if err := json.Unmarshal(v, &arr); err == nil && len(arr) > 0 {
+		if err := json.Unmarshal(root[k], &arr); err == nil && len(arr) > 0 {
 			// Check if these objects have the expected fields.
 			if _, hasName := arr[0][cfg.NameKey]; hasName {
 				s, err := treemapFromArray(arr, cfg, 1)

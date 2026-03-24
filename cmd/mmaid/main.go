@@ -142,24 +142,7 @@ func main() {
 		}
 
 		// Render the generated Mermaid syntax.
-		var opts []mmaid.Option
-		if ascii {
-			opts = append(opts, mmaid.WithASCII())
-		}
-		if paddingX != 4 || paddingY != 2 {
-			opts = append(opts, mmaid.WithPadding(paddingX, paddingY))
-		}
-		if sharpEdges {
-			opts = append(opts, mmaid.WithSharpEdges())
-		}
-		if theme != "" {
-			opts = append(opts, mmaid.WithTheme(theme))
-		}
-		result := mmaid.Render(mermaidSrc, opts...)
-		if markdown {
-			result = "```\n" + result + "\n```"
-		}
-		fmt.Println(result)
+		renderAndOutput(mermaidSrc, ascii, paddingX, paddingY, sharpEdges, theme, markdown, insert)
 		os.Exit(0)
 	}
 
@@ -169,6 +152,10 @@ func main() {
 		os.Exit(1)
 	}
 
+	renderAndOutput(input, ascii, paddingX, paddingY, sharpEdges, theme, markdown, insert)
+}
+
+func renderAndOutput(source string, ascii bool, paddingX, paddingY int, sharpEdges bool, theme string, markdown bool, insert string) {
 	var opts []mmaid.Option
 	if ascii {
 		opts = append(opts, mmaid.WithASCII())
@@ -183,14 +170,12 @@ func main() {
 		opts = append(opts, mmaid.WithTheme(theme))
 	}
 
-	result := mmaid.Render(input, opts...)
+	result := mmaid.Render(source, opts...)
 
-	// Wrap in markdown code block if requested
 	if markdown {
 		result = "```\n" + result + "\n```"
 	}
 
-	// Insert into file or print to stdout
 	if insert != "" {
 		if err := insertIntoFile(insert, result); err != nil {
 			fmt.Fprintf(os.Stderr, "%smmaid:%s %v\n", ansiBold+ansiCyan, ansiReset, err)

@@ -123,8 +123,9 @@ func sanitizeLabel(s string) string {
 	}
 
 	result := strings.TrimSpace(b.String())
-	if len(result) > maxLabelLen {
-		result = result[:maxLabelLen] + "..."
+	runes := []rune(result)
+	if len(runes) > maxLabelLen {
+		result = string(runes[:maxLabelLen]) + "..."
 	}
 	return result
 }
