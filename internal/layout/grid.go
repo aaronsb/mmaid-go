@@ -741,12 +741,22 @@ func computeSizes(
 		contentWidth := textWidth + paddingX  // padding on each side
 		contentHeight := textHeight + paddingY // padding top/bottom
 
-		// Ensure minimum sizes
-		if contentWidth < 3 {
-			contentWidth = 3
+		// Start/end state markers are single-character — use minimal sizing
+		// so they sit tight against the connecting edges.
+		isMarker := node.Shape == graph.ShapeStartState || node.Shape == graph.ShapeEndState
+		if isMarker {
+			contentWidth = 1
+			contentHeight = 1
 		}
-		if contentHeight < 3 {
-			contentHeight = 3
+
+		// Ensure minimum sizes (but not for point markers)
+		if !isMarker {
+			if contentWidth < 3 {
+				contentWidth = 3
+			}
+			if contentHeight < 3 {
+				contentHeight = 3
+			}
 		}
 
 		col := placement.Grid.Col
