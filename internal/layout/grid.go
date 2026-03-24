@@ -141,7 +141,9 @@ func (l *GridLayout) GridToDrawCenter(col, row int) (int, int) {
 }
 
 // ComputeLayout computes the grid layout for a graph.
-func ComputeLayout(g *graph.Graph, paddingX, paddingY int) *GridLayout {
+// maxWidth, if > 0, hints the target canvas width — gap columns will be
+// scaled proportionally to fill or compress to this width.
+func ComputeLayout(g *graph.Graph, paddingX, paddingY, maxWidth int) *GridLayout {
 	layout := NewGridLayout()
 	direction := g.Direction.Normalized()
 
@@ -198,7 +200,76 @@ func ComputeLayout(g *graph.Graph, paddingX, paddingY int) *GridLayout {
 	layout.CanvasWidth = maxX
 	layout.CanvasHeight = maxY
 
+	// Scale gap columns to fill target width
+	if maxWidth > 0 && maxX != maxWidth {
+		scaleGapColumns(layout, maxWidth)
+	}
+
 	return layout
+}
+
+// scaleGapColumns proportionally scales gap columns (those not occupied by nodes)
+// to make the canvas closer to targetWidth.
+func scaleGapColumns(layout *GridLayout, targetWidth int) {
+	// Identify gap columns (columns with no node placement)
+	nodeCols := map[int]bool{}
+	for _, p := range layout.Placements {
+		nodeCols[p.Grid.Col] = true
+	}
+
+	var gapCols []int
+	totalGapW := 0
+	for c, w := range layout.ColWidths {
+		if !nodeCols[c] {
+			gapCols = append(gapCols, c)
+			totalGapW += w
+		}
+	}
+	if len(gapCols) == 0 || totalGapW == 0 {
+		return
+	}
+
+	slack := targetWidth - layout.CanvasWidth
+	// Distribute slack across gap columns proportionally
+	distributed := 0
+	for i, c := range gapCols {
+		share := slack / len(gapCols)
+		if i < slack%len(gapCols) && slack > 0 {
+			share++
+		}
+		newW := layout.ColWidths[c] + share
+		if newW < 2 {
+			newW = 2 // minimum gap
+		}
+		if newW > 20 {
+			newW = 20 // max gap to avoid stretching
+		}
+		distributed += newW - layout.ColWidths[c]
+		layout.ColWidths[c] = newW
+	}
+
+	// Recompute draw coordinates and canvas size
+	computeDrawCoords(layout)
+	maxX := 0
+	maxY := 0
+	for _, p := range layout.Placements {
+		if p.DrawX+p.DrawWidth > maxX {
+			maxX = p.DrawX + p.DrawWidth
+		}
+		if p.DrawY+p.DrawHeight > maxY {
+			maxY = p.DrawY + p.DrawHeight
+		}
+	}
+	for _, sb := range layout.SubgraphBounds {
+		if sb.X+sb.Width > maxX {
+			maxX = sb.X + sb.Width
+		}
+		if sb.Y+sb.Height > maxY {
+			maxY = sb.Y + sb.Height
+		}
+	}
+	layout.CanvasWidth = maxX
+	layout.CanvasHeight = maxY
 }
 
 // edgeKey is a source-target pair used as a map key.

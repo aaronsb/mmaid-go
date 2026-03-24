@@ -13,8 +13,13 @@ func SetWidthOverride(w int) {
 	diagramWidth = w
 }
 
-// usableWidth returns the diagram rendering width.
+// UsableWidth returns the diagram rendering width.
 // Returns the override if set, otherwise the detected terminal width.
+// Exported so the root package can pass it to the graph layout engine.
+func UsableWidth() int {
+	return usableWidth()
+}
+
 func usableWidth() int {
 	if diagramWidth > 0 {
 		return diagramWidth

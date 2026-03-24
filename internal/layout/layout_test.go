@@ -13,7 +13,7 @@ func TestComputeLayoutSimpleChain(t *testing.T) {
 	g.AddNode(&graph.Node{ID: "B", Label: "End"})
 	g.AddEdge(graph.NewEdge("A", "B"))
 
-	l := ComputeLayout(g, 4, 2)
+	l := ComputeLayout(g, 4, 2, 0)
 	if l == nil {
 		t.Fatal("ComputeLayout returned nil")
 	}
@@ -36,7 +36,7 @@ func TestComputeLayoutTD(t *testing.T) {
 	g.AddNode(&graph.Node{ID: "B", Label: "Bottom"})
 	g.AddEdge(graph.NewEdge("A", "B"))
 
-	l := ComputeLayout(g, 4, 2)
+	l := ComputeLayout(g, 4, 2, 0)
 	pa := l.Placements["A"]
 	pb := l.Placements["B"]
 	// In TD, A should be above B
@@ -49,7 +49,7 @@ func TestComputeLayoutCanvasSize(t *testing.T) {
 	g := graph.NewGraph()
 	g.AddNode(&graph.Node{ID: "A", Label: "Hello World"})
 
-	l := ComputeLayout(g, 4, 2)
+	l := ComputeLayout(g, 4, 2, 0)
 	if l.CanvasWidth <= 0 || l.CanvasHeight <= 0 {
 		t.Errorf("expected positive canvas dimensions, got %dx%d", l.CanvasWidth, l.CanvasHeight)
 	}
@@ -64,7 +64,7 @@ func TestComputeLayoutBranching(t *testing.T) {
 	g.AddEdge(graph.NewEdge("A", "B"))
 	g.AddEdge(graph.NewEdge("A", "C"))
 
-	l := ComputeLayout(g, 4, 2)
+	l := ComputeLayout(g, 4, 2, 0)
 	if len(l.Placements) != 3 {
 		t.Fatalf("expected 3 placements, got %d", len(l.Placements))
 	}

@@ -10,7 +10,7 @@ import (
 
 // RenderGraph renders a graph to a string.
 func RenderGraph(g *graph.Graph, useASCII bool, paddingX, paddingY int, roundedEdges bool) string {
-	canvas := RenderGraphCanvas(g, useASCII, paddingX, paddingY, roundedEdges)
+	canvas := RenderGraphCanvas(g, useASCII, paddingX, paddingY, roundedEdges, 0)
 	if canvas == nil {
 		return ""
 	}
@@ -18,7 +18,8 @@ func RenderGraph(g *graph.Graph, useASCII bool, paddingX, paddingY int, roundedE
 }
 
 // RenderGraphCanvas renders a graph to a Canvas.
-func RenderGraphCanvas(g *graph.Graph, useASCII bool, paddingX, paddingY int, roundedEdges bool) *Canvas {
+// maxWidth, if > 0, hints the target canvas width for gap scaling.
+func RenderGraphCanvas(g *graph.Graph, useASCII bool, paddingX, paddingY int, roundedEdges bool, maxWidth int) *Canvas {
 	if len(g.NodeOrder) == 0 {
 		return nil
 	}
@@ -34,7 +35,7 @@ func RenderGraphCanvas(g *graph.Graph, useASCII bool, paddingX, paddingY int, ro
 	needFlipH := g.Direction == graph.DirRL
 
 	// Compute layout (Normalized direction is used internally)
-	l := layout.ComputeLayout(g, paddingX, paddingY)
+	l := layout.ComputeLayout(g, paddingX, paddingY, maxWidth)
 
 	// Route edges
 	routed := routing.RouteEdges(g, l)

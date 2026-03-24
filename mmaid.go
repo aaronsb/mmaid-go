@@ -144,7 +144,7 @@ func Render(source string, opts ...Option) (result string) {
 		canvas = diagram.RenderPieChart(source, cfg.useASCII, cfg.theme != "", getThemePtr(cfg.theme))
 	case "state":
 		g := diagram.ParseStateDiagram(source)
-		canvas = renderer.RenderGraphCanvas(g, cfg.useASCII, cfg.paddingX, cfg.paddingY, cfg.roundedEdges)
+		canvas = renderer.RenderGraphCanvas(g, cfg.useASCII, cfg.paddingX, cfg.paddingY, cfg.roundedEdges, diagram.UsableWidth())
 	case "block":
 		canvas = diagram.RenderBlockDiagram(source, cfg.useASCII)
 	case "gitgraph":
@@ -165,7 +165,7 @@ func Render(source string, opts ...Option) (result string) {
 		canvas = diagram.RenderKanban(source, cfg.useASCII, getThemePtr(cfg.theme))
 	default:
 		g := parser.ParseFlowchart(source)
-		canvas = renderer.RenderGraphCanvas(g, cfg.useASCII, cfg.paddingX, cfg.paddingY, cfg.roundedEdges)
+		canvas = renderer.RenderGraphCanvas(g, cfg.useASCII, cfg.paddingX, cfg.paddingY, cfg.roundedEdges, diagram.UsableWidth())
 	}
 
 	if canvas == nil {
