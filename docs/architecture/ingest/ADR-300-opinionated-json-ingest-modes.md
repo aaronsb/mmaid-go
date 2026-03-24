@@ -64,6 +64,55 @@ some-tool --json | mmaid --json treemap --name-key label --value-key bytes --chi
 5. Auto-format large values with human-readable suffixes (G/M/K) in labels
 6. Floor leaf values to integers, minimum 1 (treemap requires positive ints)
 
+### Schema templates
+
+Each ingest mode provides a `--template` flag that emits the minimum valid JSON
+structure for that mode. This serves as both documentation and a starting point
+for programmatic generation.
+
+```bash
+$ mmaid --json treemap --template
+{
+  "name": "Root",
+  "children": [
+    {
+      "name": "Group A",
+      "children": [
+        { "name": "Item 1", "size": 100 },
+        { "name": "Item 2", "size": 200 }
+      ]
+    },
+    {
+      "name": "Group B",
+      "children": [
+        { "name": "Item 3", "size": 150 }
+      ]
+    }
+  ]
+}
+
+$ mmaid --json pie --template
+{
+  "title": "Distribution",
+  "data": {
+    "Category A": 45,
+    "Category B": 30,
+    "Category C": 25
+  }
+}
+```
+
+Templates reflect the current field defaults. If `--name-key` or `--value-key`
+overrides are provided, the template adapts to show those field names instead,
+so the output is always a copy-paste-ready example for the exact invocation.
+
+The template is valid JSON that, if piped back into mmaid, renders a working
+diagram — making it self-testing:
+
+```bash
+mmaid --json treemap --template | mmaid --json treemap -t blueprint
+```
+
 ### Scope boundary
 
 This is NOT a general-purpose data transformation tool. We support:
@@ -83,6 +132,7 @@ We do NOT support:
 - `lsblk -Jb | mmaid --json treemap -t blueprint` — one pipe, no jq
 - Makes the asciinema demo compelling: real system data, simple command
 - Opens the door for more ingest modes later (xychart, gantt) without redesign
+- `--template` makes the expected schema self-documenting and self-testing
 
 ### Negative
 
