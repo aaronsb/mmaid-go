@@ -19,7 +19,7 @@ import (
 	"github.com/aaronsb/mmaid-go/internal/renderer"
 )
 
-const version = "0.2.0"
+const version = "0.2.1"
 
 // ANSI helpers for CLI output
 const (
