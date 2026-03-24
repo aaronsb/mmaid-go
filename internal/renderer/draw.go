@@ -35,7 +35,11 @@ func RenderGraphCanvas(g *graph.Graph, useASCII bool, paddingX, paddingY int, ro
 	needFlipH := g.Direction == graph.DirRL
 
 	// Compute layout (Normalized direction is used internally)
-	l := layout.ComputeLayout(g, paddingX, paddingY, maxWidth)
+	layoutMaxW := 0
+	if maxWidth > 0 {
+		layoutMaxW = maxWidth * 3 / 4 // use ~75% of terminal to leave room for subgraph borders
+	}
+	l := layout.ComputeLayout(g, paddingX, paddingY, layoutMaxW)
 
 	// Route edges
 	routed := routing.RouteEdges(g, l)
