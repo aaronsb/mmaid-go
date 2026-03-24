@@ -140,14 +140,25 @@ func RenderMindmap(source string, useASCII bool) *renderer.Canvas {
 
 	// Column positions (cumulative)
 	depthX := map[int]int{}
-	gap := 4 // horizontal gap between levels
-	x := 0
 	maxDepth := 0
 	for d := range depthWidths {
 		if d > maxDepth {
 			maxDepth = d
 		}
 	}
+
+	// Compute natural width at base gap, then scale gap to fit terminal
+	baseGap := 4
+	naturalW := 0
+	for d := 0; d <= maxDepth; d++ {
+		naturalW += depthWidths[d] + baseGap
+	}
+	gap := baseGap
+	if maxDepth > 0 {
+		gap = scaleGap(baseGap, maxDepth, naturalW, 2, 8)
+	}
+
+	x := 0
 	for d := 0; d <= maxDepth; d++ {
 		depthX[d] = x
 		x += depthWidths[d] + gap

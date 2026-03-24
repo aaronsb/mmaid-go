@@ -112,7 +112,7 @@ func RenderTimeline(source string, useASCII bool, theme *renderer.Theme) *render
 
 	colWidth := computeTimelineColWidth(td)
 	horizontalWidth := len(td.events)*colWidth + 2
-	termW := getTerminalWidth()
+	termW := usableWidth()
 
 	if horizontalWidth > termW {
 		return renderTimelineVertical(td, useASCII, theme)

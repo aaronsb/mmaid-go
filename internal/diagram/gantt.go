@@ -256,7 +256,7 @@ func RenderGantt(source string, useASCII bool, theme *renderer.Theme) *renderer.
 	}
 	labelW += 2
 
-	barW := 50
+	barW := scaleWidth(labelW+5, 20, maxScaledWidth)
 	titleRows := 0
 	if gd.title != "" {
 		titleRows = 2

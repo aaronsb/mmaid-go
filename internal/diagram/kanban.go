@@ -88,15 +88,28 @@ func RenderKanban(source string, useASCII bool, theme *renderer.Theme) *renderer
 		}
 	}
 
-	gap := 2
+	baseGap := 2
 	if useRegion {
-		gap = 1 // tighter spacing with colored columns
+		baseGap = 1
+	}
+	// Compute natural width, then scale gap
+	naturalW := 0
+	for _, w := range colWidths {
+		naturalW += w + baseGap
+	}
+	naturalW -= baseGap
+	nGaps := len(colWidths) - 1
+	gap := baseGap
+	if nGaps > 0 {
+		gap = scaleGap(baseGap, nGaps, naturalW, 0, 4)
 	}
 	totalWidth := 0
 	for _, w := range colWidths {
 		totalWidth += w + gap
 	}
-	totalWidth -= gap // no trailing gap
+	if nGaps > 0 {
+		totalWidth -= gap // no trailing gap
+	}
 
 	// Height: header(3) + cards(3 each) + bottom border(1)
 	colHeight := 3 + maxCards*3 + 1

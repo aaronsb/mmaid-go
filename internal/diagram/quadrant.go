@@ -99,7 +99,6 @@ func parseQuadrant(source string) *quadrantData {
 func RenderQuadrantChart(source string, useASCII bool, theme *renderer.Theme) *renderer.Canvas {
 	qd := parseQuadrant(source)
 
-	plotW := 40
 	plotH := 20
 	yLabelW := 0
 	if qd.yAxisBottom != "" || qd.yAxisTop != "" {
@@ -109,6 +108,8 @@ func RenderQuadrantChart(source string, useASCII bool, theme *renderer.Theme) *r
 	if yLabelW < 2 {
 		yLabelW = 2
 	}
+
+	plotW := scaleWidth(yLabelW+4, 30, maxScaledWidth)
 
 	titleRows := 0
 	if qd.title != "" {

@@ -28,11 +28,12 @@ type gitBranch struct {
 }
 
 type gitGraph struct {
-	commits        []gitCommit
-	branches       []gitBranch
-	direction      string // "LR", "TB", "BT"
-	mainBranchName string // default "main"
-	warnings       []string
+	commits           []gitCommit
+	branches          []gitBranch
+	direction         string // "LR", "TB", "BT"
+	directionExplicit bool   // true if direction was set in source
+	mainBranchName    string // default "main"
+	warnings          []string
 }
 
 // ── layout constants ─────────────────────────────────────────────
@@ -125,6 +126,7 @@ func parseGitGraph(source string) *gitGraph {
 		reDir := regexp.MustCompile(`(?i)(LR|TB|BT)\s*:?`)
 		if m := reDir.FindStringSubmatch(rest); m != nil {
 			p.diagram.direction = strings.ToUpper(m[1])
+			p.diagram.directionExplicit = true
 		}
 		remaining = remaining[1:]
 	}
@@ -450,8 +452,13 @@ func renderGitGraph(gg *gitGraph, useASCII bool) *renderer.Canvas {
 		return c
 	}
 
-	// LR (default)
+	// LR (default) — auto-flip to TB if it would overflow
 	commitCol, branchRow, sortedBranches, width, height, leftOffset := gitComputeLayoutLR(gg, useASCII)
+	if width > usableWidth() && !gg.directionExplicit {
+		c := renderer.NewCanvas(1, 1)
+		gitDrawTB(gg, c, useASCII, cs, false)
+		return c
+	}
 	c := renderer.NewCanvas(width, height)
 	gitDrawLR(gg, c, commitCol, branchRow, sortedBranches, leftOffset, cs, useASCII)
 	return c

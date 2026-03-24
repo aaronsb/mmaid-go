@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	mmaid "github.com/aaronsb/mmaid-go"
+	"github.com/aaronsb/mmaid-go/internal/diagram"
 	"github.com/aaronsb/mmaid-go/internal/renderer"
 )
 
@@ -45,6 +46,7 @@ func main() {
 		demo       string
 		markdown   bool
 		insert     string
+		width      int
 	)
 
 	flag.BoolVar(&ascii, "ascii", false, "")
@@ -61,9 +63,15 @@ func main() {
 	flag.BoolVar(&markdown, "markdown", false, "")
 	flag.BoolVar(&markdown, "m", false, "")
 	flag.StringVar(&insert, "insert", "", "")
+	flag.IntVar(&width, "width", 0, "")
+	flag.IntVar(&width, "w", 0, "")
 
 	flag.Usage = func() { printUsage() }
 	flag.Parse()
+
+	if width > 0 {
+		diagram.SetWidthOverride(width)
+	}
 
 	if showVer {
 		fmt.Printf("%smmaid%s %s%s%s\n", ansiBold+ansiCyan, ansiReset, ansiYellow, version, ansiReset)
@@ -137,6 +145,7 @@ func printUsage() {
 	fmt.Fprintf(w, "        %s--demo%s %sTYPE%s     Show sample diagram (use with %s-t%s for theme)\n", ansiYellow, ansiReset, ansiDim, ansiReset, ansiYellow, ansiReset)
 	fmt.Fprintf(w, "        %s--padding-x%s %sN%s   Horizontal node padding (default: 4)\n", ansiYellow, ansiReset, ansiDim, ansiReset)
 	fmt.Fprintf(w, "        %s--padding-y%s %sN%s   Vertical node padding (default: 2)\n", ansiYellow, ansiReset, ansiDim, ansiReset)
+	fmt.Fprintf(w, "    %s-w%s, %s--width%s %sN%s      Override diagram width (columns)\n", ansiYellow, ansiReset, ansiYellow, ansiReset, ansiDim, ansiReset)
 	fmt.Fprintf(w, "        %s--sharp-edges%s    Sharp corners on edge routing\n\n", ansiYellow, ansiReset)
 	fmt.Fprintf(w, "  %sDIAGRAM TYPES%s\n", ansiBold+ansiWhite, ansiReset)
 	types := []struct{ keyword, desc string }{
