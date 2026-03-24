@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/aaronsb/mmaid-go/internal/graph"
 )
@@ -998,12 +999,36 @@ func stripQuotes(text string) string {
 // Handles common Mermaid conventions that don't apply to terminal output:
 //   - \n (literal backslash-n) → space (Claude and editors often insert these)
 //   - <br>, <br/>, <br /> → space (HTML line breaks used in GitHub Mermaid)
+//   - Control characters (including ANSI escapes) → stripped
 func sanitizeLabel(text string) string {
 	text = strings.ReplaceAll(text, `\n`, " ")
 	text = strings.ReplaceAll(text, "<br>", " ")
 	text = strings.ReplaceAll(text, "<br/>", " ")
 	text = strings.ReplaceAll(text, "<br />", " ")
-	return text
+	return stripControlChars(text)
+}
+
+// ansiEscRe matches ANSI escape sequences: ESC followed by [ and parameters.
+var ansiEscRe = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+
+// stripControlChars removes control characters and ANSI escape sequences from text.
+// This prevents terminal control codes from being injected through Mermaid labels.
+func stripControlChars(text string) string {
+	// Strip full ANSI escape sequences first (ESC[...m etc).
+	text = ansiEscRe.ReplaceAllString(text, "")
+
+	var b strings.Builder
+	b.Grow(len(text))
+	for _, r := range text {
+		if r == '\t' {
+			b.WriteByte(' ')
+		} else if unicode.IsControl(r) {
+			continue
+		} else {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 func parseCSSProps(text string) map[string]string {

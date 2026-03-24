@@ -185,3 +185,34 @@ func TestParseLinkStyle(t *testing.T) {
 		t.Error("linkStyle 0 not found")
 	}
 }
+
+func TestSanitizeLabel_StripsControlChars(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"normal text", "normal text"},
+		{"has\ttab", "has tab"},
+		{"has\x1b[31mANSI\x1b[0m", "hasANSI"},
+		{"null\x00byte", "nullbyte"},
+		{"line\nbreak", "linebreak"},         // real newline stripped by stripControlChars
+		{`line\nbreak`, "line break"},        // literal \n replaced by sanitizeLabel
+		{"html<br>break", "html break"},     // <br> → space
+	}
+	for _, tt := range tests {
+		got := sanitizeLabel(tt.input)
+		if got != tt.want {
+			t.Errorf("sanitizeLabel(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestStripControlChars(t *testing.T) {
+	// Full ANSI escape sequences should be stripped entirely.
+	input := "before\x1b[31mred\x1b[0mafter"
+	got := stripControlChars(input)
+	want := "beforeredafter"
+	if got != want {
+		t.Errorf("stripControlChars(%q) = %q, want %q", input, got, want)
+	}
+}
