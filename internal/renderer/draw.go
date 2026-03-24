@@ -174,6 +174,10 @@ func restoreNodeBorderStyles(canvas *Canvas, g *graph.Graph, l *layout.GridLayou
 		if !ok {
 			continue
 		}
+		// Start/end state markers are single characters — no border to restore.
+		if node.Shape == graph.ShapeStartState || node.Shape == graph.ShapeEndState {
+			continue
+		}
 		p, ok := l.Placements[nid]
 		if !ok {
 			continue
@@ -277,7 +281,7 @@ func drawEdges(canvas *Canvas, g *graph.Graph, l *layout.GridLayout, routed []ro
 
 	// Pass 1b: Draw arrows and T-junctions (after all lines so they aren't overwritten)
 	for _, re := range routed {
-		drawEdgeEndpoints(canvas, re, l, cs)
+		drawEdgeEndpoints(canvas, re, g, l, cs)
 	}
 
 	// Pass 2: Draw edge labels
@@ -452,7 +456,7 @@ func drawEdgeLines(canvas *Canvas, re routing.RoutedEdge, cs CharSet, roundedEdg
 }
 
 // drawEdgeEndpoints draws arrow heads and T-junctions for a routed edge (Pass 1b).
-func drawEdgeEndpoints(canvas *Canvas, re routing.RoutedEdge, l *layout.GridLayout, cs CharSet) {
+func drawEdgeEndpoints(canvas *Canvas, re routing.RoutedEdge, g *graph.Graph, l *layout.GridLayout, cs CharSet) {
 	path := re.DrawPath
 	if len(path) < 2 {
 		return
@@ -464,7 +468,11 @@ func drawEdgeEndpoints(canvas *Canvas, re routing.RoutedEdge, l *layout.GridLayo
 	if edge.HasArrowEnd && len(path) >= 2 {
 		from := path[len(path)-2]
 		to := path[len(path)-1]
-		drawArrowHead(canvas, from, to, cs, edge.Style, edge.ArrowTypeEnd)
+		// Skip arrowhead if target is an end-state marker (it would overwrite ◉)
+		tgtNode := g.Nodes[edge.Target]
+		if tgtNode == nil || tgtNode.Shape != graph.ShapeEndState {
+			drawArrowHead(canvas, from, to, cs, edge.Style, edge.ArrowTypeEnd)
+		}
 	}
 
 	// Draw arrow at start (source) - for bidirectional edges
@@ -475,8 +483,13 @@ func drawEdgeEndpoints(canvas *Canvas, re routing.RoutedEdge, l *layout.GridLayo
 	}
 
 	// Draw T-junction where edge leaves source node border
+	// Skip for start/end state markers — they're single characters
+	// and the junction would overwrite or detach from the marker.
 	if len(path) >= 2 {
-		drawBoxStart(canvas, path[0], path[1], re, l, cs)
+		srcNode := g.Nodes[edge.Source]
+		if srcNode == nil || (srcNode.Shape != graph.ShapeStartState && srcNode.Shape != graph.ShapeEndState) {
+			drawBoxStart(canvas, path[0], path[1], re, l, cs)
+		}
 	}
 }
 
