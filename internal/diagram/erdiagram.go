@@ -316,19 +316,19 @@ func RenderERDiagram(source string, useASCII bool) *renderer.Canvas {
 	// Create canvas with margin
 	c := renderer.NewCanvas(canvasWidth+4, canvasHeight+4)
 
-	// Draw entity boxes
-	for _, name := range erd.entityOrder {
-		drawERBox(c, erd.entities[name], boxes[name], cs)
-	}
-
-	// Draw relationships
+	// Draw relationships first so entity boxes paint over any crossing lines
 	for _, rel := range erd.relationships {
 		srcBox := boxes[rel.entity1]
 		tgtBox := boxes[rel.entity2]
 		if srcBox == nil || tgtBox == nil {
 			continue
 		}
-		drawERRelationship(c, rel, srcBox, tgtBox, cs, isLR)
+		drawERRelationship(c, rel, srcBox, tgtBox, boxes, cs, isLR)
+	}
+
+	// Draw entity boxes on top — labels always win over lines
+	for _, name := range erd.entityOrder {
+		drawERBox(c, erd.entities[name], boxes[name], cs)
 	}
 
 	return c
@@ -570,7 +570,7 @@ func drawERBox(c *renderer.Canvas, entity *erEntity, box *erBoxInfo, cs renderer
 }
 
 // drawERRelationship draws a relationship line between two entity boxes.
-func drawERRelationship(c *renderer.Canvas, rel erRelationship, src, tgt *erBoxInfo, cs renderer.CharSet, isLR bool) {
+func drawERRelationship(c *renderer.Canvas, rel erRelationship, src, tgt *erBoxInfo, allBoxes map[string]*erBoxInfo, cs renderer.CharSet, isLR bool) {
 	// Determine line characters
 	lineH := cs.LineHorizontal
 	lineV := cs.LineVertical
@@ -600,21 +600,58 @@ func drawERRelationship(c *renderer.Canvas, rel erRelationship, src, tgt *erBoxI
 			tgtY = tgtCY
 		}
 	} else {
+		// TB mode: prefer vertical connections from bottom/top edges.
+		// When boxes are horizontally offset, use side edges to avoid
+		// routing through intermediate boxes.
 		if src.y < tgt.y {
-			srcX = srcCX
-			srcY = src.y + src.height
-			tgtX = tgtCX
-			tgtY = tgt.y
+			srcY = src.y + src.height - 1 // bottom edge
+			tgtY = tgt.y                  // top edge
+			if srcCX == tgtCX {
+				// Vertically aligned — straight down
+				srcX = srcCX
+				tgtX = tgtCX
+			} else if tgtCX > src.x+src.width {
+				// Target is to the right — exit from right side of src
+				srcX = src.x + src.width - 1
+				srcY = srcCY
+				tgtX = tgt.x
+				tgtY = tgtCY
+			} else if tgtCX < src.x {
+				// Target is to the left — exit from left side of src
+				srcX = src.x
+				srcY = srcCY
+				tgtX = tgt.x + tgt.width - 1
+				tgtY = tgtCY
+			} else {
+				// Overlapping X ranges — use center-bottom/top
+				srcX = srcCX
+				tgtX = tgtCX
+			}
 		} else {
-			srcX = srcCX
-			srcY = src.y
-			tgtX = tgtCX
-			tgtY = tgt.y + tgt.height
+			srcY = src.y     // top edge
+			tgtY = tgt.y + tgt.height - 1 // bottom edge
+			if srcCX == tgtCX {
+				srcX = srcCX
+				tgtX = tgtCX
+			} else if tgtCX > src.x+src.width {
+				srcX = src.x + src.width - 1
+				srcY = srcCY
+				tgtX = tgt.x
+				tgtY = tgtCY
+			} else if tgtCX < src.x {
+				srcX = src.x
+				srcY = srcCY
+				tgtX = tgt.x + tgt.width - 1
+				tgtY = tgtCY
+			} else {
+				srcX = srcCX
+				tgtX = tgtCX
+			}
 		}
 	}
 
-	// Draw the routed line
-	drawRoutedLine(c, srcX, srcY, tgtX, tgtY, lineH, lineV, cs)
+	// Draw the routed line, avoiding intermediate boxes
+	drawERRoutedLine(c, srcX, srcY, tgtX, tgtY, lineH, lineV, cs, src, tgt, allBoxes)
 
 	// Draw cardinality text near connection points
 	card1Text := cardinalityDisplay[rel.card1]
@@ -661,4 +698,129 @@ func drawERRelationship(c *renderer.Canvas, rel erRelationship, src, tgt *erBoxI
 		}
 		c.PutText(labelRow, labelCol, rel.label, "edge_label")
 	}
+}
+
+// drawERRoutedLine draws a Z-shaped line between two points, choosing a
+// horizontal bend position that avoids overlapping intermediate entity boxes.
+func drawERRoutedLine(c *renderer.Canvas, x1, y1, x2, y2 int, lineH, lineV rune, cs renderer.CharSet, src, tgt *erBoxInfo, allBoxes map[string]*erBoxInfo) {
+	// Ensure canvas is big enough
+	maxX := max(x1, x2)
+	maxY := max(y1, y2)
+	if maxX+2 > c.Width || maxY+2 > c.Height {
+		c.Resize(maxX+2, maxY+2)
+	}
+
+	if x1 == x2 {
+		// Straight vertical
+		c.DrawVertical(x1, y1, y2, lineV, "edge")
+		return
+	}
+	if y1 == y2 {
+		// Straight horizontal
+		c.DrawHorizontal(y1, x1, x2, lineH, "edge")
+		return
+	}
+
+	// Z-shaped routing: pick a midY that doesn't intersect any box
+	// (other than the source and target).
+	midY := findClearMidY(y1, y2, x1, x2, src, tgt, allBoxes)
+
+	// Vertical from source to midY
+	c.DrawVertical(x1, y1, midY, lineV, "edge")
+	// Horizontal from x1 to x2 at midY
+	c.DrawHorizontal(midY, x1, x2, lineH, "edge")
+	// Vertical from midY to target
+	c.DrawVertical(x2, midY, y2, lineV, "edge")
+
+	// Corners
+	if y1 < midY {
+		if x1 < x2 {
+			c.Put(midY, x1, cs.CornerBottomLeft, true, "edge")
+			c.Put(midY, x2, cs.CornerTopRight, true, "edge")
+		} else {
+			c.Put(midY, x1, cs.CornerBottomRight, true, "edge")
+			c.Put(midY, x2, cs.CornerTopLeft, true, "edge")
+		}
+	} else {
+		if x1 < x2 {
+			c.Put(midY, x1, cs.CornerTopLeft, true, "edge")
+			c.Put(midY, x2, cs.CornerBottomRight, true, "edge")
+		} else {
+			c.Put(midY, x1, cs.CornerTopRight, true, "edge")
+			c.Put(midY, x2, cs.CornerBottomLeft, true, "edge")
+		}
+	}
+}
+
+// findClearMidY finds a Y coordinate for the horizontal segment of a Z-route
+// that doesn't pass through any entity box (other than src/tgt).
+func findClearMidY(y1, y2, x1, x2 int, src, tgt *erBoxInfo, allBoxes map[string]*erBoxInfo) int {
+	minY := min(y1, y2)
+	maxY := max(y1, y2)
+	minX := min(x1, x2)
+	maxX := max(x1, x2)
+
+	// Default midpoint
+	defaultMid := (y1 + y2) / 2
+
+	// Collect boxes that could be hit (exclude src and tgt)
+	var obstacles []*erBoxInfo
+	for _, box := range allBoxes {
+		if box == src || box == tgt {
+			continue
+		}
+		// Only consider boxes whose X range overlaps with our horizontal span
+		boxLeft := box.x
+		boxRight := box.x + box.width
+		if boxRight < minX || boxLeft > maxX {
+			continue
+		}
+		// Only consider boxes in the Y range we're routing through
+		boxTop := box.y
+		boxBottom := box.y + box.height
+		if boxBottom < minY || boxTop > maxY {
+			continue
+		}
+		obstacles = append(obstacles, box)
+	}
+
+	if len(obstacles) == 0 {
+		return defaultMid
+	}
+
+	// Try the gap just above and just below each obstacle
+	candidates := []int{defaultMid}
+	for _, box := range obstacles {
+		candidates = append(candidates, box.y-1)          // just above
+		candidates = append(candidates, box.y+box.height) // just below
+	}
+
+	// Pick the candidate closest to the default midpoint that doesn't hit any obstacle
+	bestY := defaultMid
+	bestDist := maxY - minY + 1 // worse than any real candidate
+
+	for _, cy := range candidates {
+		if cy <= minY || cy >= maxY {
+			continue
+		}
+		clear := true
+		for _, box := range obstacles {
+			if cy >= box.y && cy < box.y+box.height {
+				clear = false
+				break
+			}
+		}
+		if clear {
+			dist := cy - defaultMid
+			if dist < 0 {
+				dist = -dist
+			}
+			if dist < bestDist {
+				bestDist = dist
+				bestY = cy
+			}
+		}
+	}
+
+	return bestY
 }
