@@ -291,7 +291,7 @@ func (p *flowchartParser) parseSubgraph(line string) {
 	}
 
 	sgID = stripQuotes(sgID)
-	sgLabel = stripQuotes(sgLabel)
+	sgLabel = sanitizeLabel(stripQuotes(sgLabel))
 
 	var parent *graph.Subgraph
 	if len(p.subgraphStack) > 0 {
@@ -435,7 +435,7 @@ func (p *flowchartParser) parseStatement(line string) {
 			for _, src := range prevNodes {
 				for _, tgt := range currentNodes {
 					edge := graph.NewEdge(src, tgt)
-					edge.Label = arrowSeg.label
+					edge.Label = sanitizeLabel(arrowSeg.label)
 					edge.Style = arrowSeg.edgeStyle
 					edge.HasArrowStart = arrowSeg.hasArrowStart
 					edge.HasArrowEnd = arrowSeg.hasArrowEnd
@@ -539,6 +539,28 @@ type arrowMatch struct {
 }
 
 // splitByArrows splits a line into alternating node and arrow segments.
+// insideQuotedRegion returns true if position pos falls inside a quoted
+// string ("...") or bracket pair ([...], (...), etc.) in text.
+func insideQuotedRegion(text string, pos int) bool {
+	inQuote := false
+	depth := 0 // bracket nesting depth
+	for i := 0; i < pos && i < len(text); i++ {
+		switch text[i] {
+		case '"':
+			inQuote = !inQuote
+		case '[', '(':
+			if !inQuote {
+				depth++
+			}
+		case ']', ')':
+			if !inQuote && depth > 0 {
+				depth--
+			}
+		}
+	}
+	return inQuote || depth > 0
+}
+
 func (p *flowchartParser) splitByArrows(line string) []segment {
 	var segments []segment
 	remaining := strings.TrimSpace(line)
@@ -547,7 +569,7 @@ func (p *flowchartParser) splitByArrows(line string) []segment {
 		var best *arrowMatch
 
 		// First check for labeled arrows: -->|text| or -- text -->
-		if lm := p.findLabeledArrow(remaining); lm != nil {
+		if lm := p.findLabeledArrow(remaining); lm != nil && !insideQuotedRegion(remaining, lm.pos) {
 			best = &arrowMatch{
 				pos: lm.pos, end: lm.end, style: lm.style,
 				arrStart: lm.arrStart, arrEnd: lm.arrEnd,
@@ -557,7 +579,7 @@ func (p *flowchartParser) splitByArrows(line string) []segment {
 		}
 
 		// Then check for plain arrows
-		if pm := p.findPlainArrow(remaining); pm != nil {
+		if pm := p.findPlainArrow(remaining); pm != nil && !insideQuotedRegion(remaining, pm.pos) {
 			if best == nil || pm.pos < best.pos {
 				best = &arrowMatch{
 					pos: pm.pos, end: pm.end, style: pm.style,
@@ -846,7 +868,7 @@ func (p *flowchartParser) parseNode(text string) *graph.Node {
 		p.shapedNodeIDs[nodeID] = struct{}{}
 		return &graph.Node{
 			ID:         nodeID,
-			Label:      label,
+			Label:      sanitizeLabel(label),
 			Shape:      shape,
 			StyleClass: styleClass,
 		}
@@ -873,14 +895,14 @@ func (p *flowchartParser) parseNode(text string) *graph.Node {
 		if md := parseMarkdownLabel(rawLabel); md != nil {
 			return &graph.Node{
 				ID:            nodeID,
-				Label:         md.plain,
+				Label:         sanitizeLabel(md.plain),
 				Shape:         sp.shape,
 				StyleClass:    styleClass,
 				LabelSegments: md.segments,
 			}
 		}
 
-		label := stripQuotes(rawLabel)
+		label := sanitizeLabel(stripQuotes(rawLabel))
 		return &graph.Node{
 			ID:         nodeID,
 			Label:      label,
@@ -969,6 +991,18 @@ func stripQuotes(text string) string {
 	if len(text) >= 2 && text[0] == '"' && text[len(text)-1] == '"' {
 		return text[1 : len(text)-1]
 	}
+	return text
+}
+
+// sanitizeLabel cleans up label text for terminal rendering.
+// Handles common Mermaid conventions that don't apply to terminal output:
+//   - \n (literal backslash-n) → space (Claude and editors often insert these)
+//   - <br>, <br/>, <br /> → space (HTML line breaks used in GitHub Mermaid)
+func sanitizeLabel(text string) string {
+	text = strings.ReplaceAll(text, `\n`, " ")
+	text = strings.ReplaceAll(text, "<br>", " ")
+	text = strings.ReplaceAll(text, "<br/>", " ")
+	text = strings.ReplaceAll(text, "<br />", " ")
 	return text
 }
 
