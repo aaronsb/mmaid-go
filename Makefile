@@ -1,4 +1,4 @@
-.PHONY: build test test-visual clean install lint vet release aur aur-push
+.PHONY: build test test-visual clean install lint vet dist release aur aur-push
 
 BINARY := mmaid
 BUILD_DIR := .
@@ -30,6 +30,20 @@ clean:
 	rm -f $(BINARY)
 
 all: clean build test
+
+# --- Cross-compilation ---
+
+LDFLAGS := -trimpath -ldflags="-s -w"
+DIST_DIR := dist
+
+dist:
+	@mkdir -p $(DIST_DIR)
+	GOOS=linux   GOARCH=amd64 go build $(LDFLAGS) -o $(DIST_DIR)/$(BINARY)-linux-amd64 ./cmd/mmaid
+	GOOS=linux   GOARCH=arm64 go build $(LDFLAGS) -o $(DIST_DIR)/$(BINARY)-linux-arm64 ./cmd/mmaid
+	GOOS=darwin  GOARCH=amd64 go build $(LDFLAGS) -o $(DIST_DIR)/$(BINARY)-darwin-amd64 ./cmd/mmaid
+	GOOS=darwin  GOARCH=arm64 go build $(LDFLAGS) -o $(DIST_DIR)/$(BINARY)-darwin-arm64 ./cmd/mmaid
+	GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -o $(DIST_DIR)/$(BINARY)-windows-amd64.exe ./cmd/mmaid
+	@echo "Built binaries in $(DIST_DIR)/"
 
 # --- AUR packaging ---
 
@@ -66,11 +80,16 @@ aur-push: aur
 	git push && \
 	echo "Pushed to AUR. Users can install with: yay -S mmaid"
 
-# Full release: tag + GitHub release + AUR
-release:
+# Full release: cross-compile + GitHub release with binaries + AUR
+release: dist
 ifndef VERSION
 	$(error VERSION is required. Usage: make release VERSION=x.y.z)
 endif
 	@echo "Creating GitHub release v$(VERSION)..."
-	gh release create "v$(VERSION)" --title "v$(VERSION)" --generate-notes
+	gh release create "v$(VERSION)" --title "v$(VERSION)" --generate-notes \
+		$(DIST_DIR)/$(BINARY)-linux-amd64 \
+		$(DIST_DIR)/$(BINARY)-linux-arm64 \
+		$(DIST_DIR)/$(BINARY)-darwin-amd64 \
+		$(DIST_DIR)/$(BINARY)-darwin-arm64 \
+		$(DIST_DIR)/$(BINARY)-windows-amd64.exe
 	@$(MAKE) aur-push
