@@ -184,46 +184,18 @@ func renderPieCircle(pc *pieChart, colors [][3]int) *renderer.Canvas {
 		cur += span
 	}
 
-	// Legend dimensions (compute first to size the radius)
+	// Scale radius to available width
+	radius := piScaledRadius(pc, total)
+	diameter := radius*2 + 1
+
 	legendGap := 3
-	maxLabelW := 0
-	for _, s := range pc.slices {
-		if len(s.label) > maxLabelW {
-			maxLabelW = len(s.label)
-		}
-	}
-	maxSuffixW := 0
-	for _, s := range pc.slices {
-		pct := s.value / total * 100
-		suffix := fmt.Sprintf(" %.1f%%", pct)
-		if pc.showData {
-			suffix = fmt.Sprintf(" %.1f%% (%.0f)", pct, s.value)
-		}
-		if len(suffix) > maxSuffixW {
-			maxSuffixW = len(suffix)
-		}
-	}
-	// Legend box: border + " ██ label  xx.x% " + border
-	legendInnerW := 1 + 2 + 1 + maxLabelW + maxSuffixW + 1
-	legendW := legendInnerW + 2 // +2 for borders
+	legendW := pieLegendWidth(pc, total)
 
 	titleRow := 0
 	startRow := 0
 	if pc.title != "" {
 		startRow = 2
 	}
-
-	// Scale radius to available width: diameter = available - legend - gap - 1
-	legendOverhead := legendGap + legendW + 1
-	availableForCircle := usableWidth() - legendOverhead
-	radius := (availableForCircle - 1) / 2
-	if radius < 8 {
-		radius = 8
-	}
-	if radius > 30 {
-		radius = 30
-	}
-	diameter := radius*2 + 1
 
 	// Canvas rows: each cell = 2 sub-pixels vertically
 	circleRows := (diameter + 1) / 2
@@ -294,8 +266,16 @@ func renderPieCircle(pc *pieChart, colors [][3]int) *renderer.Canvas {
 		legendStartRow = startRow
 	}
 
+	// Recompute maxLabelW for legend alignment
+	maxLabelW := 0
+	for _, s := range pc.slices {
+		if len(s.label) > maxLabelW {
+			maxLabelW = len(s.label)
+		}
+	}
+
 	// Legend box dimensions
-	legendBoxW := legendInnerW + 2 // +2 for left/right borders
+	legendBoxW := legendW
 	legendBoxH := len(pc.slices) + 2                         // +2 for top/bottom borders
 	legendBoxTop := legendStartRow
 	legendBoxLeft := legendCol

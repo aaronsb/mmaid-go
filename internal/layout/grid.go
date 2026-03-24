@@ -172,6 +172,13 @@ func ComputeLayout(g *graph.Graph, paddingX, paddingY, maxWidth int) *GridLayout
 	// Step 6: Compute drawing coordinates
 	computeDrawCoords(layout)
 
+	// Step 6b: Scale gap columns to target width (before subgraph bounds)
+	if maxWidth > 0 {
+		scaleGapColumns(layout, maxWidth)
+		// Recompute draw coords after gap scaling
+		computeDrawCoords(layout)
+	}
+
 	// Step 7: Compute subgraph bounds
 	computeSubgraphBounds(g, layout)
 
@@ -179,6 +186,13 @@ func ComputeLayout(g *graph.Graph, paddingX, paddingY, maxWidth int) *GridLayout
 	adjustForNegativeBounds(layout)
 
 	// Step 9: Compute canvas size
+	computeCanvasSize(layout)
+
+	return layout
+}
+
+// computeCanvasSize sets CanvasWidth/CanvasHeight from placements and subgraph bounds.
+func computeCanvasSize(layout *GridLayout) {
 	maxX := 0
 	maxY := 0
 	for _, p := range layout.Placements {
@@ -199,18 +213,18 @@ func ComputeLayout(g *graph.Graph, paddingX, paddingY, maxWidth int) *GridLayout
 	}
 	layout.CanvasWidth = maxX
 	layout.CanvasHeight = maxY
-
-	// Scale gap columns to fill target width
-	if maxWidth > 0 && maxX != maxWidth {
-		scaleGapColumns(layout, maxWidth)
-	}
-
-	return layout
 }
 
 // scaleGapColumns proportionally scales gap columns (those not occupied by nodes)
-// to make the canvas closer to targetWidth.
+// to make the canvas closer to targetWidth. Only adjusts ColWidths — caller must
+// recompute draw coordinates after.
 func scaleGapColumns(layout *GridLayout, targetWidth int) {
+	// Compute current canvas width from column widths
+	currentW := 0
+	for _, w := range layout.ColWidths {
+		currentW += w
+	}
+
 	// Identify gap columns (columns with no node placement)
 	nodeCols := map[int]bool{}
 	for _, p := range layout.Placements {
@@ -218,58 +232,44 @@ func scaleGapColumns(layout *GridLayout, targetWidth int) {
 	}
 
 	var gapCols []int
-	totalGapW := 0
-	for c, w := range layout.ColWidths {
+	for c := range layout.ColWidths {
 		if !nodeCols[c] {
 			gapCols = append(gapCols, c)
-			totalGapW += w
 		}
 	}
-	if len(gapCols) == 0 || totalGapW == 0 {
+	if len(gapCols) == 0 {
 		return
 	}
 
-	slack := targetWidth - layout.CanvasWidth
-	// Distribute slack across gap columns proportionally
-	distributed := 0
+	slack := targetWidth - currentW
+	n := len(gapCols)
 	for i, c := range gapCols {
-		share := slack / len(gapCols)
-		if i < slack%len(gapCols) && slack > 0 {
-			share++
+		share := slack / n
+		// Distribute remainder evenly (works for both positive and negative slack)
+		rem := slack % n
+		if rem != 0 && i < abs(rem) {
+			if slack > 0 {
+				share++
+			} else {
+				share--
+			}
 		}
 		newW := layout.ColWidths[c] + share
 		if newW < 2 {
-			newW = 2 // minimum gap
+			newW = 2
 		}
 		if newW > 20 {
-			newW = 20 // max gap to avoid stretching
+			newW = 20
 		}
-		distributed += newW - layout.ColWidths[c]
 		layout.ColWidths[c] = newW
 	}
+}
 
-	// Recompute draw coordinates and canvas size
-	computeDrawCoords(layout)
-	maxX := 0
-	maxY := 0
-	for _, p := range layout.Placements {
-		if p.DrawX+p.DrawWidth > maxX {
-			maxX = p.DrawX + p.DrawWidth
-		}
-		if p.DrawY+p.DrawHeight > maxY {
-			maxY = p.DrawY + p.DrawHeight
-		}
+func abs(x int) int {
+	if x < 0 {
+		return -x
 	}
-	for _, sb := range layout.SubgraphBounds {
-		if sb.X+sb.Width > maxX {
-			maxX = sb.X + sb.Width
-		}
-		if sb.Y+sb.Height > maxY {
-			maxY = sb.Y + sb.Height
-		}
-	}
-	layout.CanvasWidth = maxX
-	layout.CanvasHeight = maxY
+	return x
 }
 
 // edgeKey is a source-target pair used as a map key.
