@@ -104,33 +104,21 @@ clear
 header "Mindmap — sunset theme"
 run "$MMAID --demo mindmap -t sunset"
 
-# --- Pipe demo with real system data ---
+# --- JSON ingest — pipe real data, no jq needed ---
 
 clear
-header "Pipe it — lsblk JSON → jq → mmaid treemap"
-# Show the command readably (typing simulation), then run from a temp script
-PIPE_DISPLAY="lsblk -Jb -o NAME,SIZE,TYPE | jq -r '...' | mmaid -w $WIDTH -t blueprint"
-printf '\033[1;32m$\033[0m '
-for (( i=0; i<${#PIPE_DISPLAY}; i++ )); do
-  printf '%s' "${PIPE_DISPLAY:$i:1}"
-  sleep 0.02
-done
-echo
-# Now run the real pipeline
-lsblk -Jb -o NAME,SIZE,TYPE | jq -r '
-  def human: if . >= 1073741824 then
-    (((. / 1073741824 * 10 | floor) / 10) | tostring) + "G"
-  else ((. / 1048576 | floor) | tostring) + "M" end;
-  def weight: [(. / 1073741824 | floor), 1] | max;
-  "treemap-beta", "  \"Storage\"",
-  (.blockdevices[] | select(.type == "disk") |
-    "    \"" + .name + "\"",
-    (.children // [] | .[] |
-      "      \"" + .name + " (" + (.size | human) + ")\":" + (.size | weight | tostring)))
-' | $MMAID -t blueprint
-sleep "$DELAY"
+header "JSON ingest — schema template"
+run "$MMAID --json treemap --template"
+
+clear
+header "JSON ingest — pipe system data directly"
+run "lsblk -Jb -o NAME,SIZE,TYPE | $MMAID --json treemap -t blueprint"
+
+clear
+header "JSON ingest — instant pie chart"
+run "echo '{\"Go\":45,\"Rust\":30,\"Python\":25}' | $MMAID --json pie -t monokai"
 
 # --- Closing ---
 sleep 1
-printf '\n\033[1;37m  15 diagram types. 11 themes. One binary. No dependencies.\033[0m\n\n'
+printf '\n\033[1;37m  15 diagram types. 11 themes. JSON ingest. One binary. No dependencies.\033[0m\n\n'
 sleep 3
