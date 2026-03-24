@@ -8,9 +8,13 @@ import (
 	"github.com/aaronsb/mmaid-go/internal/routing"
 )
 
+// graphFillPercent is the fraction of terminal width used for graph layouts.
+// See terminal_scale.go GraphFillRatio for the rationale.
+const graphFillPercent = 75
+
 // RenderGraph renders a graph to a string.
 func RenderGraph(g *graph.Graph, useASCII bool, paddingX, paddingY int, roundedEdges bool) string {
-	canvas := RenderGraphCanvas(g, useASCII, paddingX, paddingY, roundedEdges)
+	canvas := RenderGraphCanvas(g, useASCII, paddingX, paddingY, roundedEdges, 0)
 	if canvas == nil {
 		return ""
 	}
@@ -18,7 +22,8 @@ func RenderGraph(g *graph.Graph, useASCII bool, paddingX, paddingY int, roundedE
 }
 
 // RenderGraphCanvas renders a graph to a Canvas.
-func RenderGraphCanvas(g *graph.Graph, useASCII bool, paddingX, paddingY int, roundedEdges bool) *Canvas {
+// maxWidth, if > 0, hints the target canvas width for gap scaling.
+func RenderGraphCanvas(g *graph.Graph, useASCII bool, paddingX, paddingY int, roundedEdges bool, maxWidth int) *Canvas {
 	if len(g.NodeOrder) == 0 {
 		return nil
 	}
@@ -34,7 +39,20 @@ func RenderGraphCanvas(g *graph.Graph, useASCII bool, paddingX, paddingY int, ro
 	needFlipH := g.Direction == graph.DirRL
 
 	// Compute layout (Normalized direction is used internally)
-	l := layout.ComputeLayout(g, paddingX, paddingY)
+	layoutMaxW := 0
+	if maxWidth > 0 {
+		layoutMaxW = maxWidth * graphFillPercent / 100
+	}
+	l := layout.ComputeLayout(g, paddingX, paddingY, layoutMaxW)
+
+	// Auto-flip LR→TD if the layout overflows and direction wasn't explicit
+	if maxWidth > 0 && l.CanvasWidth+4 > maxWidth && !g.DirectionExplicit &&
+		g.Direction.IsHorizontal() {
+		g.Direction = graph.DirTB
+		needFlipV = false
+		needFlipH = false
+		l = layout.ComputeLayout(g, paddingX, paddingY, layoutMaxW)
+	}
 
 	// Route edges
 	routed := routing.RouteEdges(g, l)

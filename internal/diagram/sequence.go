@@ -564,6 +564,21 @@ func computeLayout(diagram *sequenceDiagram, autonumber bool, flatEvents []inter
 		}
 	}
 
+	// Scale gaps to terminal width: expand if slack, compress if overflow
+	if n > 1 {
+		naturalW := boxWidths[0]/2 + 1
+		for i := 0; i < n-1; i++ {
+			naturalW += gapMins[i]
+		}
+		naturalW += boxWidths[n-1]/2 + 2
+		scaledGap := scaleGap(minGap, n-1, naturalW, 10, 40)
+		for i := range gapMins {
+			if gapMins[i] < scaledGap {
+				gapMins[i] = scaledGap
+			}
+		}
+	}
+
 	// Build center positions cumulatively
 	colCenters := make([]int, n)
 	colCenters[0] = boxWidths[0]/2 + 1

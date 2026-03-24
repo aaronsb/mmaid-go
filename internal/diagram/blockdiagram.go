@@ -40,11 +40,19 @@ const (
 	blockPad   = 2
 	minBlockW  = 12
 	minBlockH  = 5
-	blockColGap = 4
 	blockRowGap = 2
 	blockMargin = 2
 	groupPad   = 2
 )
+
+// blockColumnGap returns the column gap scaled to available width.
+func blockColumnGap(colCount int, contentW int) int {
+	if colCount <= 1 {
+		return 4
+	}
+	naturalW := blockMargin*2 + contentW + 4*(colCount-1)
+	return scaleGap(4, colCount-1, naturalW, 2, 8)
+}
 
 // ── shape patterns ───────────────────────────────────────────────
 
@@ -432,15 +440,22 @@ func renderBlockDiagram(bd *blockDiagram, useASCII bool) *renderer.Canvas {
 	blockSizes := make(map[string][2]int) // id -> {w, h}
 	blockComputeAllSizes(bd.blocks, blockSizes, cs)
 
+	// Compute column gap scaled to available width
+	contentW := 0
+	for _, sz := range blockSizes {
+		contentW += sz[0]
+	}
+	colGap := blockColumnGap(colCount, contentW)
+
 	// Compute column widths and row heights
-	colWidths, rowHeights := blockComputeGridDimensions(grid, colCount, blockSizes)
+	colWidths, rowHeights := blockComputeGridDimensions(grid, colCount, blockSizes, colGap)
 
 	// Compute block positions
 	positions := make(map[string][2]int) // id -> {x, y}
-	blockComputePositions(grid, colWidths, rowHeights, blockSizes, positions)
+	blockComputePositions(grid, colWidths, rowHeights, blockSizes, positions, colGap)
 
 	// Canvas size
-	totalW := blockMargin*2 + intSum(colWidths) + blockColGap*max(0, colCount-1)
+	totalW := blockMargin*2 + intSum(colWidths) + colGap*max(0, colCount-1)
 	totalH := blockMargin*2 + intSum(rowHeights) + blockRowGap*max(0, len(grid)-1)
 	totalW = max(totalW, 20)
 	totalH = max(totalH, 5)
@@ -502,8 +517,8 @@ func blockComputeBlockSize(block *blockNode, cs renderer.CharSet) (int, int) {
 		innerGrid, innerColCount := blockLayoutGrid(block.children, innerCols)
 		childSizes := make(map[string][2]int)
 		blockComputeAllSizes(block.children, childSizes, cs)
-		cww, rhh := blockComputeGridDimensions(innerGrid, innerColCount, childSizes)
-		innerW := intSum(cww) + blockColGap*max(0, innerColCount-1)
+		cww, rhh := blockComputeGridDimensions(innerGrid, innerColCount, childSizes, 4)
+		innerW := intSum(cww) + 4*max(0, innerColCount-1)
 		innerH := intSum(rhh) + blockRowGap*max(0, len(innerGrid)-1)
 		w := innerW + groupPad*2 + 2
 		labelRows := 0
@@ -533,7 +548,7 @@ func blockComputeAllSizes(blocks []blockNode, sizes map[string][2]int, cs render
 	}
 }
 
-func blockComputeGridDimensions(grid [][]blockGridEntry, colCount int, sizes map[string][2]int) ([]int, []int) {
+func blockComputeGridDimensions(grid [][]blockGridEntry, colCount int, sizes map[string][2]int, colGap int) ([]int, []int) {
 	colWidths := make([]int, colCount)
 	for i := range colWidths {
 		colWidths[i] = minBlockW
@@ -573,7 +588,7 @@ func blockComputeGridDimensions(grid [][]blockGridEntry, colCount int, sizes map
 			for c := entry.startCol; c < endCol; c++ {
 				available += colWidths[c]
 			}
-			available += blockColGap * (entry.span - 1)
+			available += colGap * (entry.span - 1)
 			if w > available {
 				extra := w - available
 				perCol := extra / entry.span
@@ -591,13 +606,13 @@ func blockComputeGridDimensions(grid [][]blockGridEntry, colCount int, sizes map
 	return colWidths, rowHeights
 }
 
-func blockComputePositions(grid [][]blockGridEntry, colWidths, rowHeights []int, sizes map[string][2]int, positions map[string][2]int) {
+func blockComputePositions(grid [][]blockGridEntry, colWidths, rowHeights []int, sizes map[string][2]int, positions map[string][2]int, colGap int) {
 	// Precompute column x positions
 	colX := make([]int, len(colWidths))
 	x := blockMargin
 	for c := range colWidths {
 		colX[c] = x
-		x += colWidths[c] + blockColGap
+		x += colWidths[c] + colGap
 	}
 
 	// Precompute row y positions
@@ -649,13 +664,13 @@ func blockPositionChildren(group *blockNode, gx, gy, gw, gh int, sizes map[strin
 		}
 	}
 	innerGrid, innerColCount := blockLayoutGrid(group.children, innerCols)
-	cww, rhh := blockComputeGridDimensions(innerGrid, innerColCount, sizes)
+	cww, rhh := blockComputeGridDimensions(innerGrid, innerColCount, sizes, 4)
 
 	childColX := make([]int, len(cww))
 	cx := innerX
 	for c := range cww {
 		childColX[c] = cx
-		cx += cww[c] + blockColGap
+		cx += cww[c] + 4
 	}
 
 	childRowY := make([]int, len(rhh))

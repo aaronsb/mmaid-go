@@ -117,6 +117,7 @@ func (sp *stateParser) parseStateLines(lines []string, parentSG *graph.Subgraph)
 				dir = graph.DirTB
 			}
 			sp.g.Direction = dir
+			sp.g.DirectionExplicit = true
 			i++
 			continue
 		}

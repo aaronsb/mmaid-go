@@ -141,7 +141,9 @@ func (l *GridLayout) GridToDrawCenter(col, row int) (int, int) {
 }
 
 // ComputeLayout computes the grid layout for a graph.
-func ComputeLayout(g *graph.Graph, paddingX, paddingY int) *GridLayout {
+// maxWidth, if > 0, hints the target canvas width — gap columns will be
+// scaled proportionally to fill or compress to this width.
+func ComputeLayout(g *graph.Graph, paddingX, paddingY, maxWidth int) *GridLayout {
 	layout := NewGridLayout()
 	direction := g.Direction.Normalized()
 
@@ -170,6 +172,13 @@ func ComputeLayout(g *graph.Graph, paddingX, paddingY int) *GridLayout {
 	// Step 6: Compute drawing coordinates
 	computeDrawCoords(layout)
 
+	// Step 6b: Scale node columns to fill target width (before subgraph bounds)
+	if maxWidth > 0 {
+		scaleNodeColumns(layout, maxWidth)
+		// Recompute draw coords after scaling
+		computeDrawCoords(layout)
+	}
+
 	// Step 7: Compute subgraph bounds
 	computeSubgraphBounds(g, layout)
 
@@ -177,6 +186,13 @@ func ComputeLayout(g *graph.Graph, paddingX, paddingY int) *GridLayout {
 	adjustForNegativeBounds(layout)
 
 	// Step 9: Compute canvas size
+	computeCanvasSize(layout)
+
+	return layout
+}
+
+// computeCanvasSize sets CanvasWidth/CanvasHeight from placements and subgraph bounds.
+func computeCanvasSize(layout *GridLayout) {
 	maxX := 0
 	maxY := 0
 	for _, p := range layout.Placements {
@@ -197,9 +213,50 @@ func ComputeLayout(g *graph.Graph, paddingX, paddingY int) *GridLayout {
 	}
 	layout.CanvasWidth = maxX
 	layout.CanvasHeight = maxY
-
-	return layout
 }
+
+// scaleNodeColumns proportionally scales node columns (center column of each
+// node's 3×3 block) to fill targetWidth. Gap columns stay fixed so edges
+// remain correctly attached at node boundaries.
+func scaleNodeColumns(layout *GridLayout, targetWidth int) {
+	// Compute current canvas width from column widths
+	currentW := 0
+	for _, w := range layout.ColWidths {
+		currentW += w
+	}
+
+	slack := targetWidth - currentW
+	if slack <= 0 {
+		return // don't compress — content-driven width is the minimum
+	}
+
+	// Identify node columns
+	nodeCols := map[int]bool{}
+	for _, p := range layout.Placements {
+		nodeCols[p.Grid.Col] = true
+	}
+
+	var scalable []int
+	for c := range layout.ColWidths {
+		if nodeCols[c] {
+			scalable = append(scalable, c)
+		}
+	}
+	if len(scalable) == 0 {
+		return
+	}
+
+	// Distribute slack evenly across node columns
+	n := len(scalable)
+	for i, c := range scalable {
+		share := slack / n
+		if i < slack%n {
+			share++
+		}
+		layout.ColWidths[c] += share
+	}
+}
+
 
 // edgeKey is a source-target pair used as a map key.
 type edgeKey struct{ src, tgt string }

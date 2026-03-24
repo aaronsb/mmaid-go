@@ -293,12 +293,24 @@ func RenderERDiagram(source string, useASCII bool) *renderer.Canvas {
 		layerGroups[l] = append(layerGroups[l], name)
 	}
 
+	// Compute natural width to inform gap scaling
+	naturalW := 0
+	for _, group := range layerGroups {
+		layerW := 0
+		for _, name := range group {
+			layerW += boxes[name].width
+		}
+		if layerW > naturalW {
+			naturalW = layerW
+		}
+	}
+
 	// Position boxes
 	var canvasWidth, canvasHeight int
 	if isLR {
-		canvasWidth, canvasHeight = positionERBoxesLR(layerGroups, boxes)
+		canvasWidth, canvasHeight = positionERBoxesLR(layerGroups, boxes, naturalW)
 	} else {
-		canvasWidth, canvasHeight = positionERBoxesTB(layerGroups, boxes)
+		canvasWidth, canvasHeight = positionERBoxesTB(layerGroups, boxes, naturalW)
 	}
 
 	// Create canvas with margin
@@ -423,9 +435,15 @@ func formatERAttribute(attr erAttribute) string {
 }
 
 // positionERBoxesTB positions boxes in top-to-bottom layout.
-func positionERBoxesTB(layerGroups [][]string, boxes map[string]*erBoxInfo) (int, int) {
-	const hGap = 6
-	const vGap = 4
+func positionERBoxesTB(layerGroups [][]string, boxes map[string]*erBoxInfo, naturalW int) (int, int) {
+	nGaps := 0
+	for _, g := range layerGroups {
+		if len(g)-1 > nGaps {
+			nGaps = len(g) - 1
+		}
+	}
+	hGap := scaleGap(6, max(1, nGaps), naturalW, 4, 12)
+	vGap := 4
 
 	y := 1
 	maxWidth := 0
@@ -466,9 +484,9 @@ func positionERBoxesTB(layerGroups [][]string, boxes map[string]*erBoxInfo) (int
 }
 
 // positionERBoxesLR positions boxes in left-to-right layout.
-func positionERBoxesLR(layerGroups [][]string, boxes map[string]*erBoxInfo) (int, int) {
-	const hGap = 8
-	const vGap = 3
+func positionERBoxesLR(layerGroups [][]string, boxes map[string]*erBoxInfo, naturalW int) (int, int) {
+	hGap := scaleGap(8, max(1, len(layerGroups)-1), naturalW, 4, 16)
+	vGap := 3
 
 	x := 1
 	maxHeight := 0

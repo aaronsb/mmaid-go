@@ -394,13 +394,11 @@ func TestRenderReturnsString(t *testing.T) {
 func TestWithPadding(t *testing.T) {
 	narrow := Render("graph LR\n  A --> B", WithPadding(2, 1))
 	wide := Render("graph LR\n  A --> B", WithPadding(8, 4))
-	// Wider padding = wider output
+	// Wider vertical padding = taller output
 	narrowLines := strings.Split(narrow, "\n")
 	wideLines := strings.Split(wide, "\n")
-	if len(wideLines) > 0 && len(narrowLines) > 0 {
-		if len(wideLines[0]) <= len(narrowLines[0]) {
-			t.Error("wider padding should produce wider output")
-		}
+	if len(wideLines) <= len(narrowLines) {
+		t.Error("wider padding should produce taller output")
 	}
 }
 

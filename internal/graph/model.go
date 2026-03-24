@@ -155,7 +155,8 @@ type Subgraph struct {
 
 // Graph is the top-level container for a parsed flowchart.
 type Graph struct {
-	Direction  Direction
+	Direction         Direction
+	DirectionExplicit bool // true if direction was set in source (not default)
 	Nodes      map[string]*Node
 	Edges      []Edge
 	Subgraphs  []*Subgraph

@@ -222,6 +222,7 @@ func (p *flowchartParser) parseHeader(line string) {
 		for _, d := range validDirections {
 			if string(d) == dirStr {
 				p.g.Direction = d
+				p.g.DirectionExplicit = true
 				found = true
 				break
 			}

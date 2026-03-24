@@ -152,7 +152,7 @@ func renderTreemap(tm *treemap, useASCII bool, theme *renderer.Theme) *renderer.
 
 	// Scale width: proportional for small diagrams, tight for large ones
 	// Use terminal width to decide layout, but never truncate labels
-	termW := getTerminalWidth()
+	termW := usableWidth()
 	canvasW := max(minW, min(termW-2, max(60, int(float64(minW)*1.6))))
 
 	c := renderer.NewCanvas(canvasW, canvasH)

@@ -129,14 +129,6 @@ func RenderXYChart(source string, useASCII bool, theme *renderer.Theme) *rendere
 	xd := parseXYChart(source)
 
 	plotH := 15
-	plotW := 50
-	if len(xd.xLabels) > 0 {
-		// Ensure enough width for labels
-		minW := len(xd.xLabels) * 6
-		if minW > plotW {
-			plotW = minW
-		}
-	}
 
 	yLabelW := len(formatNum(xd.yMax)) + 1
 	if yLabelW < len(formatNum(xd.yMin))+1 {
@@ -145,6 +137,15 @@ func RenderXYChart(source string, useASCII bool, theme *renderer.Theme) *rendere
 	if xd.yLabel != "" && len(xd.yLabel)+2 > yLabelW {
 		yLabelW = len(xd.yLabel) + 2
 	}
+
+	// Scale plot width to terminal, with minimum from label count
+	minPlotW := 30
+	if len(xd.xLabels) > 0 {
+		if lw := len(xd.xLabels) * 6; lw > minPlotW {
+			minPlotW = lw
+		}
+	}
+	plotW := scaleWidth(yLabelW+4, minPlotW, maxScaledWidth)
 
 	titleRows := 0
 	if xd.title != "" {
