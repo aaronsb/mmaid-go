@@ -8,6 +8,10 @@ import (
 	"github.com/aaronsb/mmaid-go/internal/routing"
 )
 
+// graphFillPercent is the fraction of terminal width used for graph layouts.
+// See terminal_scale.go GraphFillRatio for the rationale.
+const graphFillPercent = 75
+
 // RenderGraph renders a graph to a string.
 func RenderGraph(g *graph.Graph, useASCII bool, paddingX, paddingY int, roundedEdges bool) string {
 	canvas := RenderGraphCanvas(g, useASCII, paddingX, paddingY, roundedEdges, 0)
@@ -37,9 +41,18 @@ func RenderGraphCanvas(g *graph.Graph, useASCII bool, paddingX, paddingY int, ro
 	// Compute layout (Normalized direction is used internally)
 	layoutMaxW := 0
 	if maxWidth > 0 {
-		layoutMaxW = maxWidth * 3 / 4 // use ~75% of terminal to leave room for subgraph borders
+		layoutMaxW = maxWidth * graphFillPercent / 100
 	}
 	l := layout.ComputeLayout(g, paddingX, paddingY, layoutMaxW)
+
+	// Auto-flip LR→TD if the layout overflows and direction wasn't explicit
+	if maxWidth > 0 && l.CanvasWidth+4 > maxWidth && !g.DirectionExplicit &&
+		g.Direction.IsHorizontal() {
+		g.Direction = graph.DirTB
+		needFlipV = false
+		needFlipH = false
+		l = layout.ComputeLayout(g, paddingX, paddingY, layoutMaxW)
+	}
 
 	// Route edges
 	routed := routing.RouteEdges(g, l)

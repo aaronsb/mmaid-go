@@ -1,14 +1,43 @@
 package diagram
 
-// maxScaledWidth is the upper bound for scalable chart elements (bars, plots, gaps).
-// Prevents diagrams from looking unnaturally stretched on very wide terminals.
-const maxScaledWidth = 140
+// ── Terminal Width Scaling Constants ─────────────────────────────────────────
+//
+// Diagrams scale to fill available terminal width. These constants control
+// the bounds and behavior of that scaling.
+//
+// The rendering pipeline:
+//   1. usableWidth() returns terminal width (auto-detected or --width override)
+//   2. Chart renderers (gantt, xy, pie, etc.) use scaleWidth/scaleGap to size
+//      their scalable elements within [min, max] bounds
+//   3. Graph renderers (flowchart, state, class, ER) scale node columns via
+//      the layout engine at GraphFillRatio of the usable width
+//
+// Why not 100%? Graph-based diagrams have a 3×3 grid model where nodes absorb
+// adjacent gap columns into their draw width. Subgraph borders, canvas margins
+// (+4), and nested padding add further overhead. Filling 100% causes overflow.
+// Chart renderers control their own canvas size so they can safely fill more.
+
+const (
+	// maxScaledWidth caps scalable chart elements (bars, plots, gaps) to prevent
+	// unnaturally stretched diagrams on very wide terminals.
+	maxScaledWidth = 140
+
+	// graphFillPercent is the fraction of terminal width used for graph-based
+	// diagram layouts (flowchart, state, class, ER). The remaining ~25% absorbs
+	// canvas margins, subgraph borders, and nested padding.
+	// Mirrored as graphFillPercent in internal/renderer/draw.go (can't import
+	// across the diagram→renderer boundary without a cycle).
+	graphFillPercent = 75
+)
+
+// ── Width Override ───────────────────────────────────────────────────────────
 
 // diagramWidth is the effective width for diagram rendering.
-// Defaults to 80, overridden via CLI --width flag.
+// When 0 (default), auto-detects from the terminal.
+// Set via CLI --width/-w flag.
 var diagramWidth int
 
-// SetWidthOverride sets the diagram rendering width.
+// SetWidthOverride forces a fixed rendering width, bypassing terminal detection.
 func SetWidthOverride(w int) {
 	diagramWidth = w
 }
@@ -26,6 +55,8 @@ func usableWidth() int {
 	}
 	return getTerminalWidth()
 }
+
+// ── Scaling Helpers ─────────────────────────────────────────────────────────
 
 // scaleWidth adjusts a fixed-width element to use available diagram space.
 // fixedOverhead is the non-scalable portion (labels, borders, margins).
