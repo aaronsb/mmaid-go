@@ -462,6 +462,35 @@ func TestDetectTreemap(t *testing.T) {
 	}
 }
 
+func TestDetectJourney(t *testing.T) {
+	if dt := detectDiagramType("journey\n  title Day\n  section S\n    A: 3: X"); dt != "journey" {
+		t.Errorf("expected journey, got %s", dt)
+	}
+}
+
+func TestDetectPacket(t *testing.T) {
+	if dt := detectDiagramType("packet-beta\n  0-7: \"A\""); dt != "packet" {
+		t.Errorf("expected packet, got %s", dt)
+	}
+	if dt := detectDiagramType("packet\n  0-7: \"A\""); dt != "packet" {
+		t.Errorf("expected packet (no -beta), got %s", dt)
+	}
+}
+
+func TestRenderJourneyDispatch(t *testing.T) {
+	out := Render("journey\n  title Day\n  section Work\n    Tea: 5: Me")
+	if !strings.Contains(out, "Tea") || !strings.Contains(out, "Work") {
+		t.Errorf("journey did not dispatch/render:\n%s", out)
+	}
+}
+
+func TestRenderPacketDispatch(t *testing.T) {
+	out := Render("packet-beta\n  0-15: \"Src\"\n  16-31: \"Dst\"")
+	if !strings.Contains(out, "Src") || !strings.Contains(out, "Dst") {
+		t.Errorf("packet did not dispatch/render:\n%s", out)
+	}
+}
+
 func TestStripFrontmatter(t *testing.T) {
 	input := "---\ntitle: Test\n---\ngraph LR\n  A --> B"
 	result := stripFrontmatter(input)

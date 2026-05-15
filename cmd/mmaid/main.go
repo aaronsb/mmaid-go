@@ -21,7 +21,7 @@ import (
 	"github.com/aaronsb/mmaid-go/internal/renderer"
 )
 
-const version = "0.4.1"
+const version = "0.5.0"
 
 // ANSI helpers for CLI output
 const (
@@ -53,6 +53,7 @@ func main() {
 		nameKey     string
 		valueKey    string
 		childrenKey string
+		orientation string
 	)
 
 	flag.BoolVar(&ascii, "ascii", false, "")
@@ -76,12 +77,16 @@ func main() {
 	flag.StringVar(&nameKey, "name-key", "", "")
 	flag.StringVar(&valueKey, "value-key", "", "")
 	flag.StringVar(&childrenKey, "children-key", "", "")
+	flag.StringVar(&orientation, "orientation", "", "")
 
 	flag.Usage = func() { printUsage() }
 	flag.Parse()
 
 	if width > 0 {
 		diagram.SetWidthOverride(width)
+	}
+	if orientation != "" {
+		diagram.SetOrientationOverride(orientation)
 	}
 
 	if showVer {
@@ -204,6 +209,7 @@ func printUsage() {
 	fmt.Fprintf(w, "        %s--padding-x%s %sN%s   Horizontal node padding (default: 4)\n", ansiYellow, ansiReset, ansiDim, ansiReset)
 	fmt.Fprintf(w, "        %s--padding-y%s %sN%s   Vertical node padding (default: 2)\n", ansiYellow, ansiReset, ansiDim, ansiReset)
 	fmt.Fprintf(w, "    %s-w%s, %s--width%s %sN%s      Override diagram width (columns)\n", ansiYellow, ansiReset, ansiYellow, ansiReset, ansiDim, ansiReset)
+	fmt.Fprintf(w, "        %s--orientation%s %sTB|LR%s  Force layout orientation (overrides 'direction')\n", ansiYellow, ansiReset, ansiDim, ansiReset)
 	fmt.Fprintf(w, "        %s--sharp-edges%s    Sharp corners on edge routing\n\n", ansiYellow, ansiReset)
 	fmt.Fprintf(w, "  %sJSON INGEST%s\n", ansiBold+ansiWhite, ansiReset)
 	fmt.Fprintf(w, "        %s--json%s %sMODE%s     Read JSON from stdin, render as MODE (treemap, pie)\n", ansiYellow, ansiReset, ansiDim, ansiReset)
@@ -228,6 +234,8 @@ func printUsage() {
 		{"quadrantChart", "2×2 matrix plots"},
 		{"xychart-beta", "Bar and line charts"},
 		{"treemap-beta", "Proportional treemaps"},
+		{"journey", "User journey maps"},
+		{"packet-beta", "Network packet layouts"},
 	}
 	maxKW := 0
 	for _, t := range types {
@@ -302,6 +310,22 @@ var demoSamples = map[string]string{
     2024 Q2 : Design : Prototype
     2024 Q3 : Development
     2024 Q4 : Launch`,
+	"journey": `journey
+    title Ship a Feature
+    section Build
+        Write code   : 4: Dev
+        Run tests    : 3: Dev, CI
+    section Release
+        Code review  : 2: Dev, Lead
+        Deploy       : 5: Dev`,
+	"packet": `packet-beta
+    0-15: "Source Port"
+    16-31: "Destination Port"
+    32-63: "Sequence Number"
+    64-95: "Acknowledgment Number"
+    96-99: "Data Offset"
+    100-111: "Flags"
+    112-127: "Window"`,
 	"quadrant": `quadrantChart
     title Priority Matrix
     x-axis Low Effort --> High Effort
@@ -377,6 +401,8 @@ var demoTypes = []struct{ name, key string }{
 	{"Quadrant Chart", "quadrant"},
 	{"XY Chart", "xychart"},
 	{"Treemap", "treemap"},
+	{"User Journey", "journey"},
+	{"Packet Diagram", "packet"},
 }
 
 func runDemo(themeName, diagramType string) {

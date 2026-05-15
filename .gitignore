@@ -7,5 +7,7 @@ termaid
 /pkg/
 /src/
 *.pkg.tar.zst
+# Release source archive (PKGBUILD downloads vX.Y.Z.tar.gz)
+/*.tar.gz
 # Cross-compiled binaries
 /dist/
