@@ -46,8 +46,14 @@ If neither is present, each renderer keeps its own natural default
 Resolution is centralised in `diagram.resolveVertical(source, defaultVertical)`,
 mirroring the existing `SetWidthOverride` / `usableWidth()` pattern, so no
 render-function signatures change and diagrams adopt it incrementally
-(journey first). The `direction` line is non-invasive: existing per-diagram
-parsers already ignore unrecognised non-colon lines.
+(journey first).
+
+The directive is recognised only at **nesting depth 0**, matching Mermaid's
+own scoping of `direction`: a `direction` inside a flowchart `subgraph` or a
+composite-state `{ … }` block governs that block, not the whole diagram, so
+it must not flip overall orientation. This keeps the convention consistent
+with Mermaid semantics rather than requiring a documented exception when
+flowchart/state adopt the helper.
 
 Terminal width plays no part in orientation. `timeline`'s existing
 width-based auto-switch is grandfathered and may migrate to this mechanism
@@ -78,6 +84,8 @@ later, but width-triggered switching is not extended to new diagrams.
 - No automatic relayout: a diagram that overflows without an explicit
   `direction`/`--orientation` stays overflowed (acceptable — overflow is
   visible and the fix is one keyword).
+- An unrecognised `--orientation` value warns on stderr and is ignored
+  (no override applied), consistent with how `--theme` reports unknowns.
 
 ## Alternatives Considered
 

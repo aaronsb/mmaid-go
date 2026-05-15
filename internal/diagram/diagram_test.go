@@ -249,6 +249,52 @@ func TestResolveVerticalPrecedence(t *testing.T) {
 	}
 }
 
+func TestOrientationInvalidTokenIsNoop(t *testing.T) {
+	if SetOrientationOverride("sideways") {
+		t.Error("unrecognized token should report false")
+	}
+	defer SetOrientationOverride("")
+	// Override not applied -> falls back to the supplied default.
+	if resolveVertical("journey\n  section S", false) {
+		t.Error("invalid override must not force vertical; expected default (false)")
+	}
+	if !resolveVertical("journey\n  section S", true) {
+		t.Error("invalid override must not block the default (true)")
+	}
+}
+
+func TestDirectionScopedToTopLevel(t *testing.T) {
+	// `direction LR` nested in a subgraph governs that subgraph only — it
+	// must not flip the whole diagram (Mermaid semantics).
+	nested := "flowchart TB\n  subgraph G\n    direction LR\n    A --> B\n  end\n  C --> A"
+	if !resolveVertical(nested, true) {
+		t.Error("nested 'direction LR' must not override whole-diagram default")
+	}
+	// A top-level `direction` does govern the whole diagram.
+	if resolveVertical("stateDiagram-v2\ndirection LR\n[*] --> A", true) {
+		t.Error("top-level 'direction LR' should yield horizontal")
+	}
+	if !resolveVertical("journey\ndirection TB\nsection S", false) {
+		t.Error("top-level 'direction TB' should yield vertical")
+	}
+}
+
+func TestJourneyLeadingBlankAndComment(t *testing.T) {
+	// Leading blank/comment lines before the header must not break parsing.
+	for _, src := range []string{
+		"\n\njourney\n    section S\n        Tea: 5: Me",
+		"%% a note\njourney\n    section S\n        Tea: 5: Me",
+	} {
+		c := RenderJourney(src, false, nil)
+		assertCanvasContains(t, c, "Tea")
+	}
+}
+
+func TestPacketLeadingBlank(t *testing.T) {
+	c := RenderPacket("\npacket-beta\n    0-7: \"A\"", false, nil)
+	assertCanvasContains(t, c, "A")
+}
+
 // ── Packet ──────────────────────────────────────────────────────────────────
 
 func TestPacketBasic(t *testing.T) {

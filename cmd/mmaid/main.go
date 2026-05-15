@@ -85,8 +85,8 @@ func main() {
 	if width > 0 {
 		diagram.SetWidthOverride(width)
 	}
-	if orientation != "" {
-		diagram.SetOrientationOverride(orientation)
+	if orientation != "" && !diagram.SetOrientationOverride(orientation) {
+		fmt.Fprintf(os.Stderr, "%smmaid:%s unknown orientation %q (use TB or LR)\n", ansiBold+ansiCyan, ansiReset, orientation)
 	}
 
 	if showVer {
