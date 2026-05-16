@@ -8,12 +8,13 @@
 
 ## Features
 
-- **16 diagram types:** flowcharts, sequence, class, ER, state, block, git graphs, pie charts, treemaps, gantt, timeline, kanban, mindmap, quadrant, XY charts
+- **17 diagram types:** flowcharts, sequence, class, ER, state, block, git graphs, pie charts, treemaps, gantt, timeline, kanban, mindmap, quadrant, XY charts, user journey, packet
 - **Zero dependencies:** pure Go, single portable binary
 - **11 color themes:** including 5 solid-background themes with depth-based region coloring
 - **Anti-aliased pie charts:** circular rendering with half-block characters and supersampled edges
 - **Braille fallback:** pie charts use distinct dot patterns when no color theme is active
 - **ASCII mode:** works on any terminal
+- **Orientation control:** `direction TB` in the diagram, or `--orientation tb`, lays a diagram out vertically — independent of terminal width ([ADR-100](docs/architecture/core/ADR-100-diagram-orientation-is-explicit-intent-distinct-from-terminal-width.md))
 - **JSON ingest:** pipe structured data directly — `lsblk -Jb | mmaid --json treemap`
 - **Pipe-friendly CLI:** `echo "graph LR; A-->B" | mmaid` just works
 

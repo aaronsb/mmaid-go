@@ -164,6 +164,167 @@ func TestKanbanThemed(t *testing.T) {
 	assertCanvasNotEmpty(t, c)
 }
 
+// ── Journey ─────────────────────────────────────────────────────────────────
+
+func TestJourneyBasic(t *testing.T) {
+	src := "journey\n    title My day\n    section Work\n        Tea: 5: Me\n        Code: 1: Me, Bot"
+	c := RenderJourney(src, false, nil)
+	assertCanvasContains(t, c, "My day")
+	assertCanvasContains(t, c, "Work")
+	assertCanvasContains(t, c, "Tea")
+	assertCanvasContains(t, c, "Code")
+	assertCanvasContains(t, c, "Me")
+	assertCanvasContains(t, c, "Bot")
+	assertCanvasContains(t, c, ":D")  // score 5 face
+	assertCanvasContains(t, c, ":((") // score 1 face
+}
+
+func TestJourneyScoreClamped(t *testing.T) {
+	// Out-of-range and non-numeric scores fall back/clamp without panicking.
+	c := RenderJourney("journey\n    section S\n        A: 99: X\n        B: nope: Y", false, nil)
+	assertCanvasContains(t, c, ":D")  // 99 clamps to 5
+	assertCanvasContains(t, c, ":-|") // "nope" -> default 3
+}
+
+func TestJourneyThemed(t *testing.T) {
+	theme := renderer.GetTheme("blueprint")
+	c := RenderJourney("journey\n    section S\n        A: 3: X", false, &theme)
+	assertCanvasNotEmpty(t, c)
+}
+
+func TestJourneyEmpty(t *testing.T) {
+	c := RenderJourney("journey", false, nil)
+	assertCanvasContains(t, c, "no sections")
+}
+
+// ── Orientation ─────────────────────────────────────────────────────────────
+
+func TestJourneyVerticalViaDirective(t *testing.T) {
+	src := "journey\n    direction TB\n    title Day\n    section Work\n        Tea: 5: Me\n        Code: 2: Me, Bot"
+	c := RenderJourney(src, false, nil)
+	out := c.ToString()
+	// Vertical layout is tall and narrow; horizontal is wide and short.
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	if len(lines) < 8 {
+		t.Errorf("expected a tall vertical layout, got %d lines:\n%s", len(lines), out)
+	}
+	assertCanvasContains(t, c, "Tea")
+	assertCanvasContains(t, c, "Code")
+}
+
+func TestJourneyHorizontalByDefault(t *testing.T) {
+	// No directive, no override -> journey's natural default is horizontal.
+	c := RenderJourney("journey\n    section S\n        A: 3: X\n        B: 4: Y", false, nil)
+	lines := strings.Split(strings.TrimRight(c.ToString(), "\n"), "\n")
+	if len(lines) > 9 {
+		t.Errorf("expected a short horizontal layout, got %d lines", len(lines))
+	}
+}
+
+func TestOrientationCLIOverridesDirective(t *testing.T) {
+	src := "journey\n    direction TB\n    section S\n        A: 3: X"
+	SetOrientationOverride("lr") // CLI says horizontal, directive says vertical
+	defer SetOrientationOverride("")
+	c := RenderJourney(src, false, nil)
+	lines := strings.Split(strings.TrimRight(c.ToString(), "\n"), "\n")
+	if len(lines) > 9 {
+		t.Errorf("CLI --orientation lr should override 'direction TB'; got %d lines", len(lines))
+	}
+}
+
+func TestResolveVerticalPrecedence(t *testing.T) {
+	if resolveVertical("journey\n  section S", false) {
+		t.Error("no directive/override should yield the default (false)")
+	}
+	if !resolveVertical("journey\n  direction TB\n  section S", false) {
+		t.Error("'direction TB' directive should yield vertical")
+	}
+	if resolveVertical("journey\n  direction LR\n  section S", true) {
+		t.Error("'direction LR' directive should yield horizontal even if default is vertical")
+	}
+	SetOrientationOverride("tb")
+	defer SetOrientationOverride("")
+	if !resolveVertical("journey\n  direction LR\n  section S", false) {
+		t.Error("CLI override must win over the directive")
+	}
+}
+
+func TestOrientationInvalidTokenIsNoop(t *testing.T) {
+	if SetOrientationOverride("sideways") {
+		t.Error("unrecognized token should report false")
+	}
+	defer SetOrientationOverride("")
+	// Override not applied -> falls back to the supplied default.
+	if resolveVertical("journey\n  section S", false) {
+		t.Error("invalid override must not force vertical; expected default (false)")
+	}
+	if !resolveVertical("journey\n  section S", true) {
+		t.Error("invalid override must not block the default (true)")
+	}
+}
+
+func TestDirectionScopedToTopLevel(t *testing.T) {
+	// `direction LR` nested in a subgraph governs that subgraph only — it
+	// must not flip the whole diagram (Mermaid semantics).
+	nested := "flowchart TB\n  subgraph G\n    direction LR\n    A --> B\n  end\n  C --> A"
+	if !resolveVertical(nested, true) {
+		t.Error("nested 'direction LR' must not override whole-diagram default")
+	}
+	// A top-level `direction` does govern the whole diagram.
+	if resolveVertical("stateDiagram-v2\ndirection LR\n[*] --> A", true) {
+		t.Error("top-level 'direction LR' should yield horizontal")
+	}
+	if !resolveVertical("journey\ndirection TB\nsection S", false) {
+		t.Error("top-level 'direction TB' should yield vertical")
+	}
+}
+
+func TestJourneyLeadingBlankAndComment(t *testing.T) {
+	// Leading blank/comment lines before the header must not break parsing.
+	for _, src := range []string{
+		"\n\njourney\n    section S\n        Tea: 5: Me",
+		"%% a note\njourney\n    section S\n        Tea: 5: Me",
+	} {
+		c := RenderJourney(src, false, nil)
+		assertCanvasContains(t, c, "Tea")
+	}
+}
+
+func TestPacketLeadingBlank(t *testing.T) {
+	c := RenderPacket("\npacket-beta\n    0-7: \"A\"", false, nil)
+	assertCanvasContains(t, c, "A")
+}
+
+// ── Packet ──────────────────────────────────────────────────────────────────
+
+func TestPacketBasic(t *testing.T) {
+	src := "packet-beta\n    0-15: \"Source Port\"\n    16-31: \"Destination Port\""
+	c := RenderPacket(src, false, nil)
+	assertCanvasContains(t, c, "Source Port")
+	assertCanvasContains(t, c, "Destination Port")
+	assertCanvasContains(t, c, "0")
+	assertCanvasContains(t, c, "31")
+}
+
+func TestPacketAutoIncrement(t *testing.T) {
+	// +N fields chain from the previous field's end bit.
+	c := RenderPacket("packet-beta\n    +16: \"A\"\n    +16: \"B\"", false, nil)
+	assertCanvasContains(t, c, "A")
+	assertCanvasContains(t, c, "B")
+	assertCanvasContains(t, c, "31") // 0..15 then 16..31
+}
+
+func TestPacketTruncationLegend(t *testing.T) {
+	// A label too wide for a 1-bit field is truncated and listed in a legend.
+	c := RenderPacket("packet-beta\n    0: \"VeryLongFieldName\"", false, nil)
+	assertCanvasContains(t, c, "VeryLongFieldName [0]")
+}
+
+func TestPacketEmpty(t *testing.T) {
+	c := RenderPacket("packet-beta", false, nil)
+	assertCanvasContains(t, c, "no fields")
+}
+
 // ── Mindmap ─────────────────────────────────────────────────────────────────
 
 func TestMindmapBasic(t *testing.T) {

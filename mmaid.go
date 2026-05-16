@@ -103,6 +103,10 @@ func detectDiagramType(source string) string {
 			return "xychart"
 		case strings.HasPrefix(lower, "kanban"):
 			return "kanban"
+		case strings.HasPrefix(lower, "journey"):
+			return "journey"
+		case strings.HasPrefix(lower, "packet"):
+			return "packet"
 		default:
 			return "flowchart"
 		}
@@ -163,6 +167,10 @@ func Render(source string, opts ...Option) (result string) {
 		canvas = diagram.RenderXYChart(source, cfg.useASCII, getThemePtr(cfg.theme))
 	case "kanban":
 		canvas = diagram.RenderKanban(source, cfg.useASCII, getThemePtr(cfg.theme))
+	case "journey":
+		canvas = diagram.RenderJourney(source, cfg.useASCII, getThemePtr(cfg.theme))
+	case "packet":
+		canvas = diagram.RenderPacket(source, cfg.useASCII, getThemePtr(cfg.theme))
 	default:
 		g := parser.ParseFlowchart(source)
 		canvas = renderer.RenderGraphCanvas(g, cfg.useASCII, cfg.paddingX, cfg.paddingY, cfg.roundedEdges, diagram.UsableWidth())
