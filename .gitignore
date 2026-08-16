@@ -11,3 +11,5 @@ termaid
 /*.tar.gz
 # Cross-compiled binaries
 /dist/
+# make package dry run
+/pkgbuild-check/
