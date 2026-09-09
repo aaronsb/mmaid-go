@@ -462,3 +462,15 @@ func TestFlipHorizontalRepairsWideRunes(t *testing.T) {
 		t.Errorf("ToString = %q, want %q", got, "  日")
 	}
 }
+
+func TestWideRuneContinuationTakesNoArms(t *testing.T) {
+	c := NewCanvas(6, 1)
+	c.PutText(0, 2, "字", "")
+	c.Segment(0, 0, 0, 5, glyph.Light, false, "")
+	if a := c.Arms(0, 3); a != 0 {
+		t.Errorf("continuation arms = %04b, want none", a)
+	}
+	if got := c.ToString(); got != "╶─字─╴" {
+		t.Errorf("ToString = %q", got)
+	}
+}
