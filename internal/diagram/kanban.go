@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/aaronsb/mmaid-go/internal/glyph"
 	"github.com/aaronsb/mmaid-go/internal/renderer"
 	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
@@ -117,8 +118,10 @@ func RenderKanban(source string, useASCII bool, theme *renderer.Theme) *renderer
 	canvasHeight := colHeight + 1
 
 	c := renderer.NewCanvas(totalWidth+1, canvasHeight)
+	if useASCII {
+		c.SetCharSet(renderer.ASCII)
+	}
 
-	hLine := '─'
 	vLine := '│'
 	tl := '┌'
 	tr := '┐'
@@ -129,7 +132,6 @@ func RenderKanban(source string, useASCII bool, theme *renderer.Theme) *renderer
 	cardBL := '╰'
 	cardBR := '╯'
 	if useASCII {
-		hLine = '-'
 		vLine = '|'
 		tl = '+'
 		tr = '+'
@@ -161,18 +163,18 @@ func RenderKanban(source string, useASCII bool, theme *renderer.Theme) *renderer
 		}
 
 		// Column border
-		c.Put(0, x, tl, false, colBorderStyle)
-		c.DrawHorizontal(0, x+1, x+w-2, hLine, colBorderStyle)
-		c.Put(0, x+w-1, tr, false, colBorderStyle)
+		c.Put(0, x, tl, colBorderStyle)
+		c.DrawHorizontal(0, x, x+w-1, glyph.Light, colBorderStyle)
+		c.Put(0, x+w-1, tr, colBorderStyle)
 
 		for row := 1; row < colHeight-1; row++ {
-			c.Put(row, x, vLine, false, colBorderStyle)
-			c.Put(row, x+w-1, vLine, false, colBorderStyle)
+			c.Put(row, x, vLine, colBorderStyle)
+			c.Put(row, x+w-1, vLine, colBorderStyle)
 		}
 
-		c.Put(colHeight-1, x, bl, false, colBorderStyle)
-		c.DrawHorizontal(colHeight-1, x+1, x+w-2, hLine, colBorderStyle)
-		c.Put(colHeight-1, x+w-1, br, false, colBorderStyle)
+		c.Put(colHeight-1, x, bl, colBorderStyle)
+		c.DrawHorizontal(colHeight-1, x, x+w-1, glyph.Light, colBorderStyle)
+		c.Put(colHeight-1, x+w-1, br, colBorderStyle)
 
 		// Fill column interior
 		if colFillStyle != "" {
@@ -188,7 +190,7 @@ func RenderKanban(source string, useASCII bool, theme *renderer.Theme) *renderer
 		c.PutText(1, titleX, col.title, colTitleStyle)
 
 		// Separator under title
-		c.DrawHorizontal(2, x+1, x+w-2, hLine, colBorderStyle)
+		c.DrawHorizontal(2, x, x+w-1, glyph.Light, colBorderStyle)
 
 		// Cards
 		for j, card := range col.cards {
@@ -196,18 +198,18 @@ func RenderKanban(source string, useASCII bool, theme *renderer.Theme) *renderer
 			cardW := textwidth.String(card.label) + 4
 			cardX := x + (w-cardW)/2
 
-			c.Put(cardRow, cardX, cardTL, false, cardBorderStyle)
-			c.DrawHorizontal(cardRow, cardX+1, cardX+cardW-2, hLine, cardBorderStyle)
-			c.Put(cardRow, cardX+cardW-1, cardTR, false, cardBorderStyle)
+			c.Put(cardRow, cardX, cardTL, cardBorderStyle)
+			c.DrawHorizontal(cardRow, cardX, cardX+cardW-1, glyph.Light, cardBorderStyle)
+			c.Put(cardRow, cardX+cardW-1, cardTR, cardBorderStyle)
 
-			c.Put(cardRow+1, cardX, vLine, false, cardBorderStyle)
+			c.Put(cardRow+1, cardX, vLine, cardBorderStyle)
 			labelX := cardX + (cardW-textwidth.String(card.label))/2
 			c.PutText(cardRow+1, labelX, card.label, cardLabelStyle)
-			c.Put(cardRow+1, cardX+cardW-1, vLine, false, cardBorderStyle)
+			c.Put(cardRow+1, cardX+cardW-1, vLine, cardBorderStyle)
 
-			c.Put(cardRow+2, cardX, cardBL, false, cardBorderStyle)
-			c.DrawHorizontal(cardRow+2, cardX+1, cardX+cardW-2, hLine, cardBorderStyle)
-			c.Put(cardRow+2, cardX+cardW-1, cardBR, false, cardBorderStyle)
+			c.Put(cardRow+2, cardX, cardBL, cardBorderStyle)
+			c.DrawHorizontal(cardRow+2, cardX, cardX+cardW-1, glyph.Light, cardBorderStyle)
+			c.Put(cardRow+2, cardX+cardW-1, cardBR, cardBorderStyle)
 
 			// Fill card interior
 			if useRegion {

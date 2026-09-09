@@ -3,6 +3,7 @@ package diagram
 import (
 	"strings"
 
+	"github.com/aaronsb/mmaid-go/internal/glyph"
 	"github.com/aaronsb/mmaid-go/internal/renderer"
 	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
@@ -201,15 +202,16 @@ func RenderMindmap(source string, useASCII bool) *renderer.Canvas {
 	totalHeight := endR - startR + 2
 
 	c := renderer.NewCanvas(totalWidth+1, totalHeight+1)
+	if useASCII {
+		c.SetCharSet(renderer.ASCII)
+	}
 
-	hLine := '─'
 	vLine := '│'
 	tl := '╭'
 	tr := '╮'
 	bl := '╰'
 	br := '╯'
 	if useASCII {
-		hLine = '-'
 		vLine = '|'
 		tl = '+'
 		tr = '+'
@@ -224,17 +226,17 @@ func RenderMindmap(source string, useASCII bool) *renderer.Canvas {
 		col := ln.col
 		boxW := textwidth.String(n.label) + 4
 
-		c.Put(row, col, tl, false, "node")
-		c.DrawHorizontal(row, col+1, col+boxW-2, hLine, "node")
-		c.Put(row, col+boxW-1, tr, false, "node")
+		c.Put(row, col, tl, "node")
+		c.DrawHorizontal(row, col, col+boxW-1, glyph.Light, "node")
+		c.Put(row, col+boxW-1, tr, "node")
 
-		c.Put(row+1, col, vLine, false, "node")
+		c.Put(row+1, col, vLine, "node")
 		c.PutText(row+1, col+2, n.label, "label")
-		c.Put(row+1, col+boxW-1, vLine, false, "node")
+		c.Put(row+1, col+boxW-1, vLine, "node")
 
-		c.Put(row+2, col, bl, false, "node")
-		c.DrawHorizontal(row+2, col+1, col+boxW-2, hLine, "node")
-		c.Put(row+2, col+boxW-1, br, false, "node")
+		c.Put(row+2, col, bl, "node")
+		c.DrawHorizontal(row+2, col, col+boxW-1, glyph.Light, "node")
+		c.Put(row+2, col+boxW-1, br, "node")
 
 		// Fill interior spaces so background themes render solid
 		for cx := col + 1; cx < col+boxW-1; cx++ {
@@ -275,15 +277,15 @@ func RenderMindmap(source string, useASCII bool) *renderer.Canvas {
 			if parentRow >= 0 && childRow >= 0 {
 				// Horizontal from parent to midpoint
 				midX := parentX + parentBoxW + (childX-parentX-parentBoxW)/2
-				c.DrawHorizontal(parentRow, parentX+parentBoxW, midX, hLine, "edge")
+				c.DrawHorizontal(parentRow, parentX+parentBoxW-1, midX, glyph.Light, "edge")
 
 				// Vertical from parentRow to childRow
 				if parentRow != childRow {
-					c.DrawVertical(midX, parentRow, childRow, vLine, "edge")
+					c.DrawVertical(midX, parentRow, childRow, glyph.Light, "edge")
 				}
 
 				// Horizontal from midpoint to child
-				c.DrawHorizontal(childRow, midX, childX-1, hLine, "edge")
+				c.DrawHorizontal(childRow, midX, childX, glyph.Light, "edge")
 			}
 
 			drawEdges(ch, depth+1)

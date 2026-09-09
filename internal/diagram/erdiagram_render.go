@@ -1,6 +1,7 @@
 package diagram
 
 import (
+	"github.com/aaronsb/mmaid-go/internal/glyph"
 	"github.com/aaronsb/mmaid-go/internal/renderer"
 	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
@@ -68,6 +69,7 @@ func RenderERDiagram(source string, useASCII bool) *renderer.Canvas {
 
 	// Create canvas with margin
 	c := renderer.NewCanvas(canvasWidth+4, canvasHeight+4)
+	c.SetCharSet(cs)
 
 	// Draw relationships first so entity boxes paint over any crossing lines
 	for _, rel := range erd.relationships {
@@ -279,10 +281,10 @@ func drawERBox(c *renderer.Canvas, entity *erEntity, box *erBoxInfo, cs renderer
 
 	if len(entity.attributes) > 0 {
 		for col := x + 1; col < x+w-1; col++ {
-			c.Put(row, col, cs.Horizontal, true, "node")
+			c.Arm(row, col, glyph.Horizontal, glyph.Light, false, "node")
 		}
-		c.Put(row, x, cs.TeeRight, true, "node")
-		c.Put(row, x+w-1, cs.TeeLeft, true, "node")
+		c.Arm(row, x, glyph.TeeRight, glyph.Light, false, "node")
+		c.Arm(row, x+w-1, glyph.TeeLeft, glyph.Light, false, "node")
 		row++
 
 		for _, attr := range entity.attributes {
@@ -295,11 +297,9 @@ func drawERBox(c *renderer.Canvas, entity *erEntity, box *erBoxInfo, cs renderer
 
 // drawERRelationship draws a relationship line between two entity boxes.
 func drawERRelationship(c *renderer.Canvas, rel erRelationship, src, tgt *erBoxInfo, allBoxes map[string]*erBoxInfo, cs renderer.CharSet, isLR bool) {
-	lineH := cs.LineHorizontal
-	lineV := cs.LineVertical
+	w := glyph.Light
 	if rel.lineStyle == ".." {
-		lineH = cs.LineDottedH
-		lineV = cs.LineDottedV
+		w = glyph.Dashed
 	}
 
 	srcCY := src.y + src.height/2
@@ -327,34 +327,40 @@ func drawERRelationship(c *renderer.Canvas, rel erRelationship, src, tgt *erBoxI
 		}
 	}
 
-	drawERRoutedLine(c, srcX, srcY, tgtX, tgtY, lineH, lineV, cs, src, tgt, allBoxes)
+	drawERRoutedLine(c, srcX, srcY, tgtX, tgtY, w, cs, src, tgt, allBoxes)
+	joinLineToBox(c, srcX, srcY, src.x, src.y, src.width, src.height, w)
+	joinLineToBox(c, tgtX, tgtY, tgt.x, tgt.y, tgt.width, tgt.height, w)
 
-	card1Text := cardinalityDisplay[rel.card1]
-	card2Text := cardinalityDisplay[rel.card2]
-
-	if card1Text != "" {
-		cardCol := srcX + 1
-		cardRow := srcY - 1
-		if cardRow < 0 {
-			cardRow = srcY + 1
+	// A cardinality sits in the gap beside the line's end, never on the box.
+	// At a side port it goes under the line, leaving the row above to the
+	// relationship label; at a bottom port, beside the line's first cell.
+	placeCard := func(text string, x, y int, box *erBoxInfo) {
+		if text == "" {
+			return
 		}
-		if cardCol+textwidth.String(card1Text)+1 > c.Width || cardRow+1 > c.Height {
-			c.Resize(cardCol+textwidth.String(card1Text)+2, cardRow+2)
+		width := textwidth.String(text)
+		col, row := x+1, y-1
+		switch {
+		case x == box.x+box.width:
+			row = y + 1
+		case x == box.x:
+			row, col = y+1, x-width-1
+		case y == box.y+box.height:
+			row = y
 		}
-		c.PutText(cardRow, cardCol, card1Text, "edge_label")
+		if row < 0 {
+			row = y + 1
+		}
+		if col < 0 {
+			col = 0
+		}
+		if col+width+1 > c.Width || row+1 > c.Height {
+			c.Resize(col+width+2, row+2)
+		}
+		c.PutText(row, col, text, "edge_label")
 	}
-
-	if card2Text != "" {
-		cardCol := tgtX + 1
-		cardRow := tgtY - 1
-		if cardRow < 0 {
-			cardRow = tgtY + 1
-		}
-		if cardCol+textwidth.String(card2Text)+1 > c.Width || cardRow+1 > c.Height {
-			c.Resize(cardCol+textwidth.String(card2Text)+2, cardRow+2)
-		}
-		c.PutText(cardRow, cardCol, card2Text, "edge_label")
-	}
+	placeCard(cardinalityDisplay[rel.card1], srcX, srcY, src)
+	placeCard(cardinalityDisplay[rel.card2], tgtX, tgtY, tgt)
 
 	if rel.label != "" {
 		midX := (srcX + tgtX) / 2
@@ -396,7 +402,7 @@ func erTBPorts(top, bot *erBoxInfo) (int, int, int, int) {
 
 // drawERRoutedLine draws a Z-shaped line between two points, choosing a
 // horizontal bend position that avoids overlapping intermediate entity boxes.
-func drawERRoutedLine(c *renderer.Canvas, x1, y1, x2, y2 int, lineH, lineV rune, cs renderer.CharSet, src, tgt *erBoxInfo, allBoxes map[string]*erBoxInfo) {
+func drawERRoutedLine(c *renderer.Canvas, x1, y1, x2, y2 int, w glyph.Weight, cs renderer.CharSet, src, tgt *erBoxInfo, allBoxes map[string]*erBoxInfo) {
 	maxX := max(x1, x2)
 	maxY := max(y1, y2)
 	if maxX+2 > c.Width || maxY+2 > c.Height {
@@ -404,35 +410,35 @@ func drawERRoutedLine(c *renderer.Canvas, x1, y1, x2, y2 int, lineH, lineV rune,
 	}
 
 	if x1 == x2 {
-		c.DrawVertical(x1, y1, y2, lineV, "edge")
+		c.DrawVertical(x1, y1, y2, w, "edge")
 		return
 	}
 	if y1 == y2 {
-		c.DrawHorizontal(y1, x1, x2, lineH, "edge")
+		c.DrawHorizontal(y1, x1, x2, w, "edge")
 		return
 	}
 
 	midY := findClearMidY(y1, y2, x1, x2, src, tgt, allBoxes)
 
-	c.DrawVertical(x1, y1, midY, lineV, "edge")
-	c.DrawHorizontal(midY, x1, x2, lineH, "edge")
-	c.DrawVertical(x2, midY, y2, lineV, "edge")
+	c.DrawVertical(x1, y1, midY, w, "edge")
+	c.DrawHorizontal(midY, x1, x2, w, "edge")
+	c.DrawVertical(x2, midY, y2, w, "edge")
 
 	if y1 < midY {
 		if x1 < x2 {
-			c.Put(midY, x1, cs.CornerBottomLeft, true, "edge")
-			c.Put(midY, x2, cs.CornerTopRight, true, "edge")
+			c.Arm(midY, x1, glyph.BottomLeft, glyph.Light, false, "edge")
+			c.Arm(midY, x2, glyph.TopRight, glyph.Light, false, "edge")
 		} else {
-			c.Put(midY, x1, cs.CornerBottomRight, true, "edge")
-			c.Put(midY, x2, cs.CornerTopLeft, true, "edge")
+			c.Arm(midY, x1, glyph.BottomRight, glyph.Light, false, "edge")
+			c.Arm(midY, x2, glyph.TopLeft, glyph.Light, false, "edge")
 		}
 	} else {
 		if x1 < x2 {
-			c.Put(midY, x1, cs.CornerTopLeft, true, "edge")
-			c.Put(midY, x2, cs.CornerBottomRight, true, "edge")
+			c.Arm(midY, x1, glyph.TopLeft, glyph.Light, false, "edge")
+			c.Arm(midY, x2, glyph.BottomRight, glyph.Light, false, "edge")
 		} else {
-			c.Put(midY, x1, cs.CornerTopRight, true, "edge")
-			c.Put(midY, x2, cs.CornerBottomLeft, true, "edge")
+			c.Arm(midY, x1, glyph.TopRight, glyph.Light, false, "edge")
+			c.Arm(midY, x2, glyph.BottomLeft, glyph.Light, false, "edge")
 		}
 	}
 }
@@ -506,4 +512,19 @@ func findClearMidY(y1, y2, x1, x2 int, src, tgt *erBoxInfo, allBoxes map[string]
 		return bestY
 	}
 	return minY - 1
+}
+
+// joinLineToBox runs a line end into the box border beside it. The class
+// and ER routers place an end one cell past a right or bottom border, so
+// that cell takes the arm back toward the box and the border cell the arm
+// out, making a tee.
+func joinLineToBox(c *renderer.Canvas, x, y, boxX, boxY, boxW, boxH int, w glyph.Weight) {
+	switch {
+	case y == boxY+boxH && x >= boxX && x < boxX+boxW:
+		c.Arm(y-1, x, glyph.S, w, false, "node")
+		c.Arm(y, x, glyph.N, w, false, "edge")
+	case x == boxX+boxW && y >= boxY && y < boxY+boxH:
+		c.Arm(y, x-1, glyph.E, w, false, "node")
+		c.Arm(y, x, glyph.W, w, false, "edge")
+	}
 }

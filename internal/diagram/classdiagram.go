@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/aaronsb/mmaid-go/internal/glyph"
 	"github.com/aaronsb/mmaid-go/internal/renderer"
 	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
@@ -340,6 +341,7 @@ func RenderClassDiagram(source string, useASCII bool) *renderer.Canvas {
 
 	// Create canvas with margin
 	c := renderer.NewCanvas(canvasWidth+4, canvasHeight+4)
+	c.SetCharSet(cs)
 
 	// Draw class boxes
 	for _, name := range cd.classOrder {
@@ -607,11 +609,11 @@ func drawClassBox(c *renderer.Canvas, cls *classDef, box *classBoxInfo, cs rende
 	if len(cls.members) > 0 {
 		// Draw divider
 		for col := x + 1; col < x+w-1; col++ {
-			c.Put(row, col, cs.Horizontal, true, "node")
+			c.Arm(row, col, glyph.Horizontal, glyph.Light, false, "node")
 		}
 		// Connect divider to sides
-		c.Put(row, x, cs.TeeRight, true, "node")
-		c.Put(row, x+w-1, cs.TeeLeft, true, "node")
+		c.Arm(row, x, glyph.TeeRight, glyph.Light, false, "node")
+		c.Arm(row, x+w-1, glyph.TeeLeft, glyph.Light, false, "node")
 		row++
 
 		// Members
@@ -626,11 +628,9 @@ func drawClassBox(c *renderer.Canvas, cls *classDef, box *classBoxInfo, cs rende
 // drawClassRelationship draws a relationship line between two class boxes.
 func drawClassRelationship(c *renderer.Canvas, rel classRelationship, src, tgt *classBoxInfo, cs renderer.CharSet, useASCII bool, isLR bool) {
 	// Determine line character
-	lineH := cs.LineHorizontal
-	lineV := cs.LineVertical
+	w := glyph.Light
 	if rel.lineStyle == ".." {
-		lineH = cs.LineDottedH
-		lineV = cs.LineDottedV
+		w = glyph.Dashed
 	}
 
 	// Compute connection points
@@ -670,7 +670,9 @@ func drawClassRelationship(c *renderer.Canvas, rel classRelationship, src, tgt *
 	}
 
 	// Draw the routed line
-	drawRoutedLine(c, srcX, srcY, tgtX, tgtY, lineH, lineV, cs)
+	drawRoutedLine(c, srcX, srcY, tgtX, tgtY, w, cs)
+	joinLineToBox(c, srcX, srcY, src.x, src.y, src.width, src.height, w)
+	joinLineToBox(c, tgtX, tgtY, tgt.x, tgt.y, tgt.width, tgt.height, w)
 
 	// Draw markers
 	drawClassMarker(c, tgtX, tgtY, srcX, srcY, rel.targetMarker, cs, useASCII)
@@ -717,7 +719,7 @@ func drawClassRelationship(c *renderer.Canvas, rel classRelationship, src, tgt *
 }
 
 // drawRoutedLine draws a Z-shaped or straight line between two points.
-func drawRoutedLine(c *renderer.Canvas, x1, y1, x2, y2 int, lineH, lineV rune, cs renderer.CharSet) {
+func drawRoutedLine(c *renderer.Canvas, x1, y1, x2, y2 int, w glyph.Weight, cs renderer.CharSet) {
 	// Ensure canvas is big enough
 	maxX := x1
 	if x2 > maxX {
@@ -733,39 +735,39 @@ func drawRoutedLine(c *renderer.Canvas, x1, y1, x2, y2 int, lineH, lineV rune, c
 
 	if x1 == x2 {
 		// Straight vertical
-		c.DrawVertical(x1, y1, y2, lineV, "edge")
+		c.DrawVertical(x1, y1, y2, w, "edge")
 	} else if y1 == y2 {
 		// Straight horizontal
-		c.DrawHorizontal(y1, x1, x2, lineH, "edge")
+		c.DrawHorizontal(y1, x1, x2, w, "edge")
 	} else {
 		// Z-shaped routing: vertical to midpoint, horizontal bend, vertical to end
 		midY := (y1 + y2) / 2
 
 		// Vertical from source to midY
-		c.DrawVertical(x1, y1, midY, lineV, "edge")
+		c.DrawVertical(x1, y1, midY, w, "edge")
 
 		// Horizontal from x1 to x2 at midY
-		c.DrawHorizontal(midY, x1, x2, lineH, "edge")
+		c.DrawHorizontal(midY, x1, x2, w, "edge")
 
 		// Vertical from midY to target
-		c.DrawVertical(x2, midY, y2, lineV, "edge")
+		c.DrawVertical(x2, midY, y2, w, "edge")
 
 		// Corners
 		if y1 < midY {
 			if x1 < x2 {
-				c.Put(midY, x1, cs.CornerBottomLeft, true, "edge")
-				c.Put(midY, x2, cs.CornerTopRight, true, "edge")
+				c.Arm(midY, x1, glyph.BottomLeft, glyph.Light, false, "edge")
+				c.Arm(midY, x2, glyph.TopRight, glyph.Light, false, "edge")
 			} else {
-				c.Put(midY, x1, cs.CornerBottomRight, true, "edge")
-				c.Put(midY, x2, cs.CornerTopLeft, true, "edge")
+				c.Arm(midY, x1, glyph.BottomRight, glyph.Light, false, "edge")
+				c.Arm(midY, x2, glyph.TopLeft, glyph.Light, false, "edge")
 			}
 		} else {
 			if x1 < x2 {
-				c.Put(midY, x1, cs.CornerTopLeft, true, "edge")
-				c.Put(midY, x2, cs.CornerBottomRight, true, "edge")
+				c.Arm(midY, x1, glyph.TopLeft, glyph.Light, false, "edge")
+				c.Arm(midY, x2, glyph.BottomRight, glyph.Light, false, "edge")
 			} else {
-				c.Put(midY, x1, cs.CornerTopRight, true, "edge")
-				c.Put(midY, x2, cs.CornerBottomLeft, true, "edge")
+				c.Arm(midY, x1, glyph.TopRight, glyph.Light, false, "edge")
+				c.Arm(midY, x2, glyph.BottomLeft, glyph.Light, false, "edge")
 			}
 		}
 	}
@@ -865,6 +867,6 @@ func drawClassMarker(c *renderer.Canvas, atX, atY, fromX, fromY int, marker stri
 	markerX := atX + dx
 	markerY := atY + dy
 	if markerX >= 0 && markerX < c.Width && markerY >= 0 && markerY < c.Height {
-		c.Put(markerY, markerX, ch, false, "edge")
+		c.Put(markerY, markerX, ch, "edge")
 	}
 }

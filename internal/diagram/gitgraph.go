@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/aaronsb/mmaid-go/internal/glyph"
 	"github.com/aaronsb/mmaid-go/internal/renderer"
 	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
@@ -461,6 +462,7 @@ func renderGitGraph(gg *gitGraph, useASCII bool) *renderer.Canvas {
 		return c
 	}
 	c := renderer.NewCanvas(width, height)
+	c.SetCharSet(cs)
 	gitDrawLR(gg, c, commitCol, branchRow, sortedBranches, leftOffset, cs, useASCII)
 	return c
 }
@@ -600,8 +602,6 @@ func gitComputeBranchExtentsLR(gg *gitGraph, branchCommits map[string][]*gitComm
 }
 
 func gitDrawLR(gg *gitGraph, c *renderer.Canvas, commitCol, branchRow map[string]int, sortedBranches []string, leftOffset int, cs renderer.CharSet, useASCII bool) {
-	hChar := cs.LineHorizontal
-	vChar := cs.LineVertical
 
 	branchCommits := make(map[string][]*gitCommit)
 	for _, name := range sortedBranches {
@@ -642,7 +642,7 @@ func gitDrawLR(gg *gitGraph, c *renderer.Canvas, commitCol, branchRow map[string
 			continue
 		}
 		row := branchRow[name]
-		c.DrawHorizontal(row, ext[0], ext[1], hChar, "edge")
+		c.DrawHorizontal(row, ext[0], ext[1], glyph.Light, "edge")
 	}
 
 	// 3. Draw fork and merge lines (vertical)
@@ -666,15 +666,15 @@ func gitDrawLR(gg *gitGraph, c *renderer.Canvas, commitCol, branchRow map[string
 			rMin, rMax := min(sourceRow, targetRow), max(sourceRow, targetRow)
 			// Draw vertical line between branch rows (excluding endpoints)
 			for r := rMin + 1; r < rMax; r++ {
-				c.Put(r, col, vChar, true, "edge")
+				c.Arm(r, col, glyph.Vertical, glyph.Light, false, "edge")
 			}
 			// Place T-junction characters where vertical meets horizontal branch lines
 			if !useASCII {
-				c.Put(rMin, col, '┬', false, "edge")
-				c.Put(rMax, col, '┴', false, "edge")
+				c.Put(rMin, col, '┬', "edge")
+				c.Put(rMax, col, '┴', "edge")
 			} else {
-				c.Put(rMin, col, '+', false, "edge")
-				c.Put(rMax, col, '+', false, "edge")
+				c.Put(rMin, col, '+', "edge")
+				c.Put(rMax, col, '+', "edge")
 			}
 		}
 	}
@@ -686,7 +686,7 @@ func gitDrawLR(gg *gitGraph, c *renderer.Canvas, commitCol, branchRow map[string
 		row := branchRow[cmt.branch]
 		marker := gitGetMarker(cmt.ctype, useASCII)
 
-		c.Put(row, col, marker, false, "node")
+		c.Put(row, col, marker, "node")
 
 		label := cmt.id
 		labelCol := col - textwidth.String(label)/2
@@ -701,8 +701,6 @@ func gitDrawLR(gg *gitGraph, c *renderer.Canvas, commitCol, branchRow map[string
 }
 
 func gitDrawTB(gg *gitGraph, canvas *renderer.Canvas, useASCII bool, cs renderer.CharSet, bottomToTop bool) {
-	hChar := cs.LineHorizontal
-	vChar := cs.LineVertical
 
 	sortedBranches := gitSortBranches(gg)
 
@@ -773,6 +771,7 @@ func gitDrawTB(gg *gitGraph, canvas *renderer.Canvas, useASCII bool, cs renderer
 	canvasW := gitMargin + len(sortedBranches)*colGap + gitMargin
 	// Create new canvas with computed dimensions (matching Python's canvas.__init__ call)
 	newC := renderer.NewCanvas(canvasW, canvasH)
+	newC.SetCharSet(cs)
 	*canvas = *newC
 
 	// Compute vertical branch extents (with merge extensions)
@@ -847,7 +846,7 @@ func gitDrawTB(gg *gitGraph, canvas *renderer.Canvas, useASCII bool, cs renderer
 			continue
 		}
 		col := branchCol[name]
-		canvas.DrawVertical(col, branchStart[name], branchEnd[name], vChar, "edge")
+		canvas.DrawVertical(col, branchStart[name], branchEnd[name], glyph.Light, "edge")
 	}
 
 	// 3. Draw fork/merge lines (horizontal) BEFORE markers
@@ -871,15 +870,15 @@ func gitDrawTB(gg *gitGraph, canvas *renderer.Canvas, useASCII bool, cs renderer
 			cMin, cMax := min(sourceCol, targetCol), max(sourceCol, targetCol)
 			// Draw horizontal line between branch columns (excluding endpoints)
 			for cc := cMin + 1; cc < cMax; cc++ {
-				canvas.Put(row, cc, hChar, true, "edge")
+				canvas.Arm(row, cc, glyph.Horizontal, glyph.Light, false, "edge")
 			}
 			// Place T-junction characters where horizontal meets vertical branch lines
 			if !useASCII {
-				canvas.Put(row, cMin, '├', false, "edge")
-				canvas.Put(row, cMax, '┤', false, "edge")
+				canvas.Put(row, cMin, '├', "edge")
+				canvas.Put(row, cMax, '┤', "edge")
 			} else {
-				canvas.Put(row, cMin, '+', false, "edge")
-				canvas.Put(row, cMax, '+', false, "edge")
+				canvas.Put(row, cMin, '+', "edge")
+				canvas.Put(row, cMax, '+', "edge")
 			}
 		}
 	}
@@ -891,7 +890,7 @@ func gitDrawTB(gg *gitGraph, canvas *renderer.Canvas, useASCII bool, cs renderer
 		col := branchCol[cmt.branch]
 		marker := gitGetMarker(cmt.ctype, useASCII)
 
-		canvas.Put(row, col, marker, false, "node")
+		canvas.Put(row, col, marker, "node")
 
 		labelCol := col - textwidth.String(cmt.id)/2
 		if bottomToTop {

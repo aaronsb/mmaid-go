@@ -3,6 +3,7 @@ package renderer
 import (
 	"strings"
 
+	"github.com/aaronsb/mmaid-go/internal/glyph"
 	"github.com/aaronsb/mmaid-go/internal/graph"
 	"github.com/aaronsb/mmaid-go/internal/layout"
 	"github.com/aaronsb/mmaid-go/internal/routing"
@@ -60,19 +61,16 @@ func RenderGraphCanvas(g *graph.Graph, useASCII bool, paddingX, paddingY int, ro
 
 	// Create canvas with a small margin
 	canvas := NewCanvas(l.CanvasWidth+4, l.CanvasHeight+4)
+	canvas.SetCharSet(cs)
 
 	// Draw subgraph borders (background layer)
-	drawSubgraphBorders(canvas, l, cs)
+	drawSubgraphBorders(canvas, l)
 
 	// Draw nodes
 	drawNodes(canvas, g, l, cs)
 
-	// Draw edges (lines, corners, arrows, T-junctions, labels)
+	// Draw edges (lines, arrows, labels)
 	drawEdges(canvas, g, l, routed, cs, roundedEdges)
-
-	// Restore node style on border cells where edge merging overwrote it.
-	// Junction chars (├┤┬┴) on box borders should have the node's bg, not the edge's.
-	restoreNodeBorderStyles(canvas, g, l)
 
 	// Draw subgraph labels (on top of borders)
 	drawSubgraphLabels(canvas, l, cs)
@@ -91,8 +89,8 @@ func RenderGraphCanvas(g *graph.Graph, useASCII bool, paddingX, paddingY int, ro
 	return canvas
 }
 
-// drawSubgraphBorders draws the dashed/solid borders around subgraph regions.
-func drawSubgraphBorders(canvas *Canvas, l *layout.GridLayout, cs CharSet) {
+// drawSubgraphBorders draws the borders around subgraph regions.
+func drawSubgraphBorders(canvas *Canvas, l *layout.GridLayout) {
 	for _, sb := range l.SubgraphBounds {
 		x, y := sb.X, sb.Y
 		w, h := sb.Width, sb.Height
@@ -106,25 +104,7 @@ func drawSubgraphBorders(canvas *Canvas, l *layout.GridLayout, cs CharSet) {
 			y = 0
 		}
 
-		// Top border
-		canvas.Put(y, x, cs.SGTopLeft, true, "subgraph")
-		for c := x + 1; c < x+w-1; c++ {
-			canvas.Put(y, c, cs.SGHorizontal, true, "subgraph")
-		}
-		canvas.Put(y, x+w-1, cs.SGTopRight, true, "subgraph")
-
-		// Bottom border
-		canvas.Put(y+h-1, x, cs.SGBottomLeft, true, "subgraph")
-		for c := x + 1; c < x+w-1; c++ {
-			canvas.Put(y+h-1, c, cs.SGHorizontal, true, "subgraph")
-		}
-		canvas.Put(y+h-1, x+w-1, cs.SGBottomRight, true, "subgraph")
-
-		// Side borders
-		for r := y + 1; r < y+h-1; r++ {
-			canvas.Put(r, x, cs.SGVertical, true, "subgraph")
-			canvas.Put(r, x+w-1, cs.SGVertical, true, "subgraph")
-		}
+		drawBorder(canvas, x, y, w, h, false, "subgraph")
 
 		// Fill interior with background layer so themed renders
 		// show a colored region. Content drawn on top keeps its fg.
@@ -162,40 +142,6 @@ func drawSubgraphLabels(canvas *Canvas, l *layout.GridLayout, cs CharSet) {
 		if label != "" {
 			_ = h // bounds already checked above
 			canvas.PutText(y+1, x+2, label, "subgraph_label")
-		}
-	}
-}
-
-// restoreNodeBorderStyles re-applies node style to border cells where edge
-// junction merging overwrote the style. This ensures T-junctions (├┤┬┴) on
-// box borders keep the node's background color, not the edge's.
-func restoreNodeBorderStyles(canvas *Canvas, g *graph.Graph, l *layout.GridLayout) {
-	for _, nid := range g.NodeOrder {
-		node, ok := g.Nodes[nid]
-		if !ok {
-			continue
-		}
-		// Start/end state markers are single characters — no border to restore.
-		if node.Shape == graph.ShapeStartState || node.Shape == graph.ShapeEndState {
-			continue
-		}
-		p, ok := l.Placements[nid]
-		if !ok {
-			continue
-		}
-
-		style := resolveNodeStyle(g, node)
-		x, y, w, h := p.DrawX, p.DrawY, p.DrawWidth, p.DrawHeight
-
-		// Top and bottom borders
-		for col := x; col < x+w; col++ {
-			canvas.SetStyle(y, col, style)
-			canvas.SetStyle(y+h-1, col, style)
-		}
-		// Left and right borders
-		for row := y; row < y+h; row++ {
-			canvas.SetStyle(row, x, style)
-			canvas.SetStyle(row, x+w-1, style)
 		}
 	}
 }
@@ -275,12 +221,13 @@ func labelSegmentsToStyled(segments []graph.LabelSegment) []StyledSegment {
 
 // drawEdges draws all routed edges: lines, corners, arrows, T-junctions, and labels.
 func drawEdges(canvas *Canvas, g *graph.Graph, l *layout.GridLayout, routed []routing.RoutedEdge, cs CharSet, roundedEdges bool) {
-	// Pass 1a: Draw line segments and corners
+	// Pass 1a: Draw line segments
 	for _, re := range routed {
-		drawEdgeLines(canvas, re, cs, roundedEdges)
+		arrowEnd := re.Edge.HasArrowEnd && !isMarker(g.Nodes[re.Edge.Target])
+		drawEdgeLines(canvas, re, roundedEdges, arrowEnd)
 	}
 
-	// Pass 1b: Draw arrows and T-junctions (after all lines so they aren't overwritten)
+	// Pass 1b: Draw arrows and source tees
 	for _, re := range routed {
 		drawEdgeEndpoints(canvas, re, g, l, cs)
 	}
@@ -294,17 +241,18 @@ func drawEdges(canvas *Canvas, g *graph.Graph, l *layout.GridLayout, routed []ro
 	}
 }
 
-// edgeLineChars returns the horizontal and vertical characters for an edge style.
-func edgeLineChars(style graph.EdgeStyle, cs CharSet) (rune, rune) {
+// edgeWeight returns the stroke for an edge style; ok is false for an
+// invisible edge, which draws nothing.
+func edgeWeight(style graph.EdgeStyle) (glyph.Weight, bool) {
 	switch style {
 	case graph.EdgeDotted:
-		return cs.LineDottedH, cs.LineDottedV
+		return glyph.Dashed, true
 	case graph.EdgeThick:
-		return cs.LineThickH, cs.LineThickV
+		return glyph.Heavy, true
 	case graph.EdgeInvisible:
-		return ' ', ' '
+		return glyph.Light, false
 	default:
-		return cs.LineHorizontal, cs.LineVertical
+		return glyph.Light, true
 	}
 }
 
@@ -319,144 +267,40 @@ func sign(x int) int {
 	return 0
 }
 
-// getCornerChar returns the appropriate corner character for a path bend.
-func getCornerChar(xPrev, yPrev, xCurr, yCurr, xNext, yNext int, cs CharSet, rounded bool) rune {
-	dxIn := sign(xCurr - xPrev)
-	dyIn := sign(yCurr - yPrev)
-	dxOut := sign(xNext - xCurr)
-	dyOut := sign(yNext - yCurr)
-
-	type dirKey struct{ dxIn, dyIn, dxOut, dyOut int }
-
-	if rounded {
-		cornerMap := map[dirKey]rune{
-			{1, 0, 0, 1}:   cs.RoundTopLeft,      // right then down
-			{1, 0, 0, -1}:  cs.RoundBottomLeft,    // right then up
-			{-1, 0, 0, 1}:  cs.RoundTopRight,      // left then down
-			{-1, 0, 0, -1}: cs.RoundBottomRight,    // left then up
-			{0, 1, 1, 0}:   cs.RoundBottomRight,    // down then right -> ╯ wait...
-			{0, 1, -1, 0}:  cs.RoundBottomLeft,     // down then left
-			{0, -1, 1, 0}:  cs.RoundTopRight,       // up then right
-			{0, -1, -1, 0}: cs.RoundTopLeft,        // up then left
-		}
-		// The mapping from the Python source:
-		// (1,0,0,1) = round_top_right -> but field names differ
-		// Let me re-derive. Consider the corner shape:
-		// right then down: ─┐ or ─╮  -> the corner looks like TopRight
-		// right then up:   ─┘ or ─╯  -> BottomRight
-		// left then down:  ┌─ or ╭─  -> TopLeft
-		// left then up:    └─ or ╰─  -> BottomLeft
-		// down then right: │  then ─  going ╰  -> BottomLeft
-		//                    └─
-		// down then left:  │ then ─ going ╯  -> BottomRight
-		//                    ┘─  no, └ actually. Wait:
-		// down then left: coming down, turning left -> ┘ or ╯ = BottomRight
-		// down then right: coming down, turning right -> └ or ╰ = BottomLeft
-		// up then right: coming up, turning right -> ┌ or ╭... no, ┘->  hmm
-		// up then right: ┌  no. Coming up (dy=-1), turning right (dx=1):
-		//   the path was going up, now goes right -> corner is └ or ╰ = BottomLeft... no
-		//   Picture: going up means y decreasing. At the corner we turn right.
-		//   Below the corner is the incoming line, to the right is outgoing.
-		//   That's └ or ╰ which is BottomLeft... wait no.
-		//   └ has line going up and line going right. That IS BottomLeft.
-		//   No: └ = BottomLeft. ╰ = RoundBottomLeft.
-		//   Hmm but the Python says (0,-1,1,0) -> round_top_left / corner_top_left
-		//   Let me just trust the Python mapping directly.
-
-		// Re-reading Python:
-		// (1, 0, 0, 1):  round_top_right / corner_top_right   # right then down
-		// (1, 0, 0, -1): round_bottom_right / corner_bottom_right # right then up
-		// (-1, 0, 0, 1): round_top_left / corner_top_left     # left then down
-		// (-1, 0, 0, -1): round_bottom_left / corner_bottom_left # left then up
-		// (0, 1, 1, 0):  round_bottom_left / corner_bottom_left  # down then right
-		// (0, 1, -1, 0): round_bottom_right / corner_bottom_right # down then left
-		// (0, -1, 1, 0): round_top_left / corner_top_left     # up then right
-		// (0, -1, -1, 0): round_top_right / corner_top_right   # up then left
-
-		cornerMap = map[dirKey]rune{
-			{1, 0, 0, 1}:   cs.RoundTopRight,     // right then down
-			{1, 0, 0, -1}:  cs.RoundBottomRight,   // right then up
-			{-1, 0, 0, 1}:  cs.RoundTopLeft,       // left then down
-			{-1, 0, 0, -1}: cs.RoundBottomLeft,     // left then up
-			{0, 1, 1, 0}:   cs.RoundBottomLeft,     // down then right
-			{0, 1, -1, 0}:  cs.RoundBottomRight,    // down then left
-			{0, -1, 1, 0}:  cs.RoundTopLeft,        // up then right
-			{0, -1, -1, 0}: cs.RoundTopRight,       // up then left
-		}
-		if ch, ok := cornerMap[dirKey{dxIn, dyIn, dxOut, dyOut}]; ok {
-			return ch
-		}
-	}
-
-	// Sharp corners (default)
-	sharpMap := map[dirKey]rune{
-		{1, 0, 0, 1}:   cs.CornerTopRight,     // right then down
-		{1, 0, 0, -1}:  cs.CornerBottomRight,   // right then up
-		{-1, 0, 0, 1}:  cs.CornerTopLeft,       // left then down
-		{-1, 0, 0, -1}: cs.CornerBottomLeft,     // left then up
-		{0, 1, 1, 0}:   cs.CornerBottomLeft,     // down then right
-		{0, 1, -1, 0}:  cs.CornerBottomRight,    // down then left
-		{0, -1, 1, 0}:  cs.CornerTopLeft,        // up then right
-		{0, -1, -1, 0}: cs.CornerTopRight,       // up then left
-	}
-	if ch, ok := sharpMap[dirKey{dxIn, dyIn, dxOut, dyOut}]; ok {
-		return ch
-	}
-
-	return cs.Cross
-}
-
-// drawEdgeLines draws line segments and corners for a routed edge (Pass 1a).
-func drawEdgeLines(canvas *Canvas, re routing.RoutedEdge, cs CharSet, roundedEdges bool) {
+// drawEdgeLines draws a routed edge's path as segments (Pass 1a). Bends are
+// cells where two segments meet. With arrowEnd, the last segment ends at the
+// arrowhead's cell, one short of the node border, so the edge never writes
+// an arm into the target node.
+func drawEdgeLines(canvas *Canvas, re routing.RoutedEdge, roundedEdges, arrowEnd bool) {
 	path := re.DrawPath
 	if len(path) < 2 {
 		return
 	}
 
 	edge := re.Edge
-	hChar, vChar := edgeLineChars(edge.Style, cs)
+	w, ok := edgeWeight(edge.Style)
+	if !ok {
+		return
+	}
 	nSegs := len(path) - 1
 
 	for i := 0; i < nSegs; i++ {
 		x1, y1 := path[i].Col, path[i].Row
 		x2, y2 := path[i+1].Col, path[i+1].Row
+		dx, dy := sign(x2-x1), sign(y2-y1)
 
-		// Clip first segment start if arrow_start
 		if i == 0 && edge.HasArrowStart {
-			dx := sign(x2 - x1)
-			dy := sign(y2 - y1)
 			x1, y1 = x1+dx, y1+dy
 		}
-
-		// Clip last segment end if arrow_end
-		if i == nSegs-1 && edge.HasArrowEnd {
-			dx := sign(x2 - x1)
-			dy := sign(y2 - y1)
+		if i == nSegs-1 && arrowEnd {
 			x2, y2 = x2-dx, y2-dy
 		}
 
-		// Draw horizontal or vertical segment
-		if y1 == y2 {
-			// Horizontal segment
-			canvas.DrawHorizontal(y1, x1, x2, hChar, "edge")
-		} else if x1 == x2 {
-			// Vertical segment
-			canvas.DrawVertical(x1, y1, y2, vChar, "edge")
-		}
-	}
-
-	// Draw corners at path bends
-	for i := 1; i < len(path)-1; i++ {
-		xPrev, yPrev := path[i-1].Col, path[i-1].Row
-		xCurr, yCurr := path[i].Col, path[i].Row
-		xNext, yNext := path[i+1].Col, path[i+1].Row
-
-		cornerCh := getCornerChar(xPrev, yPrev, xCurr, yCurr, xNext, yNext, cs, roundedEdges)
-		canvas.Put(yCurr, xCurr, cornerCh, true, "edge")
+		canvas.Segment(y1, x1, y2, x2, w, roundedEdges, "edge")
 	}
 }
 
-// drawEdgeEndpoints draws arrow heads and T-junctions for a routed edge (Pass 1b).
+// drawEdgeEndpoints draws arrow heads and the source tee for a routed edge (Pass 1b).
 func drawEdgeEndpoints(canvas *Canvas, re routing.RoutedEdge, g *graph.Graph, l *layout.GridLayout, cs CharSet) {
 	path := re.DrawPath
 	if len(path) < 2 {
@@ -469,9 +313,10 @@ func drawEdgeEndpoints(canvas *Canvas, re routing.RoutedEdge, g *graph.Graph, l 
 	if edge.HasArrowEnd && len(path) >= 2 {
 		from := path[len(path)-2]
 		to := path[len(path)-1]
-		// Skip arrowhead if target is an end-state marker (it would overwrite ◉)
-		tgtNode := g.Nodes[edge.Target]
-		if tgtNode == nil || tgtNode.Shape != graph.ShapeEndState {
+		// An end-state marker takes the line itself rather than an arrowhead.
+		if isMarker(g.Nodes[edge.Target]) {
+			markerThrough(canvas, to, from, edge.Style)
+		} else {
 			drawArrowHead(canvas, from, to, cs, edge.Style, edge.ArrowTypeEnd)
 		}
 	}
@@ -483,15 +328,35 @@ func drawEdgeEndpoints(canvas *Canvas, re routing.RoutedEdge, g *graph.Graph, l 
 		drawArrowHead(canvas, from, to, cs, edge.Style, edge.ArrowTypeStart)
 	}
 
-	// Draw T-junction where edge leaves source node border
-	// Skip for start/end state markers — they're single characters
-	// and the junction would overwrite or detach from the marker.
-	if len(path) >= 2 {
-		srcNode := g.Nodes[edge.Source]
-		if srcNode == nil || (srcNode.Shape != graph.ShapeStartState && srcNode.Shape != graph.ShapeEndState) {
-			drawBoxStart(canvas, path[0], path[1], re, l, cs)
+	// The source attach cell: a tee on a box border, a line running into a
+	// state marker. An arrowhead at the start owns that end instead.
+	if len(path) >= 2 && !edge.HasArrowStart {
+		if isMarker(g.Nodes[edge.Source]) {
+			markerThrough(canvas, path[0], path[1], edge.Style)
+		} else {
+			drawBoxStart(canvas, path[0], path[1], edge.Style)
 		}
 	}
+}
+
+// isMarker reports whether a node draws as a single start or end marker
+// instead of a bordered shape.
+func isMarker(n *graph.Node) bool {
+	return n != nil && (n.Shape == graph.ShapeStartState || n.Shape == graph.ShapeEndState)
+}
+
+// markerThrough writes both along-axis arms into the attach cell of a marker
+// node, so the line reads as running into the marker.
+func markerThrough(canvas *Canvas, attach, next routing.Point, style graph.EdgeStyle) {
+	w, ok := edgeWeight(style)
+	if !ok {
+		return
+	}
+	a := glyph.Vertical
+	if next.Row == attach.Row {
+		a = glyph.Horizontal
+	}
+	canvas.Arm(attach.Row, attach.Col, a, w, false, "edge")
 }
 
 // drawArrowHead draws an arrow head at the end of an edge path.
@@ -529,28 +394,33 @@ func drawArrowHead(canvas *Canvas, from, to routing.Point, cs CharSet, style gra
 		}
 	}
 
-	canvas.Put(arrowRow, arrowCol, ch, false, "edge")
+	canvas.Put(arrowRow, arrowCol, ch, "edge")
 }
 
-// drawBoxStart draws a T-junction where an edge leaves a node border.
-func drawBoxStart(canvas *Canvas, edgePoint, nextPoint routing.Point, re routing.RoutedEdge, l *layout.GridLayout, cs CharSet) {
+// drawBoxStart writes the arm an edge leaves a node border through. The
+// border's own arms make it a tee, and the cell keeps the node's style.
+func drawBoxStart(canvas *Canvas, edgePoint, nextPoint routing.Point, style graph.EdgeStyle) {
+	w, ok := edgeWeight(style)
+	if !ok {
+		return
+	}
 	dx := sign(nextPoint.Col - edgePoint.Col)
 	dy := sign(nextPoint.Row - edgePoint.Row)
 
-	var ch rune
-	if dx > 0 {
-		ch = cs.TeeRight
-	} else if dx < 0 {
-		ch = cs.TeeLeft
-	} else if dy > 0 {
-		ch = cs.TeeDown
-	} else if dy < 0 {
-		ch = cs.TeeUp
-	} else {
+	var a glyph.Arms
+	switch {
+	case dx > 0:
+		a = glyph.E
+	case dx < 0:
+		a = glyph.W
+	case dy > 0:
+		a = glyph.S
+	case dy < 0:
+		a = glyph.N
+	default:
 		return
 	}
-
-	canvas.Put(edgePoint.Row, edgePoint.Col, ch, true, "edge")
+	canvas.Arm(edgePoint.Row, edgePoint.Col, a, w, false, "edge")
 }
 
 // placedLabel tracks a placed label for collision detection.

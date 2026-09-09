@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/aaronsb/mmaid-go/internal/glyph"
 	"github.com/aaronsb/mmaid-go/internal/graph"
 	"github.com/aaronsb/mmaid-go/internal/renderer"
 	"github.com/aaronsb/mmaid-go/internal/textwidth"
@@ -462,6 +463,7 @@ func renderBlockDiagram(bd *blockDiagram, useASCII bool) *renderer.Canvas {
 	totalH = max(totalH, 5)
 
 	c := renderer.NewCanvas(totalW, totalH)
+	c.SetCharSet(cs)
 
 	// Draw group borders (background)
 	blockDrawGroups(c, bd.blocks, positions, blockSizes, cs)
@@ -765,21 +767,21 @@ func blockDrawGroups(c *renderer.Canvas, blocks []blockNode, positions map[strin
 		style := "subgraph"
 
 		// Draw border using subgraph chars
-		c.Put(y, x, cs.SGTopLeft, true, style)
+		c.Arm(y, x, glyph.TopLeft, glyph.Light, false, style)
 		for col := x + 1; col < x+w-1; col++ {
-			c.Put(y, col, cs.SGHorizontal, true, style)
+			c.Arm(y, col, glyph.Horizontal, glyph.Light, false, style)
 		}
-		c.Put(y, x+w-1, cs.SGTopRight, true, style)
+		c.Arm(y, x+w-1, glyph.TopRight, glyph.Light, false, style)
 
-		c.Put(y+h-1, x, cs.SGBottomLeft, true, style)
+		c.Arm(y+h-1, x, glyph.BottomLeft, glyph.Light, false, style)
 		for col := x + 1; col < x+w-1; col++ {
-			c.Put(y+h-1, col, cs.SGHorizontal, true, style)
+			c.Arm(y+h-1, col, glyph.Horizontal, glyph.Light, false, style)
 		}
-		c.Put(y+h-1, x+w-1, cs.SGBottomRight, true, style)
+		c.Arm(y+h-1, x+w-1, glyph.BottomRight, glyph.Light, false, style)
 
 		for row := y + 1; row < y+h-1; row++ {
-			c.Put(row, x, cs.SGVertical, true, style)
-			c.Put(row, x+w-1, cs.SGVertical, true, style)
+			c.Arm(row, x, glyph.Vertical, glyph.Light, false, style)
+			c.Arm(row, x+w-1, glyph.Vertical, glyph.Light, false, style)
 		}
 
 		// Draw group label (skip for anonymous groups)
@@ -811,8 +813,6 @@ func blockDrawLink(c *renderer.Canvas, link blockLink, positions map[string][2]i
 	sCX := sx + sw/2
 	tCX := tx + tw/2
 
-	hChar := cs.LineHorizontal
-	vChar := cs.LineVertical
 	style := "edge"
 
 	// Determine connection type based on overlap
@@ -839,8 +839,8 @@ func blockDrawLink(c *renderer.Canvas, link blockLink, positions map[string][2]i
 			arrow = cs.ArrowLeft
 		}
 
-		blockDrawRoutedLine(c, r1, c1, r2, c2, hChar, vChar, useASCII, style)
-		c.Put(r2, c2, arrow, false, style)
+		blockDrawRoutedLine(c, r1, c1, r2, c2, useASCII, style)
+		c.Put(r2, c2, arrow, style)
 	} else {
 		// Vertical: exit/enter from top/bottom
 		dy := (ty + th/2) - (sy + sh/2)
@@ -863,18 +863,18 @@ func blockDrawLink(c *renderer.Canvas, link blockLink, positions map[string][2]i
 			// Straight vertical
 			rMin, rMax := min(r1, r2), max(r1, r2)
 			for r := rMin; r <= rMax; r++ {
-				c.Put(r, c1, vChar, true, style)
+				c.Arm(r, c1, glyph.Vertical, glyph.Light, false, style)
 			}
 		} else {
 			// L-route: vertical to bend row, then horizontal to target x
 			bendRow := r2
 			rMin, rMax := min(r1, bendRow), max(r1, bendRow)
 			for r := rMin; r <= rMax; r++ {
-				c.Put(r, c1, vChar, true, style)
+				c.Arm(r, c1, glyph.Vertical, glyph.Light, false, style)
 			}
 			cMin, cMax := min(c1, c2), max(c1, c2)
 			for col := cMin; col <= cMax; col++ {
-				c.Put(bendRow, col, hChar, true, style)
+				c.Arm(bendRow, col, glyph.Horizontal, glyph.Light, false, style)
 			}
 			if !useASCII {
 				var corner rune
@@ -891,7 +891,7 @@ func blockDrawLink(c *renderer.Canvas, link blockLink, positions map[string][2]i
 						corner = '┌'
 					}
 				}
-				c.Put(bendRow, c1, corner, false, style)
+				c.Put(bendRow, c1, corner, style)
 			}
 		}
 
@@ -900,7 +900,7 @@ func blockDrawLink(c *renderer.Canvas, link blockLink, positions map[string][2]i
 		} else {
 			arrow = cs.ArrowUp
 		}
-		c.Put(r2, c2, arrow, false, style)
+		c.Put(r2, c2, arrow, style)
 	}
 
 	// Draw label
@@ -913,30 +913,30 @@ func blockDrawLink(c *renderer.Canvas, link blockLink, positions map[string][2]i
 }
 
 // blockDrawRoutedLine draws a Z-shaped or straight line using block routing (different from classdiagram's drawRoutedLine).
-func blockDrawRoutedLine(c *renderer.Canvas, r1, c1, r2, c2 int, hChar, vChar rune, useASCII bool, style string) {
+func blockDrawRoutedLine(c *renderer.Canvas, r1, c1, r2, c2 int, useASCII bool, style string) {
 	if c1 == c2 {
 		rMin, rMax := min(r1, r2), max(r1, r2)
 		for r := rMin; r <= rMax; r++ {
-			c.Put(r, c1, vChar, true, style)
+			c.Arm(r, c1, glyph.Vertical, glyph.Light, false, style)
 		}
 	} else if r1 == r2 {
 		cMin, cMax := min(c1, c2), max(c1, c2)
 		for col := cMin; col <= cMax; col++ {
-			c.Put(r1, col, hChar, true, style)
+			c.Arm(r1, col, glyph.Horizontal, glyph.Light, false, style)
 		}
 	} else {
 		midRow := (r1 + r2) / 2
 		rMin, rMax := min(r1, midRow), max(r1, midRow)
 		for r := rMin; r <= rMax; r++ {
-			c.Put(r, c1, vChar, true, style)
+			c.Arm(r, c1, glyph.Vertical, glyph.Light, false, style)
 		}
 		cMin, cMax := min(c1, c2), max(c1, c2)
 		for col := cMin; col <= cMax; col++ {
-			c.Put(midRow, col, hChar, true, style)
+			c.Arm(midRow, col, glyph.Horizontal, glyph.Light, false, style)
 		}
 		rMin2, rMax2 := min(midRow, r2), max(midRow, r2)
 		for r := rMin2; r <= rMax2; r++ {
-			c.Put(r, c2, vChar, true, style)
+			c.Arm(r, c2, glyph.Vertical, glyph.Light, false, style)
 		}
 		if !useASCII {
 			var corner1 rune
@@ -953,7 +953,7 @@ func blockDrawRoutedLine(c *renderer.Canvas, r1, c1, r2, c2 int, hChar, vChar ru
 					corner1 = '┌'
 				}
 			}
-			c.Put(midRow, c1, corner1, false, style)
+			c.Put(midRow, c1, corner1, style)
 
 			var corner2 rune
 			if r2 > midRow {
@@ -969,7 +969,7 @@ func blockDrawRoutedLine(c *renderer.Canvas, r1, c1, r2, c2 int, hChar, vChar ru
 					corner2 = '┘'
 				}
 			}
-			c.Put(midRow, c2, corner2, false, style)
+			c.Put(midRow, c2, corner2, style)
 		}
 	}
 }

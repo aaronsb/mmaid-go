@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/aaronsb/mmaid-go/internal/glyph"
 	"github.com/aaronsb/mmaid-go/internal/renderer"
 	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
@@ -157,6 +158,9 @@ func renderTreemap(tm *treemap, useASCII bool, theme *renderer.Theme) *renderer.
 	canvasW := max(minW, min(termW-2, max(60, int(float64(minW)*1.6))))
 
 	c := renderer.NewCanvas(canvasW, canvasH)
+	if useASCII {
+		c.SetCharSet(renderer.ASCII)
+	}
 
 	// Render each root with its own section index for per-hue coloring
 	tmLayoutRoots(c, cs, tm.roots, 0, 0, canvasW, canvasH, theme)
@@ -428,17 +432,17 @@ func tmDrawNode(c *renderer.Canvas, cs renderer.CharSet, node *treemapNode, x, y
 
 	var hz, vt rune
 	if isSection {
-		hz = cs.LineDottedH
-		vt = cs.LineDottedV
+		hz = cs.Rune(glyph.Horizontal, glyph.Dashed)
+		vt = cs.Rune(glyph.Vertical, glyph.Dashed)
 	} else {
-		hz = cs.Horizontal
-		vt = cs.Vertical
+		hz = cs.Rune(glyph.Horizontal, glyph.Light)
+		vt = cs.Rune(glyph.Vertical, glyph.Light)
 	}
 
-	tl := cs.TopLeft
-	tr := cs.TopRight
-	bl := cs.BottomLeft
-	br := cs.BottomRight
+	tl := cs.Rune(glyph.TopLeft, glyph.Light)
+	tr := cs.Rune(glyph.TopRight, glyph.Light)
+	bl := cs.Rune(glyph.BottomLeft, glyph.Light)
+	br := cs.Rune(glyph.BottomRight, glyph.Light)
 
 	// Determine styles — use region colors if theme supports it
 	var borderStyle, fillStyle, labelStyle, valueStyle string
@@ -470,23 +474,23 @@ func tmDrawNode(c *renderer.Canvas, cs renderer.CharSet, node *treemapNode, x, y
 	}
 
 	// Top border
-	c.Put(y, x, tl, false, borderStyle)
+	c.Put(y, x, tl, borderStyle)
 	for col := x + 1; col < x+w-1; col++ {
-		c.Put(y, col, hz, false, borderStyle)
+		c.Put(y, col, hz, borderStyle)
 	}
-	c.Put(y, x+w-1, tr, false, borderStyle)
+	c.Put(y, x+w-1, tr, borderStyle)
 
 	// Bottom border
-	c.Put(y+h-1, x, bl, false, borderStyle)
+	c.Put(y+h-1, x, bl, borderStyle)
 	for col := x + 1; col < x+w-1; col++ {
-		c.Put(y+h-1, col, hz, false, borderStyle)
+		c.Put(y+h-1, col, hz, borderStyle)
 	}
-	c.Put(y+h-1, x+w-1, br, false, borderStyle)
+	c.Put(y+h-1, x+w-1, br, borderStyle)
 
 	// Side borders + interior fill
 	for row := y + 1; row < y+h-1; row++ {
-		c.Put(row, x, vt, false, borderStyle)
-		c.Put(row, x+w-1, vt, false, borderStyle)
+		c.Put(row, x, vt, borderStyle)
+		c.Put(row, x+w-1, vt, borderStyle)
 		if !useDirectANSI {
 			for col := x + 1; col < x+w-1; col++ {
 				c.SetStyle(row, col, fillStyle)

@@ -1,6 +1,10 @@
 package cells
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/aaronsb/mmaid-go/internal/glyph"
+)
 
 // Finding is one structural defect in a frame's glyph grid.
 type Finding struct {
@@ -27,15 +31,8 @@ const (
 
 var dirs = [4]dir{north, south, east, west}
 
-const (
-	armN = 1 << iota
-	armS
-	armE
-	armW
-)
-
-func (d dir) bit() int {
-	return [4]int{armN, armS, armE, armW}[d]
+func (d dir) bit() glyph.Arms {
+	return [4]glyph.Arms{glyph.N, glyph.S, glyph.E, glyph.W}[d]
 }
 
 func (d dir) opposite() dir {
@@ -59,33 +56,27 @@ func (d dir) step(row, col int) (int, int) {
 	}
 }
 
-// boxArms maps each box-drawing glyph mmaid draws to the arms it extends.
-// ASCII rules are absent: '-', '|', '+', '.' and ':' are as often text as
-// they are lines, so the lint reads them as text and leaves ASCII output to
-// the goldens.
-var boxArms = map[rune]int{
-	// Light.
-	'─': armE | armW, '│': armN | armS,
-	'┌': armS | armE, '┐': armS | armW, '└': armN | armE, '┘': armN | armW,
-	'├': armN | armS | armE, '┤': armN | armS | armW,
-	'┬': armS | armE | armW, '┴': armN | armE | armW,
-	'┼': armN | armS | armE | armW,
-	// Heavy.
-	'━': armE | armW, '┃': armN | armS, '╋': armN | armS | armE | armW,
-	// Dotted.
-	'┄': armE | armW, '┆': armN | armS,
-	// Rounded.
-	'╭': armS | armE, '╮': armS | armW, '╰': armN | armE, '╯': armN | armW,
-	// Double.
-	'═': armE | armW, '║': armN | armS,
-	'╔': armS | armE, '╗': armS | armW, '╚': armN | armE, '╝': armN | armW,
+// boxArms returns the arms a box-drawing glyph extends, read through the
+// tables the renderer resolves from. ASCII is absent: '-', '|', '+', '.' and
+// ':' are as often text as they are lines, so the lint reads them as text and
+// leaves ASCII output to the goldens.
+func boxArms(r rune) (glyph.Arms, bool) {
+	a, _, _, ok := glyph.Of(r)
+	return a, ok
 }
 
-// arrowTails maps each arrowhead to the side its tail is on. The hollow forms
-// are the class and sequence diagrams' relationship arrows.
-var arrowTails = map[rune]dir{
-	'▲': south, '▼': north, '◄': east, '►': west,
-	'△': south, '▽': north, '◁': east, '▷': west,
+// arrowTail returns the side an arrowhead's tail is on.
+func arrowTail(r rune) (dir, bool) {
+	a, ok := glyph.Tail(r)
+	if !ok {
+		return 0, false
+	}
+	for _, d := range dirs {
+		if d.bit() == a {
+			return d, true
+		}
+	}
+	return 0, false
 }
 
 // glyphAt returns the glyph at (row, col); outside the frame it is a space.
@@ -100,7 +91,8 @@ func glyphAt(f *Frame, row, col int) rune {
 // back toward it.
 func fedFrom(f *Frame, row, col int, d dir) bool {
 	nr, nc := d.step(row, col)
-	return boxArms[glyphAt(f, nr, nc)]&d.opposite().bit() != 0
+	a, _ := boxArms(glyphAt(f, nr, nc))
+	return a&d.opposite().bit() != 0
 }
 
 // Lint walks the glyph grid and reports every arm that does not meet
@@ -111,14 +103,15 @@ func Lint(f *Frame) []Finding {
 	for row := 0; row < f.H; row++ {
 		for col := 0; col < f.W; col++ {
 			g := glyphAt(f, row, col)
+			arms, _ := boxArms(g)
 
 			for _, d := range dirs {
-				if boxArms[g]&d.bit() == 0 {
+				if arms&d.bit() == 0 {
 					continue
 				}
 				nr, nc := d.step(row, col)
 				ng := glyphAt(f, nr, nc)
-				if tail, isArrow := arrowTails[ng]; isArrow {
+				if tail, isArrow := arrowTail(ng); isArrow {
 					if tail != d.opposite() {
 						out = append(out, Finding{row, col, g, 3, fmt.Sprintf(
 							"%s arm meets arrowhead %c on its %s side, not its tail",
@@ -126,7 +119,7 @@ func Lint(f *Frame) []Finding {
 					}
 					continue
 				}
-				if narms, isBox := boxArms[ng]; isBox {
+				if narms, isBox := boxArms(ng); isBox {
 					if narms&d.opposite().bit() == 0 {
 						out = append(out, Finding{row, col, g, 1, fmt.Sprintf(
 							"%s arm meets %c, which has no %s arm back",
@@ -140,7 +133,7 @@ func Lint(f *Frame) []Finding {
 				}
 			}
 
-			if tail, isArrow := arrowTails[g]; isArrow && !fedFrom(f, row, col, tail) {
+			if tail, isArrow := arrowTail(g); isArrow && !fedFrom(f, row, col, tail) {
 				out = append(out, Finding{row, col, g, 2, fmt.Sprintf(
 					"no arm feeds arrowhead %c from the %s", g, tail.name())})
 			}

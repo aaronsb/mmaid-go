@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/aaronsb/mmaid-go/internal/glyph"
 	"github.com/aaronsb/mmaid-go/internal/renderer"
 	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
@@ -255,7 +256,7 @@ func renderPieCircle(pc *pieChart, colors [][3]int) *renderer.Canvas {
 				ansi = fmt.Sprintf("\033[38;2;%d;%d;%dm", botColor[0], botColor[1], botColor[2])
 			}
 
-			c.Put(startRow+row, col, ch, false, "_ansi:"+ansi)
+			c.Put(startRow+row, col, ch, "_ansi:"+ansi)
 		}
 	}
 
@@ -282,18 +283,18 @@ func renderPieCircle(pc *pieChart, colors [][3]int) *renderer.Canvas {
 	legendBoxLeft := legendCol
 
 	// Draw legend border
-	c.Put(legendBoxTop, legendBoxLeft, '┌', false, "node")
-	c.DrawHorizontal(legendBoxTop, legendBoxLeft+1, legendBoxLeft+legendBoxW-2, '─', "node")
-	c.Put(legendBoxTop, legendBoxLeft+legendBoxW-1, '┐', false, "node")
+	c.Put(legendBoxTop, legendBoxLeft, '┌', "node")
+	c.DrawHorizontal(legendBoxTop, legendBoxLeft, legendBoxLeft+legendBoxW-1, glyph.Light, "node")
+	c.Put(legendBoxTop, legendBoxLeft+legendBoxW-1, '┐', "node")
 
 	for row := legendBoxTop + 1; row < legendBoxTop+legendBoxH-1; row++ {
-		c.Put(row, legendBoxLeft, '│', false, "node")
-		c.Put(row, legendBoxLeft+legendBoxW-1, '│', false, "node")
+		c.Put(row, legendBoxLeft, '│', "node")
+		c.Put(row, legendBoxLeft+legendBoxW-1, '│', "node")
 	}
 
-	c.Put(legendBoxTop+legendBoxH-1, legendBoxLeft, '└', false, "node")
-	c.DrawHorizontal(legendBoxTop+legendBoxH-1, legendBoxLeft+1, legendBoxLeft+legendBoxW-2, '─', "node")
-	c.Put(legendBoxTop+legendBoxH-1, legendBoxLeft+legendBoxW-1, '┘', false, "node")
+	c.Put(legendBoxTop+legendBoxH-1, legendBoxLeft, '└', "node")
+	c.DrawHorizontal(legendBoxTop+legendBoxH-1, legendBoxLeft, legendBoxLeft+legendBoxW-1, glyph.Light, "node")
+	c.Put(legendBoxTop+legendBoxH-1, legendBoxLeft+legendBoxW-1, '┘', "node")
 
 	// Fill legend interior — use fill layer only so all cells share the same bg
 	for row := legendBoxTop; row < legendBoxTop+legendBoxH; row++ {
@@ -314,8 +315,8 @@ func renderPieCircle(pc *pieChart, colors [][3]int) *renderer.Canvas {
 
 		// Color swatch
 		swatchCol := legendBoxLeft + 2
-		c.Put(row, swatchCol, '█', false, "_ansi:"+blockAnsi)
-		c.Put(row, swatchCol+1, '█', false, "_ansi:"+blockAnsi)
+		c.Put(row, swatchCol, '█', "_ansi:"+blockAnsi)
+		c.Put(row, swatchCol+1, '█', "_ansi:"+blockAnsi)
 
 		// Label (regular weight, white text — inherits fill bg from legend box)
 		c.PutText(row, swatchCol+3, s.label, "_ansi:\033[38;2;255;255;255m")
@@ -544,7 +545,7 @@ func renderPieBraille(pc *pieChart) *renderer.Canvas {
 			}
 
 			ch := rune(0x2800 + bits)
-			c.Put(startRow+row, col, ch, false, "default")
+			c.Put(startRow+row, col, ch, "default")
 		}
 	}
 
@@ -558,16 +559,16 @@ func renderPieBraille(pc *pieChart) *renderer.Canvas {
 	legendBoxLeft := legendCol
 
 	// Border
-	c.Put(legendStartRow, legendBoxLeft, '┌', false, "node")
-	c.DrawHorizontal(legendStartRow, legendBoxLeft+1, legendBoxLeft+legendBoxW-2, '─', "node")
-	c.Put(legendStartRow, legendBoxLeft+legendBoxW-1, '┐', false, "node")
+	c.Put(legendStartRow, legendBoxLeft, '┌', "node")
+	c.DrawHorizontal(legendStartRow, legendBoxLeft, legendBoxLeft+legendBoxW-1, glyph.Light, "node")
+	c.Put(legendStartRow, legendBoxLeft+legendBoxW-1, '┐', "node")
 	for row := legendStartRow + 1; row < legendStartRow+legendBoxH-1; row++ {
-		c.Put(row, legendBoxLeft, '│', false, "node")
-		c.Put(row, legendBoxLeft+legendBoxW-1, '│', false, "node")
+		c.Put(row, legendBoxLeft, '│', "node")
+		c.Put(row, legendBoxLeft+legendBoxW-1, '│', "node")
 	}
-	c.Put(legendStartRow+legendBoxH-1, legendBoxLeft, '└', false, "node")
-	c.DrawHorizontal(legendStartRow+legendBoxH-1, legendBoxLeft+1, legendBoxLeft+legendBoxW-2, '─', "node")
-	c.Put(legendStartRow+legendBoxH-1, legendBoxLeft+legendBoxW-1, '┘', false, "node")
+	c.Put(legendStartRow+legendBoxH-1, legendBoxLeft, '└', "node")
+	c.DrawHorizontal(legendStartRow+legendBoxH-1, legendBoxLeft, legendBoxLeft+legendBoxW-1, glyph.Light, "node")
+	c.Put(legendStartRow+legendBoxH-1, legendBoxLeft+legendBoxW-1, '┘', "node")
 
 	// Entries
 	for i, s := range pc.slices {
@@ -588,8 +589,8 @@ func renderPieBraille(pc *pieChart) *renderer.Canvas {
 			}
 		}
 		swatch := rune(0x2800 + swatchBits)
-		c.Put(row, swatchCol, swatch, false, "default")
-		c.Put(row, swatchCol+1, swatch, false, "default")
+		c.Put(row, swatchCol, swatch, "default")
+		c.Put(row, swatchCol+1, swatch, "default")
 
 		// Label
 		c.PutText(row, swatchCol+3, s.label, "default")
@@ -654,6 +655,9 @@ func renderPieBarChart(pc *pieChart, useASCII bool) *renderer.Canvas {
 	canvasHeight := barStartRow + len(pc.slices) + 1
 
 	c := renderer.NewCanvas(canvasWidth, canvasHeight)
+	if useASCII {
+		c.SetCharSet(renderer.ASCII)
+	}
 
 	// Draw title
 	if pc.title != "" {
@@ -692,7 +696,7 @@ func renderPieBarChart(pc *pieChart, useASCII bool) *renderer.Canvas {
 			barLen = 1
 		}
 		for j := 0; j < barLen; j++ {
-			c.Put(row, barCol+j, fillChar, false, "default")
+			c.Put(row, barCol+j, fillChar, "default")
 		}
 
 		// Suffix with percentage (and optionally value)
