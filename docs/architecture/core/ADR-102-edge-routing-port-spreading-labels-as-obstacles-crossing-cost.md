@@ -88,6 +88,29 @@ moved. `TestFixturesLint` stays clean.
   routing reads it.
 - The ellipsis fallback introduces truncation to edge labels for the
   first time.
+- Ports need every edge's side before any edge's draw path exists, and a
+  label needs the draw path. Routing therefore runs twice: a first pass
+  over the bare grid chooses sides, ports are assigned, and a second pass
+  routes each edge through its sides with the labels placed so far as
+  hard obstacles. An edge whose sides no longer connect in the second
+  pass takes the other pair with centre ports.
+- The per-side port count the layout sizes nodes from is read off the
+  preferred sides. Routing may move an edge to its alternative side, and
+  a side that ends up with more edges than ports sends the surplus to
+  the centre.
+- The grid cells next to a node side are where its ports fan out, so the
+  soft-obstacle cost is waived for the first step out of a path's start
+  and the steps into its end and the end's neighbours. Without the waiver
+  every second edge from one side paid for a corridor it never shares.
+- A port's offset rides its run to the first turn. A path with no turn
+  jogs between its two ports on the centre line of its first gap cell.
+- A label sits beside a plain run cell, not beside a corner, a border, or
+  an arrowhead; a two-cell stub into a port defers to the segment before
+  it. After the segment before, the search continues to every earlier
+  segment; after the ellipsis, over other edges' lines; a label that
+  still fits nowhere is dropped.
+- The preferred and alternative side pairs are compared by path cost, not
+  path length, so the crossing costs decide sides as well as routes.
 
 ## Alternatives Considered
 
