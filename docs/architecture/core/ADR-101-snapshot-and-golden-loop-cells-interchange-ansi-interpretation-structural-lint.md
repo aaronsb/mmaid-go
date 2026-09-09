@@ -15,8 +15,9 @@ The only visual gate is `test_visual.sh`, which prints every diagram with a
 prose `CHECK` hint for a human eye. The Go tests are substring assertions.
 Three glyph defects in the current flowchart output went unnoticed by both:
 a `╮` corner directly before an arrowhead (`├──╮►│`), a `╭` inside a
-horizontal run where two edges cross, and an edge that bleeds one cell past
-its arrowhead and merges into the target's top border as `┴`.
+horizontal run where two edges cross, and an outgoing edge's source tee and
+an incoming edge's arrowhead sharing one port cell, so the tee's arm meets
+the arrowhead's tip.
 
 An agent working on the renderer cannot see its own output. Terminal
 emulators inside tool-result panes drop columns and substitute glyphs, so
