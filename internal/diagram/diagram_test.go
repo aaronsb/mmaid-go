@@ -1246,3 +1246,58 @@ func TestIshikawaCommentIsWholeLineOnly(t *testing.T) {
 		t.Errorf("cause = %q, want the %%%% kept", causes[0].text)
 	}
 }
+
+// ── Radar ───────────────────────────────────────────────────────────────────
+
+func TestRadarAxesAndCurves(t *testing.T) {
+	c := RenderRadar("radar-beta\n  title Grades\n  axis m[\"Math\"], s[\"Science\"]\n  axis e[\"English\"]\n  curve a[\"Alice\"]{85, 90, 80}\n  max 100", renderer.UNICODE, false, nil)
+	assertCanvasContains(t, c, "Grades")
+	assertCanvasContains(t, c, "Math")
+	assertCanvasContains(t, c, "Science")
+	assertCanvasContains(t, c, "English")
+	assertCanvasContains(t, c, "Alice")
+	assertCanvasContains(t, c, "●")
+}
+
+func TestRadarSeveralDeclarationsOneLine(t *testing.T) {
+	rc := parseRadar("radar-beta\n  axis a, b, c\n  curve one{1, 2, 3}, two{3, 2, 1}")
+	if len(rc.axes) != 3 {
+		t.Fatalf("axes = %d, want 3", len(rc.axes))
+	}
+	if len(rc.curves) != 2 {
+		t.Fatalf("curves = %d, want 2", len(rc.curves))
+	}
+	if got := rc.curves[1].values; len(got) != 3 || got[0] != 3 {
+		t.Errorf("second curve values = %v, want [3 2 1]", got)
+	}
+}
+
+func TestRadarKeyedValuesFollowAxisOrder(t *testing.T) {
+	rc := parseRadar("radar-beta\n  axis a, b, c\n  curve x{ c: 30, a: 10, b: 20 }")
+	want := []float64{10, 20, 30}
+	if got := rc.curves[0].values; len(got) != 3 || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] {
+		t.Errorf("values = %v, want %v", got, want)
+	}
+}
+
+func TestRadarOptions(t *testing.T) {
+	rc := parseRadar("radar-beta\n  axis a, b, c\n  curve x{1,2,3}\n  showLegend false\n  graticule polygon\n  ticks 3\n  min 1\n  max 9")
+	if rc.showLegend {
+		t.Error("showLegend false was not read")
+	}
+	if !rc.polygon {
+		t.Error("graticule polygon was not read")
+	}
+	if rc.ticks != 3 {
+		t.Errorf("ticks = %d, want 3", rc.ticks)
+	}
+	lo, hi := rc.bounds()
+	if lo != 1 || hi != 9 {
+		t.Errorf("bounds = %v..%v, want 1..9", lo, hi)
+	}
+}
+
+func TestRadarTooFewAxes(t *testing.T) {
+	c := RenderRadar("radar-beta\n  axis a, b\n  curve x{1,2}", renderer.UNICODE, false, nil)
+	assertCanvasContains(t, c, "three or more axes")
+}

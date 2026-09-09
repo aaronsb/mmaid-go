@@ -164,6 +164,8 @@ func detectDiagramType(source string) string {
 			return "c4"
 		case strings.HasPrefix(lower, "usecase"):
 			return "usecase"
+		case strings.HasPrefix(lower, "radar"):
+			return "radar"
 		default:
 			return "flowchart"
 		}
@@ -244,6 +246,8 @@ func Render(source string, opts ...Option) (result string) {
 	case "usecase":
 		g := diagram.ParseUseCaseDiagram(source)
 		canvas = renderer.RenderGraphCanvas(g, cs, cfg.paddingX, cfg.paddingY, cfg.roundedEdges, diagram.UsableWidth())
+	case "radar":
+		canvas = diagram.RenderRadar(source, cs, cfg.theme != "", getThemePtr(cfg.theme))
 	default:
 		g := parser.ParseFlowchart(source)
 		canvas = renderer.RenderGraphCanvas(g, cs, cfg.paddingX, cfg.paddingY, cfg.roundedEdges, diagram.UsableWidth())

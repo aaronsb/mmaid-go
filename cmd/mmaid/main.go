@@ -668,6 +668,13 @@ var demoSamples = map[string]string{
             No cache
         Environment
             Remote timezones`,
+	"radar": `radar-beta
+    title Service Comparison
+    axis speed["Speed"], cost["Cost"], reliability["Reliability"]
+    axis support["Support"], features["Features"]
+    curve a["Vendor A"]{85, 60, 90, 70, 75}
+    curve b["Vendor B"]{60, 90, 70, 85, 65}
+    max 100`,
 }
 
 var demoTypes = []struct{ name, key string }{
@@ -694,6 +701,7 @@ var demoTypes = []struct{ name, key string }{
 	{"Requirement Diagram", "requirement"},
 	{"C4 Diagram", "c4"},
 	{"Use Case Diagram", "usecase"},
+	{"Radar Chart", "radar"},
 }
 
 func runDemo(w io.Writer, themeName, diagramType string, opts ...mmaid.Option) {
@@ -727,6 +735,7 @@ func runDemo(w io.Writer, themeName, diagramType string, opts ...mmaid.Option) {
 			"treeview-beta": "treeview", "tree": "treeview",
 			"eventmodel": "eventmodeling", "em": "eventmodeling",
 			"ishikawa-beta": "ishikawa", "fishbone": "ishikawa",
+			"radar-beta": "radar",
 		}
 		if mapped, ok2 := aliases[strings.ToLower(diagramType)]; ok2 {
 			source = demoSamples[mapped]
