@@ -19,12 +19,35 @@ func TestRGBTo256(t *testing.T) {
 		{"#0000ff", 21},
 		{"#808080", 244}, // grey ramp, 8+10*23 is 238; 128 is rung 12 at 128
 		{"#5F87AF", 67},  // an exact cube colour: 95,135,175
+		{"#080808", 232}, // the ramp's first rung beats the cube's black
+		{"#FEFEFE", 231}, // the cube's white beats the ramp, which stops at 238
+		{"#737373", 243}, // grey 118 beats the cube, which is 20 off on each channel
 	}
 	for _, tc := range cases {
 		r, g, b := parseHex(tc.hex)
 		if got := rgbTo256(r, g, b); got != tc.want {
 			t.Errorf("rgbTo256(%s) = %d, want %d", tc.hex, got, tc.want)
 		}
+	}
+}
+
+func TestNearestCubeLevelTie(t *testing.T) {
+	// 115 sits between 95 and 135; the comparison is strict, so the lower level
+	// wins.
+	if got := nearestCubeLevel(115); got != 1 {
+		t.Errorf("nearestCubeLevel(115) = %d, want 1 (level 95)", got)
+	}
+}
+
+func TestDowngradeLeavesNonSGRAlone(t *testing.T) {
+	in := "\033[2J\033[H\033[38;2;255;215;0m\033[48;2;0;0;0mx"
+	want := "\033[2J\033[H\033[38;5;220m\033[48;5;16mx"
+	if got := Downgrade(in); got != want {
+		t.Errorf("Downgrade = %q, want %q", got, want)
+	}
+	both := "\033[38;2;255;215;0;48;2;95;135;175m"
+	if got, want := Downgrade(both), "\033[38;5;220;48;5;67m"; got != want {
+		t.Errorf("Downgrade = %q, want %q", got, want)
 	}
 }
 

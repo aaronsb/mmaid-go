@@ -87,14 +87,22 @@ func Downgrade(ansi string) string {
 			b.WriteString(rest)
 			return b.String()
 		}
-		end := strings.IndexByte(rest[i:], 'm')
-		if end < 0 {
+		// A CSI runs to its final byte; only 'm' carries colour, and the
+		// others (ESC[2J and the like) pass through untouched.
+		end := i + 2
+		for end < len(rest) && (rest[end] < 0x40 || rest[end] > 0x7e) {
+			end++
+		}
+		if end >= len(rest) {
 			b.WriteString(rest)
 			return b.String()
 		}
-		end += i
 		b.WriteString(rest[:i])
-		b.WriteString(downgradeSGR(rest[i+2 : end]))
+		if rest[end] == 'm' {
+			b.WriteString(downgradeSGR(rest[i+2 : end]))
+		} else {
+			b.WriteString(rest[i : end+1])
+		}
 		rest = rest[end+1:]
 	}
 }
