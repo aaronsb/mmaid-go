@@ -225,17 +225,17 @@ func RenderMindmap(source string, cs renderer.CharSet) *renderer.Canvas {
 		col := ln.col
 		boxW := textwidth.String(n.label) + 4
 
-		c.Put(row, col, tl, "node")
+		c.PutBox(row, col, tl, "node")
 		c.DrawHorizontal(row, col, col+boxW-1, glyph.Light, "node")
-		c.Put(row, col+boxW-1, tr, "node")
+		c.PutBox(row, col+boxW-1, tr, "node")
 
-		c.Put(row+1, col, vLine, "node")
+		c.PutBox(row+1, col, vLine, "node")
 		c.PutText(row+1, col+2, n.label, "label")
-		c.Put(row+1, col+boxW-1, vLine, "node")
+		c.PutBox(row+1, col+boxW-1, vLine, "node")
 
-		c.Put(row+2, col, bl, "node")
+		c.PutBox(row+2, col, bl, "node")
 		c.DrawHorizontal(row+2, col, col+boxW-1, glyph.Light, "node")
-		c.Put(row+2, col+boxW-1, br, "node")
+		c.PutBox(row+2, col+boxW-1, br, "node")
 
 		// Fill interior spaces so background themes render solid
 		for cx := col + 1; cx < col+boxW-1; cx++ {

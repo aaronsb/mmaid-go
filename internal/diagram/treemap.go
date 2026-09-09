@@ -498,23 +498,23 @@ func tmDrawNode(c *renderer.Canvas, cs renderer.CharSet, node *treemapNode, x, y
 	}
 
 	// Top border
-	c.Put(y, x, tl, borderStyle)
+	c.PutBox(y, x, tl, borderStyle)
 	for col := x + 1; col < x+w-1; col++ {
-		c.Put(y, col, hz, borderStyle)
+		c.PutBox(y, col, hz, borderStyle)
 	}
-	c.Put(y, x+w-1, tr, borderStyle)
+	c.PutBox(y, x+w-1, tr, borderStyle)
 
 	// Bottom border
-	c.Put(y+h-1, x, bl, borderStyle)
+	c.PutBox(y+h-1, x, bl, borderStyle)
 	for col := x + 1; col < x+w-1; col++ {
-		c.Put(y+h-1, col, hz, borderStyle)
+		c.PutBox(y+h-1, col, hz, borderStyle)
 	}
-	c.Put(y+h-1, x+w-1, br, borderStyle)
+	c.PutBox(y+h-1, x+w-1, br, borderStyle)
 
 	// Side borders + interior fill
 	for row := y + 1; row < y+h-1; row++ {
-		c.Put(row, x, vt, borderStyle)
-		c.Put(row, x+w-1, vt, borderStyle)
+		c.PutBox(row, x, vt, borderStyle)
+		c.PutBox(row, x+w-1, vt, borderStyle)
 		if !useDirectANSI {
 			for col := x + 1; col < x+w-1; col++ {
 				c.SetStyle(row, col, fillStyle)

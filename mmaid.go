@@ -103,7 +103,10 @@ func WithHyperlinks() Option {
 var frontmatterRe = regexp.MustCompile(`(?s)\A---\s*\n.*?\n---\s*\n`)
 
 // stripFrontmatter removes YAML frontmatter from the beginning of source.
+// stripFrontmatter removes a YAML front-matter block and a leading UTF-8
+// byte order mark, so the first non-empty line is the diagram's header.
 func stripFrontmatter(source string) string {
+	source = strings.TrimPrefix(source, "\uFEFF")
 	return frontmatterRe.ReplaceAllString(source, "")
 }
 

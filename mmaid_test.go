@@ -320,9 +320,9 @@ func TestGitGraphMerge(t *testing.T) {
     checkout main
     merge dev id: "C"`)
 	assertContains(t, out, "C")
-	// Should have T-junctions, not crosses
+	// The fork is a tee on main; the merge is a corner where dev's line ends.
 	assertContains(t, out, "┬")
-	assertContains(t, out, "┴")
+	assertContains(t, out, "┘")
 }
 
 func TestGitGraphTags(t *testing.T) {
@@ -669,5 +669,15 @@ func TestStripFrontmatter(t *testing.T) {
 	}
 	if !strings.Contains(result, "graph LR") {
 		t.Error("content after frontmatter missing")
+	}
+}
+
+func TestBOMBeforeHeaderIsIgnored(t *testing.T) {
+	out := Render("\uFEFFsankey-beta\nA,B,1\n")
+	if strings.Contains(out, "A,B,1") {
+		t.Fatalf("a BOM made the sankey source render as a flowchart node:\n%s", out)
+	}
+	if detectDiagramType(stripFrontmatter("\uFEFFpie\n\"a\" : 1\n")) != "pie" {
+		t.Fatal("BOM defeats detectDiagramType")
 	}
 }

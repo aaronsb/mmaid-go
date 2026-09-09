@@ -199,13 +199,8 @@ func (s *labelSpace) release(re *RoutedEdge) {
 // arrowCells returns the cells the edge's arrowheads occupy.
 func arrowCells(re *RoutedEdge) map[Point]bool {
 	out := make(map[Point]bool, 2)
-	p := re.DrawPath
-	n := len(p)
-	if re.Edge.HasArrowEnd {
-		out[stepToward(p[n-1], p[n-2])] = true
-	}
-	if re.Edge.HasArrowStart {
-		out[stepToward(p[0], p[1])] = true
+	for _, p := range arrowCellsOf(re.DrawPath, [2]bool{re.Edge.HasArrowStart, re.Edge.HasArrowEnd}) {
+		out[p] = true
 	}
 	return out
 }

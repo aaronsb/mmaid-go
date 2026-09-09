@@ -165,9 +165,9 @@ func renderTimelineHorizontal(td *timelineData, cs renderer.CharSet, theme *rend
 		c.PutText(0, titleCol, td.title, "bold_label")
 	}
 
-	// Draw axis line
-	for x := 0; x < canvasWidth; x++ {
-		c.Put(axisRow, x, ch.hLine, "edge")
+	// Axis line, from the first event's dot to the last.
+	if n := len(td.events); n > 0 {
+		c.Segment(axisRow, colWidth/2, axisRow, (n-1)*colWidth+colWidth/2, glyph.Light, false, "edge")
 	}
 
 	for i, e := range td.events {
@@ -201,17 +201,17 @@ func renderTimelineHorizontal(td *timelineData, cs renderer.CharSet, theme *rend
 				labelStyle = "_ansi:" + theme.RegionLabelStyle(i, 1)
 			}
 
-			c.Put(boxTop, boxX, ch.tl, borderStyle)
+			c.PutBox(boxTop, boxX, ch.tl, borderStyle)
 			c.DrawHorizontal(boxTop, boxX, boxX+boxW, glyph.Light, borderStyle)
-			c.Put(boxTop, boxX+boxW, ch.tr, borderStyle)
+			c.PutBox(boxTop, boxX+boxW, ch.tr, borderStyle)
 
-			c.Put(boxTop+1, boxX, ch.vLine, borderStyle)
+			c.PutBox(boxTop+1, boxX, ch.vLine, borderStyle)
 			c.PutText(boxTop+1, boxX+1, " "+item+" ", labelStyle)
-			c.Put(boxTop+1, boxX+boxW, ch.vLine, borderStyle)
+			c.PutBox(boxTop+1, boxX+boxW, ch.vLine, borderStyle)
 
-			c.Put(boxTop+2, boxX, ch.bl, borderStyle)
+			c.PutBox(boxTop+2, boxX, ch.bl, borderStyle)
 			c.DrawHorizontal(boxTop+2, boxX, boxX+boxW, glyph.Light, borderStyle)
-			c.Put(boxTop+2, boxX+boxW, ch.br, borderStyle)
+			c.PutBox(boxTop+2, boxX+boxW, ch.br, borderStyle)
 
 			if useRegion {
 				fillStyle := "_ansi:" + theme.RegionStyle(i, 1)
@@ -225,10 +225,6 @@ func renderTimelineHorizontal(td *timelineData, cs renderer.CharSet, theme *rend
 				if c.Get(boxTop+1, col) == ' ' {
 					c.SetStyle(boxTop+1, col, borderStyle)
 				}
-			}
-
-			if boxBottom < axisRow-1 {
-				c.Put(axisRow-1, centerX, ch.vLine, "edge")
 			}
 		}
 	}
@@ -300,9 +296,15 @@ func renderTimelineVertical(td *timelineData, cs renderer.CharSet, theme *render
 		c.PutText(0, titleX, td.title, "bold_label")
 	}
 
-	// Draw vertical axis line
-	for r := titleRows; r < totalRows-1; r++ {
-		c.Put(r, axisCol, ch.vLine, "edge")
+	// The axis runs from the first dot or connector to the last; its extent
+	// is collected while the events are drawn and the segment merges with
+	// the connector tees afterwards.
+	axisTop, axisBot := -1, -1
+	onAxis := func(r int) {
+		if axisTop < 0 || r < axisTop {
+			axisTop = r
+		}
+		axisBot = max(axisBot, r)
 	}
 
 	// Draw each event
@@ -320,6 +322,7 @@ func renderTimelineVertical(td *timelineData, cs renderer.CharSet, theme *render
 		// Dot on axis at the vertical center of this event's boxes
 		dotRow := row + eventHeight/2
 		c.Put(dotRow, axisCol, ch.dot, "arrow")
+		onAxis(dotRow)
 
 		// Period label to the left of the axis, right-aligned
 		periodStyle := "label"
@@ -345,17 +348,17 @@ func renderTimelineVertical(td *timelineData, cs renderer.CharSet, theme *render
 				labelStyle = "_ansi:" + theme.RegionLabelStyle(i, 1)
 			}
 
-			c.Put(boxTop, boxX, ch.tl, borderStyle)
+			c.PutBox(boxTop, boxX, ch.tl, borderStyle)
 			c.DrawHorizontal(boxTop, boxX, boxX+boxW, glyph.Light, borderStyle)
-			c.Put(boxTop, boxX+boxW, ch.tr, borderStyle)
+			c.PutBox(boxTop, boxX+boxW, ch.tr, borderStyle)
 
-			c.Put(boxTop+1, boxX, ch.vLine, borderStyle)
+			c.PutBox(boxTop+1, boxX, ch.vLine, borderStyle)
 			c.PutText(boxTop+1, boxX+1, " "+item+" ", labelStyle)
-			c.Put(boxTop+1, boxX+boxW, ch.vLine, borderStyle)
+			c.PutBox(boxTop+1, boxX+boxW, ch.vLine, borderStyle)
 
-			c.Put(boxTop+2, boxX, ch.bl, borderStyle)
+			c.PutBox(boxTop+2, boxX, ch.bl, borderStyle)
 			c.DrawHorizontal(boxTop+2, boxX, boxX+boxW, glyph.Light, borderStyle)
-			c.Put(boxTop+2, boxX+boxW, ch.br, borderStyle)
+			c.PutBox(boxTop+2, boxX+boxW, ch.br, borderStyle)
 
 			if useRegion {
 				fillStyle := "_ansi:" + theme.RegionStyle(i, 1)
@@ -371,13 +374,15 @@ func renderTimelineVertical(td *timelineData, cs renderer.CharSet, theme *render
 				}
 			}
 
-			// Horizontal connector from axis to box
-			for cx := axisCol + 1; cx < boxX; cx++ {
-				c.Put(boxTop+1, cx, ch.hLine, "edge")
-			}
+			// Connector from the axis to the box side; both ends become tees.
+			c.Segment(boxTop+1, axisCol, boxTop+1, boxX, glyph.Light, false, "edge")
+			onAxis(boxTop + 1)
 		}
 
 		row += eventHeight + 1
+	}
+	if axisTop >= 0 {
+		c.Segment(axisTop, axisCol, axisBot, axisCol, glyph.Light, false, "edge")
 	}
 
 	return c

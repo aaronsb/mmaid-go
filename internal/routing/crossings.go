@@ -173,12 +173,12 @@ func (bp *borderPorts) cross(pts []Point, line map[Point]bool, arrows [2]bool) (
 // sameSide reports whether a run at pos lies on the same side as at
 // natural of every box line parallel to it that the run's extent meets,
 // and on none of them.
-func (bp *borderPorts) sameSide(a, b Point, vertical bool, pos, natural int) bool {
+func sameSide(l *layout.GridLayout, a, b Point, vertical bool, pos, natural int) bool {
 	lo, hi := min(a.Row, b.Row), max(a.Row, b.Row)
 	if !vertical {
 		lo, hi = min(a.Col, b.Col), max(a.Col, b.Col)
 	}
-	for _, sb := range bp.l.SubgraphBounds {
+	for _, sb := range l.SubgraphBounds {
 		if sb.Width <= 0 || sb.Height <= 0 {
 			continue
 		}
@@ -248,7 +248,7 @@ func (bp *borderPorts) freePos(pts []Point, i int, vertical bool, line map[Point
 			return false
 		}
 		na, nb := shifted(pts, i, vertical, pos)
-		if !bp.sameSide(na, nb, vertical, pos, natural) {
+		if !sameSide(bp.l, na, nb, vertical, pos, natural) {
 			return false
 		}
 		hits := bp.hitsOn(na, nb)
@@ -280,10 +280,10 @@ func (bp *borderPorts) freePos(pts []Point, i int, vertical bool, line map[Point
 // path's border crossings. When a run anchored at a node port meets a cell
 // another edge holds, that end takes the next free port on its side and
 // the path is converted again.
-func (bp *borderPorts) route(e *edgeEnds, ends []*edgeEnds, l *layout.GridLayout, path []Point, srcSG, tgtSG *layout.SubgraphBounds, line map[Point]bool, arrows [2]bool) ([]Point, []Crossing) {
+func (bp *borderPorts) route(e *edgeEnds, ends []*edgeEnds, l *layout.GridLayout, path []Point, srcSG, tgtSG *layout.SubgraphBounds, line map[Point]bool, arrows [2]bool, lanes []int) ([]Point, []Crossing) {
 	tried := [2]map[int]bool{{}, {}}
 	for {
-		pts := drawPath(l, path, e.sides, e.ports)
+		pts := drawPath(l, path, e.sides, e.ports, lanes)
 		pts, ports := bp.anchor(pts, e, srcSG, tgtSG)
 		pts, crossings, conflict := bp.cross(pts, line, arrows)
 		which := -1

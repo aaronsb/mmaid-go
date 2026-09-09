@@ -129,6 +129,20 @@ func (l *GridLayout) PortRange(p *NodePlacement, side Side) (lo, hi int) {
 	return p.DrawX + 1 - cx, p.DrawX + p.DrawWidth - 2 - cx
 }
 
+// LaneRange returns the offsets, in draw cells from the centre line of a
+// grid column (vertical) or row, at which a run along it stays inside it.
+func (l *GridLayout) LaneRange(idx int, vertical bool) (lo, hi int) {
+	sizes := l.RowHeights
+	if vertical {
+		sizes = l.ColWidths
+	}
+	size := 1
+	if s, ok := sizes[idx]; ok {
+		size = s
+	}
+	return -(size / 2), size - 1 - size/2
+}
+
 // PortRequest is one edge end on a node side. Other is the other endpoint's
 // centre along the side's axis, in draw cells.
 type PortRequest struct {
