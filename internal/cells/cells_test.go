@@ -351,6 +351,17 @@ func TestLintPassesACleanBoxWithAnEdgeAndArrow(t *testing.T) {
 	}
 }
 
+func TestLintKnowsTheHollowArrowheads(t *testing.T) {
+	// An inheritance arrowhead with nothing feeding its tail.
+	if found := Lint(frameOf("  ◁  ")); !findRule(found, 2, 0, 2) {
+		t.Errorf("rule 2 did not flag the unfed ◁:\n%s", show(found))
+	}
+	// An arm meeting one on its tip side.
+	if found := Lint(frameOf("├──◁")); !findRule(found, 3, 0, 2) {
+		t.Errorf("rule 3 did not flag the arm meeting ◁ at its tip:\n%s", show(found))
+	}
+}
+
 func TestLintReadsASCIIAsText(t *testing.T) {
 	// Every glyph here is text to the lint, dangling edge end included.
 	f := frameOf(

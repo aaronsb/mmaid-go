@@ -81,8 +81,12 @@ var boxArms = map[rune]int{
 	'╔': armS | armE, '╗': armS | armW, '╚': armN | armE, '╝': armN | armW,
 }
 
-// arrowTails maps each arrowhead to the side its tail is on.
-var arrowTails = map[rune]dir{'▲': south, '▼': north, '◄': east, '►': west}
+// arrowTails maps each arrowhead to the side its tail is on. The hollow forms
+// are the class and sequence diagrams' relationship arrows.
+var arrowTails = map[rune]dir{
+	'▲': south, '▼': north, '◄': east, '►': west,
+	'△': south, '▽': north, '◁': east, '▷': west,
+}
 
 // glyphAt returns the glyph at (row, col); outside the frame it is a space.
 func glyphAt(f *Frame, row, col int) rune {
