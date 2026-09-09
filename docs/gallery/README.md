@@ -104,6 +104,21 @@ erDiagram
 
 ![er](er.png)
 
+## eventmodeling
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+eventmodeling
+    tf 01 ui CartUI
+    tf 02 cmd AddItem ->> 01
+    tf 03 evt ItemAdded ->> 02
+    tf 04 rmo CartView ->> 03
+    tf 05 ui CartScreen ->> 04
+```
+
+![eventmodeling](eventmodeling.png)
+
 ## flowchart
 
 Rendered with `-t blueprint`.
@@ -226,6 +241,27 @@ Rendered with `--glyphs-sample --glyphs legacy`.
 ```
 
 ![glyph-samples-legacy](glyph-samples-legacy.png)
+
+## ishikawa
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+ishikawa-beta
+    Late Delivery
+        Process
+            Slow handoffs
+            Manual steps
+        People
+            Understaffed
+        Tooling
+            Flaky CI
+            No cache
+        Environment
+            Remote timezones
+```
+
+![ishikawa](ishikawa.png)
 
 ## journey
 
@@ -457,6 +493,24 @@ treemap-beta
 ```
 
 ![treemap](treemap.png)
+
+## treeview
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+treeView-beta
+    mmaid-go/
+        cmd/
+            mmaid/
+                main.go
+        internal/
+            diagram/  ## one file per type
+            renderer/
+        README.md
+```
+
+![treeview](treeview.png)
 
 ## usecase
 
