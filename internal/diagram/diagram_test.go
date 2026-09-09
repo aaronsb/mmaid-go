@@ -1401,3 +1401,48 @@ func TestWardleyNoComponents(t *testing.T) {
 	c := RenderWardley("wardley-beta\n  title Empty", renderer.UNICODE, nil)
 	assertCanvasContains(t, c, "no components")
 }
+
+// ── Cynefin ─────────────────────────────────────────────────────────────────
+
+func TestCynefinDomainsAndItems(t *testing.T) {
+	c := RenderCynefin("cynefin-beta\n  title Response\n  complex\n    \"Probe it\"\n  clear\n    \"Known fix\"", renderer.UNICODE, nil)
+	assertCanvasContains(t, c, "Response")
+	assertCanvasContains(t, c, "Complex")
+	assertCanvasContains(t, c, "Complicated")
+	assertCanvasContains(t, c, "Chaotic")
+	assertCanvasContains(t, c, "Clear")
+	assertCanvasContains(t, c, "Confusion")
+	assertCanvasContains(t, c, "Probe it")
+	assertCanvasContains(t, c, "Known fix")
+}
+
+func TestCynefinEmptyFrameworkStillDrawsDomains(t *testing.T) {
+	c := RenderCynefin("cynefin-beta\n  complex\n  complicated\n  clear\n  chaotic", renderer.UNICODE, nil)
+	assertCanvasContains(t, c, "Complex")
+	assertCanvasContains(t, c, "Chaotic")
+}
+
+func TestCynefinTransitions(t *testing.T) {
+	cf := parseCynefin("cynefin-beta\n  complex --> complicated : \"Pattern identified\"\n  complex --> complex\n  chaotic --> complex")
+	if len(cf.moves) != 2 {
+		t.Fatalf("moves = %+v, want the two between different domains", cf.moves)
+	}
+	if cf.moves[0].label != "Pattern identified" {
+		t.Errorf("label = %q", cf.moves[0].label)
+	}
+	c := RenderCynefin("cynefin-beta\n  complex --> complicated : \"Pattern identified\"", renderer.UNICODE, nil)
+	assertCanvasContains(t, c, "Pattern identified")
+	assertCanvasContains(t, c, "►")
+}
+
+func TestCynefinConfusionOverflowIsCounted(t *testing.T) {
+	c := RenderCynefin("cynefin-beta\n  confusion\n    \"One\"\n    \"Two\"\n    \"Three\"\n    \"Four\"", renderer.UNICODE, nil)
+	assertCanvasContains(t, c, "+2 more")
+}
+
+func TestCynefinItemOutsideADomainIsDropped(t *testing.T) {
+	cf := parseCynefin("cynefin-beta\n  \"Homeless item\"\n  complex\n    \"Placed\"")
+	if len(cf.items["complex"]) != 1 || cf.items["complex"][0] != "Placed" {
+		t.Errorf("items = %+v", cf.items)
+	}
+}

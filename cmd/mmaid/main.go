@@ -699,6 +699,23 @@ var demoSamples = map[string]string{
     Kettle -> Power
     evolve Kettle 0.62
     note "Standard power lets kettles evolve" [0.30, 0.20]`,
+	"cynefin": `cynefin-beta
+    title Incident Response
+    complex
+      "Investigate root cause"
+      "Run a chaos experiment"
+    complicated
+      "Analyse performance data"
+      "Expert review needed"
+    clear
+      "Restart the service"
+      "Apply the known fix"
+    chaotic
+      "Page on-call immediately"
+    confusion
+      "Unknown failure mode"
+    complex --> complicated : "Pattern identified"
+    clear --> chaotic : "Complacency"`,
 }
 
 var demoTypes = []struct{ name, key string }{
@@ -728,6 +745,7 @@ var demoTypes = []struct{ name, key string }{
 	{"Radar Chart", "radar"},
 	{"Venn Diagram", "venn"},
 	{"Wardley Map", "wardley"},
+	{"Cynefin Framework", "cynefin"},
 }
 
 func runDemo(w io.Writer, themeName, diagramType string, opts ...mmaid.Option) {
@@ -764,6 +782,7 @@ func runDemo(w io.Writer, themeName, diagramType string, opts ...mmaid.Option) {
 			"radar-beta":   "radar",
 			"venn-beta":    "venn",
 			"wardley-beta": "wardley",
+			"cynefin-beta": "cynefin",
 		}
 		if mapped, ok2 := aliases[strings.ToLower(diagramType)]; ok2 {
 			source = demoSamples[mapped]
