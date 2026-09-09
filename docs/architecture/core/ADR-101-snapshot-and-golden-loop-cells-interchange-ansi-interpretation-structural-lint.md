@@ -121,7 +121,8 @@ border is structurally sound and is left to the goldens.
 
 `TestFixturesLint` runs the lint over every fixture. Fixtures listed in
 `testdata/fixtures/known-bad.txt` are expected to fail and the test fails
-if one of them passes. ADR-400's implementation empties that file.
+if one of them passes. ADR-400's implementation removes the flowchart
+fixtures from that file; the chart renderers leave it as each is fixed.
 
 ### What this replaces
 
