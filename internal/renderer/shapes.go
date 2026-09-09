@@ -44,11 +44,6 @@ func fillInterior(c *Canvas, x, y, width, height int, style string) {
 	}
 }
 
-// isUnicode returns true if the charset is using Unicode box-drawing characters.
-func isUnicode(cs CharSet) bool {
-	return cs.Rune(glyph.Horizontal, glyph.Light) == '─'
-}
-
 // drawBorder draws a rectangle as four segments; the corners come from the
 // arms that meet there.
 func drawBorder(c *Canvas, x, y, width, height int, rounded bool, style string) {
@@ -116,15 +111,11 @@ func DrawSubroutine(c *Canvas, x, y, width, height int, label string, cs CharSet
 // DrawDiamond draws a diamond shape with chamfered corners.
 func DrawDiamond(c *Canvas, x, y, width, height int, label string, cs CharSet, style string) {
 	drawBorder(c, x, y, width, height, false, style)
-	if isUnicode(cs) {
-		drawCorners(c, x, y, width, height, '╱', '╲', '╲', '╱', style)
-	} else {
-		drawCorners(c, x, y, width, height, '/', '\\', '\\', '/', style)
-	}
+	drawCorners(c, x, y, width, height, cs.Slash, cs.Backslash, cs.Backslash, cs.Slash, style)
 
 	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
-	shapeIndicator(c, x, y, '◇', style) // diamond
+	shapeIndicator(c, x, y, cs.Diamond, style)
 }
 
 // DrawHexagon draws a hexagon shape with / \ top corners and \ / bottom corners.
@@ -134,26 +125,20 @@ func DrawHexagon(c *Canvas, x, y, width, height int, label string, cs CharSet, s
 
 	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
-	shapeIndicator(c, x, y, '⎔', style) // hexagon
+	shapeIndicator(c, x, y, cs.Hexagon, style)
 }
 
 // DrawCircle draws a rounded box with circle markers at the top and bottom center.
 func DrawCircle(c *Canvas, x, y, width, height int, label string, cs CharSet, style string) {
 	cx := x + width/2
-	var marker rune
-	if isUnicode(cs) {
-		marker = '◯'
-	} else {
-		marker = 'O'
-	}
 
 	drawBorder(c, x, y, width, height, true, style)
-	c.Put(y, cx, marker, style)
-	c.Put(y+height-1, cx, marker, style)
+	c.Put(y, cx, cs.Ring, style)
+	c.Put(y+height-1, cx, cs.Ring, style)
 
 	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
-	shapeIndicator(c, x, y, '○', style) // circle
+	shapeIndicator(c, x, y, cs.CircleEndpoint, style)
 }
 
 // DrawDoubleCircle draws a rounded box with an inner border.
@@ -165,7 +150,7 @@ func DrawDoubleCircle(c *Canvas, x, y, width, height int, label string, cs CharS
 
 	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
-	shapeIndicator(c, x+1, y+1, '◎', style) // double circle (offset for inner border)
+	shapeIndicator(c, x+1, y+1, cs.DoubleRing, style) // offset for the inner border
 }
 
 // DrawAsymmetric draws a flag shape: > on the left side, straight right side.
@@ -240,38 +225,17 @@ func DrawParallelogramAlt(c *Canvas, x, y, width, height int, label string, cs C
 
 // DrawStartState draws a filled circle marker at the center of the region.
 func DrawStartState(c *Canvas, x, y, width, height int, label string, cs CharSet, style string) {
-	cx := x + width/2
-	cy := y + height/2
-	var marker rune
-	if isUnicode(cs) {
-		marker = '●'
-	} else {
-		marker = '*'
-	}
-	c.Put(cy, cx, marker, style)
+	c.Put(y+height/2, x+width/2, cs.Dot, style)
 }
 
 // DrawEndState draws a bullseye marker at the center of the region.
 func DrawEndState(c *Canvas, x, y, width, height int, label string, cs CharSet, style string) {
-	cx := x + width/2
-	cy := y + height/2
-	var marker rune
-	if isUnicode(cs) {
-		marker = '◉'
-	} else {
-		marker = '@'
-	}
-	c.Put(cy, cx, marker, style)
+	c.Put(y+height/2, x+width/2, cs.Bullseye, style)
 }
 
 // DrawForkJoin fills the entire area with thick horizontal lines.
 func DrawForkJoin(c *Canvas, x, y, width, height int, label string, cs CharSet, style string) {
-	var ch rune
-	if isUnicode(cs) {
-		ch = '━'
-	} else {
-		ch = '='
-	}
+	ch := cs.Rune(glyph.Horizontal, glyph.Heavy)
 	for row := y; row < y+height; row++ {
 		for col := x; col < x+width; col++ {
 			c.Put(row, col, ch, style)

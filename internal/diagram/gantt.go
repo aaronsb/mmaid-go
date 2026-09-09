@@ -223,7 +223,8 @@ func mermaidToGoDateFormat(mermaid string) string {
 }
 
 // RenderGantt parses and renders a Mermaid gantt chart.
-func RenderGantt(source string, useASCII bool, theme *renderer.Theme) *renderer.Canvas {
+func RenderGantt(source string, cs renderer.CharSet, theme *renderer.Theme) *renderer.Canvas {
+	useASCII := cs.ASCII
 	gd := parseGantt(source)
 	if len(gd.tasks) == 0 {
 		c := renderer.NewCanvas(30, 1)
@@ -278,9 +279,7 @@ func RenderGantt(source string, useASCII bool, theme *renderer.Theme) *renderer.
 	canvasHeight := titleRows + totalRows + 3
 
 	c := renderer.NewCanvas(canvasWidth, canvasHeight)
-	if useASCII {
-		c.SetCharSet(renderer.ASCII)
-	}
+	c.SetCharSet(cs)
 
 	// Wallpaper: base background behind entire diagram
 	if theme != nil && theme.HasDepthColors() {
@@ -299,14 +298,12 @@ func RenderGantt(source string, useASCII bool, theme *renderer.Theme) *renderer.
 
 	vLine := '│'
 	hLine := '─'
-	barCh := '▓'
-	barHalf := '▒'
+	barCh := cs.Fills.Dark
+	barHalf := cs.Fills.Medium
 	milestone := '◆'
 	if useASCII {
 		vLine = '|'
 		hLine = '-'
-		barCh = '='
-		barHalf = '='
 		milestone = '*'
 	}
 
@@ -383,7 +380,7 @@ func RenderGantt(source string, useASCII bool, theme *renderer.Theme) *renderer.
 				barEnd = barStart + 1
 			}
 			if useRegion && sectionIdx >= 0 {
-				// Colored bar: │ delimiters + ░ fill interior
+				// Colored bar: line delimiters, light fill interior
 				barStyle := "_ansi:" + theme.RegionBarStyle(sectionIdx, 0)
 				borderStyle := "_ansi:" + theme.RegionBorderStyle(sectionIdx, 0)
 				c.Put(row, barStart, vLine, borderStyle)
@@ -391,7 +388,7 @@ func RenderGantt(source string, useASCII bool, theme *renderer.Theme) *renderer.
 					c.Put(row, barEnd-1, vLine, borderStyle)
 				}
 				for col := barStart + 1; col < barEnd-1; col++ {
-					c.Put(row, col, '░', barStyle)
+					c.Put(row, col, cs.Fills.Light, barStyle)
 				}
 			} else {
 				for col := barStart; col < barEnd; col++ {
@@ -421,7 +418,7 @@ func RenderGantt(source string, useASCII bool, theme *renderer.Theme) *renderer.
 				// Draw from header line to last task row
 				for r := titleRows + 2; r < row; r++ {
 					existing := c.Get(r, todayCol)
-					if existing == ' ' || existing == '░' {
+					if existing == ' ' || existing == cs.Fills.Light {
 						c.Put(r, todayCol, '┆', todayStyle)
 					}
 				}

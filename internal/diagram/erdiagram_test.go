@@ -1,6 +1,10 @@
 package diagram
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/aaronsb/mmaid-go/internal/renderer"
+)
 
 // ── findClearMidY tests ──────────────────────────────────────────
 
@@ -131,7 +135,7 @@ func TestERTBPorts_OverlappingX(t *testing.T) {
 func TestRenderER_TwoEntities(t *testing.T) {
 	source := `erDiagram
     CUSTOMER ||--o{ ORDER : places`
-	canvas := RenderERDiagram(source, false)
+	canvas := RenderERDiagram(source, renderer.UNICODE)
 	if canvas == nil {
 		t.Fatal("nil canvas")
 	}
@@ -154,7 +158,7 @@ func TestRenderER_FourEntities_LabelsIntact(t *testing.T) {
     ORDER ||--|{ LINE_ITEM : contains
     PRODUCT ||--o{ LINE_ITEM : includes
     ORDER ||--|| PAYMENT : "paid by"`
-	canvas := RenderERDiagram(source, false)
+	canvas := RenderERDiagram(source, renderer.UNICODE)
 	if canvas == nil {
 		t.Fatal("nil canvas")
 	}

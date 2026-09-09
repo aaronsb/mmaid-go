@@ -28,7 +28,7 @@ func assertCanvasNotEmpty(t *testing.T, c *renderer.Canvas) {
 // ── Sequence ────────────────────────────────────────────────────────────────
 
 func TestSequenceBasic(t *testing.T) {
-	c := RenderSequence("sequenceDiagram\n  Alice->>Bob: Hello\n  Bob-->>Alice: Hi", false)
+	c := RenderSequence("sequenceDiagram\n  Alice->>Bob: Hello\n  Bob-->>Alice: Hi", renderer.UNICODE)
 	assertCanvasContains(t, c, "Alice")
 	assertCanvasContains(t, c, "Bob")
 	assertCanvasContains(t, c, "Hello")
@@ -37,7 +37,7 @@ func TestSequenceBasic(t *testing.T) {
 // ── Class Diagram ───────────────────────────────────────────────────────────
 
 func TestClassDiagramBasic(t *testing.T) {
-	c := RenderClassDiagram("classDiagram\n  class Animal {\n    +int age\n    +makeSound()\n  }", false)
+	c := RenderClassDiagram("classDiagram\n  class Animal {\n    +int age\n    +makeSound()\n  }", renderer.UNICODE)
 	assertCanvasContains(t, c, "Animal")
 	assertCanvasContains(t, c, "+int age")
 }
@@ -45,7 +45,7 @@ func TestClassDiagramBasic(t *testing.T) {
 // ── ER Diagram ──────────────────────────────────────────────────────────────
 
 func TestERDiagramBasic(t *testing.T) {
-	c := RenderERDiagram("erDiagram\n  CUSTOMER ||--o{ ORDER : places", false)
+	c := RenderERDiagram("erDiagram\n  CUSTOMER ||--o{ ORDER : places", renderer.UNICODE)
 	assertCanvasContains(t, c, "CUSTOMER")
 	assertCanvasContains(t, c, "ORDER")
 }
@@ -53,34 +53,34 @@ func TestERDiagramBasic(t *testing.T) {
 // ── Pie Chart ───────────────────────────────────────────────────────────────
 
 func TestPieChartCircle(t *testing.T) {
-	c := RenderPieChart("pie\n  \"A\" : 60\n  \"B\" : 40", false, true, nil)
+	c := RenderPieChart("pie\n  \"A\" : 60\n  \"B\" : 40", renderer.UNICODE, true, nil)
 	assertCanvasContains(t, c, "A")
 	assertCanvasContains(t, c, "B")
 	assertCanvasNotEmpty(t, c)
 }
 
 func TestPieChartBraille(t *testing.T) {
-	c := RenderPieChart("pie\n  \"X\" : 70\n  \"Y\" : 30", false, false, nil)
+	c := RenderPieChart("pie\n  \"X\" : 70\n  \"Y\" : 30", renderer.UNICODE, false, nil)
 	assertCanvasContains(t, c, "X")
 	assertCanvasContains(t, c, "⣿") // braille solid pattern
 }
 
 func TestPieChartASCII(t *testing.T) {
-	c := RenderPieChart("pie\n  \"Go\" : 50\n  \"Rust\" : 50", true, false, nil)
+	c := RenderPieChart("pie\n  \"Go\" : 50\n  \"Rust\" : 50", renderer.ASCII, false, nil)
 	assertCanvasContains(t, c, "Go")
 	assertCanvasContains(t, c, "#") // ASCII fill char
 }
 
 func TestPieChartMonochromatic(t *testing.T) {
 	theme := renderer.GetTheme("amber")
-	c := RenderPieChart("pie\n  \"A\" : 60\n  \"B\" : 40", false, true, &theme)
+	c := RenderPieChart("pie\n  \"A\" : 60\n  \"B\" : 40", renderer.UNICODE, true, &theme)
 	assertCanvasNotEmpty(t, c)
 }
 
 // ── Git Graph ───────────────────────────────────────────────────────────────
 
 func TestGitGraphBasic(t *testing.T) {
-	c := RenderGitGraph("gitGraph\n  commit id: \"A\"\n  commit id: \"B\"", false)
+	c := RenderGitGraph("gitGraph\n  commit id: \"A\"\n  commit id: \"B\"", renderer.UNICODE)
 	assertCanvasContains(t, c, "A")
 	assertCanvasContains(t, c, "B")
 	assertCanvasContains(t, c, "●")
@@ -89,7 +89,7 @@ func TestGitGraphBasic(t *testing.T) {
 // ── Block Diagram ───────────────────────────────────────────────────────────
 
 func TestBlockDiagramBasic(t *testing.T) {
-	c := RenderBlockDiagram("block-beta\n  columns 2\n  A[\"Hello\"] B[\"World\"]", false)
+	c := RenderBlockDiagram("block-beta\n  columns 2\n  A[\"Hello\"] B[\"World\"]", renderer.UNICODE)
 	assertCanvasContains(t, c, "Hello")
 	assertCanvasContains(t, c, "World")
 }
@@ -106,20 +106,20 @@ func TestStateDiagramParse(t *testing.T) {
 // ── Gantt ───────────────────────────────────────────────────────────────────
 
 func TestGanttBasic(t *testing.T) {
-	c := RenderGantt("gantt\n  title Test\n  dateFormat YYYY-MM-DD\n  section S1\n    Task1 :a1, 2024-01-01, 7d", false, nil)
+	c := RenderGantt("gantt\n  title Test\n  dateFormat YYYY-MM-DD\n  section S1\n    Task1 :a1, 2024-01-01, 7d", renderer.UNICODE, nil)
 	assertCanvasContains(t, c, "Test")
 	assertCanvasContains(t, c, "Task1")
 }
 
 func TestGanttNoTasks(t *testing.T) {
-	c := RenderGantt("gantt\n  title Empty", false, nil)
+	c := RenderGantt("gantt\n  title Empty", renderer.UNICODE, nil)
 	assertCanvasContains(t, c, "no tasks")
 }
 
 // ── Timeline ────────────────────────────────────────────────────────────────
 
 func TestTimelineBasic(t *testing.T) {
-	c := RenderTimeline("timeline\n  title History\n  2020 : Event A\n  2021 : Event B", false, nil)
+	c := RenderTimeline("timeline\n  title History\n  2020 : Event A\n  2021 : Event B", renderer.UNICODE, nil)
 	assertCanvasContains(t, c, "History")
 	assertCanvasContains(t, c, "Event A")
 	assertCanvasContains(t, c, "●")
@@ -128,7 +128,7 @@ func TestTimelineBasic(t *testing.T) {
 func TestTimelineVerticalLayout(t *testing.T) {
 	// Directly test vertical layout path with many events
 	td := parseTimeline("timeline\n  title Computing\n  1940 : ENIAC\n  1950 : UNIVAC\n  1960 : Mainframes\n  1970 : Minicomputers : UNIX\n  1980 : PCs\n  1990 : Web\n  2000 : Cloud\n  2010 : Mobile\n  2020 : AI")
-	c := renderTimelineVertical(td, false, nil)
+	c := renderTimelineVertical(td, renderer.UNICODE, nil)
 	assertCanvasNotEmpty(t, c)
 	assertCanvasContains(t, c, "Computing")
 	assertCanvasContains(t, c, "ENIAC")
@@ -144,7 +144,7 @@ func TestTimelineVerticalLayout(t *testing.T) {
 
 func TestTimelineVerticalASCII(t *testing.T) {
 	td := parseTimeline("timeline\n  2020 : Alpha\n  2021 : Beta\n  2022 : Release")
-	c := renderTimelineVertical(td, true, nil)
+	c := renderTimelineVertical(td, renderer.ASCII, nil)
 	assertCanvasNotEmpty(t, c)
 	assertCanvasContains(t, c, "Alpha")
 	assertCanvasContains(t, c, "|")
@@ -154,7 +154,7 @@ func TestTimelineVerticalASCII(t *testing.T) {
 // ── Kanban ──────────────────────────────────────────────────────────────────
 
 func TestKanbanBasic(t *testing.T) {
-	c := RenderKanban("kanban\n  col1[Todo]\n    t1[Task A]\n  col2[Done]\n    t2[Task B]", false, nil)
+	c := RenderKanban("kanban\n  col1[Todo]\n    t1[Task A]\n  col2[Done]\n    t2[Task B]", renderer.UNICODE, nil)
 	assertCanvasContains(t, c, "Todo")
 	assertCanvasContains(t, c, "Task A")
 	assertCanvasContains(t, c, "Done")
@@ -162,7 +162,7 @@ func TestKanbanBasic(t *testing.T) {
 
 func TestKanbanThemed(t *testing.T) {
 	theme := renderer.GetTheme("blueprint")
-	c := RenderKanban("kanban\n  col1[A]\n    t1[X]\n  col2[B]\n    t2[Y]", false, &theme)
+	c := RenderKanban("kanban\n  col1[A]\n    t1[X]\n  col2[B]\n    t2[Y]", renderer.UNICODE, &theme)
 	assertCanvasNotEmpty(t, c)
 }
 
@@ -170,7 +170,7 @@ func TestKanbanThemed(t *testing.T) {
 
 func TestJourneyBasic(t *testing.T) {
 	src := "journey\n    title My day\n    section Work\n        Tea: 5: Me\n        Code: 1: Me, Bot"
-	c := RenderJourney(src, false, nil)
+	c := RenderJourney(src, renderer.UNICODE, nil)
 	assertCanvasContains(t, c, "My day")
 	assertCanvasContains(t, c, "Work")
 	assertCanvasContains(t, c, "Tea")
@@ -183,19 +183,19 @@ func TestJourneyBasic(t *testing.T) {
 
 func TestJourneyScoreClamped(t *testing.T) {
 	// Out-of-range and non-numeric scores fall back/clamp without panicking.
-	c := RenderJourney("journey\n    section S\n        A: 99: X\n        B: nope: Y", false, nil)
+	c := RenderJourney("journey\n    section S\n        A: 99: X\n        B: nope: Y", renderer.UNICODE, nil)
 	assertCanvasContains(t, c, ":D")  // 99 clamps to 5
 	assertCanvasContains(t, c, ":-|") // "nope" -> default 3
 }
 
 func TestJourneyThemed(t *testing.T) {
 	theme := renderer.GetTheme("blueprint")
-	c := RenderJourney("journey\n    section S\n        A: 3: X", false, &theme)
+	c := RenderJourney("journey\n    section S\n        A: 3: X", renderer.UNICODE, &theme)
 	assertCanvasNotEmpty(t, c)
 }
 
 func TestJourneyEmpty(t *testing.T) {
-	c := RenderJourney("journey", false, nil)
+	c := RenderJourney("journey", renderer.UNICODE, nil)
 	assertCanvasContains(t, c, "no sections")
 }
 
@@ -203,7 +203,7 @@ func TestJourneyEmpty(t *testing.T) {
 
 func TestJourneyVerticalViaDirective(t *testing.T) {
 	src := "journey\n    direction TB\n    title Day\n    section Work\n        Tea: 5: Me\n        Code: 2: Me, Bot"
-	c := RenderJourney(src, false, nil)
+	c := RenderJourney(src, renderer.UNICODE, nil)
 	out := c.ToString()
 	// Vertical layout is tall and narrow; horizontal is wide and short.
 	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
@@ -216,7 +216,7 @@ func TestJourneyVerticalViaDirective(t *testing.T) {
 
 func TestJourneyHorizontalByDefault(t *testing.T) {
 	// No directive, no override -> journey's natural default is horizontal.
-	c := RenderJourney("journey\n    section S\n        A: 3: X\n        B: 4: Y", false, nil)
+	c := RenderJourney("journey\n    section S\n        A: 3: X\n        B: 4: Y", renderer.UNICODE, nil)
 	lines := strings.Split(strings.TrimRight(c.ToString(), "\n"), "\n")
 	if len(lines) > 9 {
 		t.Errorf("expected a short horizontal layout, got %d lines", len(lines))
@@ -227,7 +227,7 @@ func TestOrientationCLIOverridesDirective(t *testing.T) {
 	src := "journey\n    direction TB\n    section S\n        A: 3: X"
 	SetOrientationOverride("lr") // CLI says horizontal, directive says vertical
 	defer SetOrientationOverride("")
-	c := RenderJourney(src, false, nil)
+	c := RenderJourney(src, renderer.UNICODE, nil)
 	lines := strings.Split(strings.TrimRight(c.ToString(), "\n"), "\n")
 	if len(lines) > 9 {
 		t.Errorf("CLI --orientation lr should override 'direction TB'; got %d lines", len(lines))
@@ -287,13 +287,13 @@ func TestJourneyLeadingBlankAndComment(t *testing.T) {
 		"\n\njourney\n    section S\n        Tea: 5: Me",
 		"%% a note\njourney\n    section S\n        Tea: 5: Me",
 	} {
-		c := RenderJourney(src, false, nil)
+		c := RenderJourney(src, renderer.UNICODE, nil)
 		assertCanvasContains(t, c, "Tea")
 	}
 }
 
 func TestPacketLeadingBlank(t *testing.T) {
-	c := RenderPacket("\npacket-beta\n    0-7: \"A\"", false, nil)
+	c := RenderPacket("\npacket-beta\n    0-7: \"A\"", renderer.UNICODE, nil)
 	assertCanvasContains(t, c, "A")
 }
 
@@ -301,7 +301,7 @@ func TestPacketLeadingBlank(t *testing.T) {
 
 func TestPacketBasic(t *testing.T) {
 	src := "packet-beta\n    0-15: \"Source Port\"\n    16-31: \"Destination Port\""
-	c := RenderPacket(src, false, nil)
+	c := RenderPacket(src, renderer.UNICODE, nil)
 	assertCanvasContains(t, c, "Source Port")
 	assertCanvasContains(t, c, "Destination Port")
 	assertCanvasContains(t, c, "0")
@@ -310,7 +310,7 @@ func TestPacketBasic(t *testing.T) {
 
 func TestPacketAutoIncrement(t *testing.T) {
 	// +N fields chain from the previous field's end bit.
-	c := RenderPacket("packet-beta\n    +16: \"A\"\n    +16: \"B\"", false, nil)
+	c := RenderPacket("packet-beta\n    +16: \"A\"\n    +16: \"B\"", renderer.UNICODE, nil)
 	assertCanvasContains(t, c, "A")
 	assertCanvasContains(t, c, "B")
 	assertCanvasContains(t, c, "31") // 0..15 then 16..31
@@ -318,19 +318,19 @@ func TestPacketAutoIncrement(t *testing.T) {
 
 func TestPacketTruncationLegend(t *testing.T) {
 	// A label too wide for a 1-bit field is truncated and listed in a legend.
-	c := RenderPacket("packet-beta\n    0: \"VeryLongFieldName\"", false, nil)
+	c := RenderPacket("packet-beta\n    0: \"VeryLongFieldName\"", renderer.UNICODE, nil)
 	assertCanvasContains(t, c, "VeryLongFieldName [0]")
 }
 
 func TestPacketEmpty(t *testing.T) {
-	c := RenderPacket("packet-beta", false, nil)
+	c := RenderPacket("packet-beta", renderer.UNICODE, nil)
 	assertCanvasContains(t, c, "no fields")
 }
 
 // ── Mindmap ─────────────────────────────────────────────────────────────────
 
 func TestMindmapBasic(t *testing.T) {
-	c := RenderMindmap("mindmap\n  root((Root))\n    Child1\n    Child2", false)
+	c := RenderMindmap("mindmap\n  root((Root))\n    Child1\n    Child2", renderer.UNICODE)
 	assertCanvasContains(t, c, "Root")
 	assertCanvasContains(t, c, "Child1")
 	assertCanvasContains(t, c, "Child2")
@@ -339,7 +339,7 @@ func TestMindmapBasic(t *testing.T) {
 // ── Quadrant ────────────────────────────────────────────────────────────────
 
 func TestQuadrantBasic(t *testing.T) {
-	c := RenderQuadrantChart("quadrantChart\n  title Test\n  x-axis A --> B\n  y-axis C --> D\n  Point1: [0.5, 0.5]", false, nil)
+	c := RenderQuadrantChart("quadrantChart\n  title Test\n  x-axis A --> B\n  y-axis C --> D\n  Point1: [0.5, 0.5]", renderer.UNICODE, nil)
 	assertCanvasContains(t, c, "Test")
 	assertCanvasContains(t, c, "Point1")
 	assertCanvasContains(t, c, "●")
@@ -348,7 +348,7 @@ func TestQuadrantBasic(t *testing.T) {
 // ── XY Chart ────────────────────────────────────────────────────────────────
 
 func TestXYChartBasic(t *testing.T) {
-	c := RenderXYChart("xychart-beta\n  title Rev\n  x-axis [a, b]\n  bar [10, 20]", false, nil)
+	c := RenderXYChart("xychart-beta\n  title Rev\n  x-axis [a, b]\n  bar [10, 20]", renderer.UNICODE, nil)
 	assertCanvasContains(t, c, "Rev")
 	assertCanvasContains(t, c, "▓") // bar fill char
 }
@@ -356,7 +356,7 @@ func TestXYChartBasic(t *testing.T) {
 // ── Treemap ─────────────────────────────────────────────────────────────────
 
 func TestTreemapBasic(t *testing.T) {
-	c := RenderTreemap("treemap-beta\n  \"Section\"\n    \"Item\": 100", false, nil)
+	c := RenderTreemap("treemap-beta\n  \"Section\"\n    \"Item\": 100", renderer.UNICODE, nil)
 	assertCanvasContains(t, c, "Section")
 	assertCanvasContains(t, c, "Item")
 	assertCanvasContains(t, c, "100")

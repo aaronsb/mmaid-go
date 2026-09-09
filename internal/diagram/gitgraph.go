@@ -73,9 +73,9 @@ func gitGetMarker(commitType string, useASCII bool) rune {
 // ── parser ───────────────────────────────────────────────────────
 
 // RenderGitGraph parses and renders a Mermaid git graph.
-func RenderGitGraph(source string, useASCII bool) *renderer.Canvas {
+func RenderGitGraph(source string, cs renderer.CharSet) *renderer.Canvas {
 	gg := parseGitGraph(source)
-	return renderGitGraph(gg, useASCII)
+	return renderGitGraph(gg, cs)
 }
 
 type gitGraphParser struct {
@@ -438,12 +438,8 @@ func (p *gitGraphParser) ensureBranch(name string, order int, startCommit string
 
 // ── renderer ─────────────────────────────────────────────────────
 
-func renderGitGraph(gg *gitGraph, useASCII bool) *renderer.Canvas {
-	cs := renderer.UNICODE
-	if useASCII {
-		cs = renderer.ASCII
-	}
-
+func renderGitGraph(gg *gitGraph, cs renderer.CharSet) *renderer.Canvas {
+	useASCII := cs.ASCII
 	if len(gg.commits) == 0 {
 		return renderer.NewCanvas(1, 1)
 	}

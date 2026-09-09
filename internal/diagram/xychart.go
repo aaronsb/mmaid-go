@@ -127,7 +127,8 @@ func parseFloatList(s string) []float64 {
 }
 
 // RenderXYChart parses and renders a Mermaid xychart-beta diagram.
-func RenderXYChart(source string, useASCII bool, theme *renderer.Theme) *renderer.Canvas {
+func RenderXYChart(source string, cs renderer.CharSet, theme *renderer.Theme) *renderer.Canvas {
+	useASCII := cs.ASCII
 	xd := parseXYChart(source)
 
 	plotH := 15
@@ -158,9 +159,7 @@ func RenderXYChart(source string, useASCII bool, theme *renderer.Theme) *rendere
 	canvasHeight := titleRows + plotH + 4
 
 	c := renderer.NewCanvas(canvasWidth, canvasHeight)
-	if useASCII {
-		c.SetCharSet(renderer.ASCII)
-	}
+	c.SetCharSet(cs)
 
 	// Wallpaper: base background behind entire diagram
 	if theme != nil && theme.HasDepthColors() {
@@ -183,13 +182,11 @@ func RenderXYChart(source string, useASCII bool, theme *renderer.Theme) *rendere
 
 	vLine := '│'
 	hLine := '─'
-	barCh := '▓'
-	lineDot := '●'
+	barCh := cs.Fills.Dark
+	lineDot := cs.Dot
 	if useASCII {
 		vLine = '|'
 		hLine = '-'
-		barCh = '#'
-		lineDot = '*'
 	}
 
 	// Y axis

@@ -25,12 +25,6 @@ type pieChart struct {
 	slices   []pieSlice
 }
 
-// unicodeFills are fill characters for unicode mode.
-var unicodeFills = []rune{'█', '▓', '░', '▒', '▞', '▚', '▖', '▗'}
-
-// asciiFills are fill characters for ascii mode.
-var asciiFills = []rune{'#', '*', '+', '~', ':', '.', 'o', '='}
-
 // pieColors are vibrant, distinct colors for pie slices.
 var pieColors = [][3]int{
 	{65, 105, 225},  // royal blue
@@ -101,7 +95,7 @@ func parsePieChart(source string) *pieChart {
 
 // RenderPieChart parses and renders a Mermaid pie chart.
 // Three modes: color circle (useColor), braille circle (plain), bar chart (ASCII).
-func RenderPieChart(source string, useASCII bool, useColor bool, theme *renderer.Theme) *renderer.Canvas {
+func RenderPieChart(source string, cs renderer.CharSet, useColor bool, theme *renderer.Theme) *renderer.Canvas {
 	pc := parsePieChart(source)
 	if len(pc.slices) == 0 {
 		c := renderer.NewCanvas(30, 1)
@@ -109,8 +103,8 @@ func RenderPieChart(source string, useASCII bool, useColor bool, theme *renderer
 		return c
 	}
 
-	if useASCII {
-		return renderPieBarChart(pc, true)
+	if cs.ASCII {
+		return renderPieBarChart(pc, cs)
 	}
 	if useColor {
 		// Use monochromatic shades if theme provides a base hue
@@ -118,7 +112,10 @@ func RenderPieChart(source string, useASCII bool, useColor bool, theme *renderer
 		if theme != nil && theme.HasPieBase() {
 			colors = theme.PieColors(len(pc.slices))
 		}
-		return renderPieCircle(pc, colors)
+		return renderPieCircle(pc, colors, cs.Fills)
+	}
+	if !cs.Braille {
+		return renderPieBarChart(pc, cs)
 	}
 	return renderPieBraille(pc)
 }
@@ -168,7 +165,7 @@ type pieSliceAngle struct {
 }
 
 // renderPieCircle renders a circular pie chart using half-block characters.
-func renderPieCircle(pc *pieChart, colors [][3]int) *renderer.Canvas {
+func renderPieCircle(pc *pieChart, colors [][3]int, fills renderer.Fills) *renderer.Canvas {
 	// Compute slice angles
 	total := 0.0
 	for _, s := range pc.slices {
@@ -240,19 +237,19 @@ func renderPieCircle(pc *pieChart, colors [][3]int) *renderer.Canvas {
 
 			if topInside && botInside {
 				if topColor == botColor {
-					ch = '█'
+					ch = fills.Full
 					ansi = fmt.Sprintf("\033[38;2;%d;%d;%dm", topColor[0], topColor[1], topColor[2])
 				} else {
-					ch = '▀'
+					ch = fills.Upper
 					ansi = fmt.Sprintf("\033[38;2;%d;%d;%dm\033[48;2;%d;%d;%dm",
 						topColor[0], topColor[1], topColor[2],
 						botColor[0], botColor[1], botColor[2])
 				}
 			} else if topInside {
-				ch = '▀'
+				ch = fills.Upper
 				ansi = fmt.Sprintf("\033[38;2;%d;%d;%dm", topColor[0], topColor[1], topColor[2])
 			} else {
-				ch = '▄'
+				ch = fills.Lower
 				ansi = fmt.Sprintf("\033[38;2;%d;%d;%dm", botColor[0], botColor[1], botColor[2])
 			}
 
@@ -315,8 +312,8 @@ func renderPieCircle(pc *pieChart, colors [][3]int) *renderer.Canvas {
 
 		// Color swatch
 		swatchCol := legendBoxLeft + 2
-		c.Put(row, swatchCol, '█', "_ansi:"+blockAnsi)
-		c.Put(row, swatchCol+1, '█', "_ansi:"+blockAnsi)
+		c.Put(row, swatchCol, fills.Full, "_ansi:"+blockAnsi)
+		c.Put(row, swatchCol+1, fills.Full, "_ansi:"+blockAnsi)
 
 		// Label (regular weight, white text — inherits fill bg from legend box)
 		c.PutText(row, swatchCol+3, s.label, "_ansi:\033[38;2;255;255;255m")
@@ -608,11 +605,8 @@ func renderPieBraille(pc *pieChart) *renderer.Canvas {
 }
 
 // renderPieBarChart renders a horizontal bar chart (fallback for ASCII mode).
-func renderPieBarChart(pc *pieChart, useASCII bool) *renderer.Canvas {
-	fills := unicodeFills
-	if useASCII {
-		fills = asciiFills
-	}
+func renderPieBarChart(pc *pieChart, cs renderer.CharSet) *renderer.Canvas {
+	fills := cs.Fills.Bars
 
 	// Compute total
 	total := 0.0
@@ -655,9 +649,7 @@ func renderPieBarChart(pc *pieChart, useASCII bool) *renderer.Canvas {
 	canvasHeight := barStartRow + len(pc.slices) + 1
 
 	c := renderer.NewCanvas(canvasWidth, canvasHeight)
-	if useASCII {
-		c.SetCharSet(renderer.ASCII)
-	}
+	c.SetCharSet(cs)
 
 	// Draw title
 	if pc.title != "" {
@@ -669,10 +661,7 @@ func renderPieBarChart(pc *pieChart, useASCII bool) *renderer.Canvas {
 	}
 
 	// Separator character
-	sepChar := "┃"
-	if useASCII {
-		sepChar = "|"
-	}
+	sepChar := string(cs.Rune(glyph.Vertical, glyph.Heavy))
 
 	// Draw each bar
 	for i, s := range pc.slices {

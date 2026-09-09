@@ -116,9 +116,9 @@ var blockAnonCounter int
 // ── parser ───────────────────────────────────────────────────────
 
 // RenderBlockDiagram parses and renders a Mermaid block diagram.
-func RenderBlockDiagram(source string, useASCII bool) *renderer.Canvas {
+func RenderBlockDiagram(source string, cs renderer.CharSet) *renderer.Canvas {
 	bd := parseBlockDiagram(source)
-	return renderBlockDiagram(bd, useASCII)
+	return renderBlockDiagram(bd, cs)
 }
 
 func parseBlockDiagram(source string) *blockDiagram {
@@ -417,12 +417,8 @@ type blockGridEntry struct {
 	span     int
 }
 
-func renderBlockDiagram(bd *blockDiagram, useASCII bool) *renderer.Canvas {
-	cs := renderer.UNICODE
-	if useASCII {
-		cs = renderer.ASCII
-	}
-
+func renderBlockDiagram(bd *blockDiagram, cs renderer.CharSet) *renderer.Canvas {
+	useASCII := cs.ASCII
 	if len(bd.blocks) == 0 {
 		return renderer.NewCanvas(1, 1)
 	}

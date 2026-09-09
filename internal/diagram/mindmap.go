@@ -106,7 +106,8 @@ func parseMindmapLabel(s string) (string, string) {
 }
 
 // RenderMindmap parses and renders a Mermaid mindmap.
-func RenderMindmap(source string, useASCII bool) *renderer.Canvas {
+func RenderMindmap(source string, cs renderer.CharSet) *renderer.Canvas {
+	useASCII := cs.ASCII
 	root := parseMindmap(source)
 	if root == nil {
 		c := renderer.NewCanvas(30, 1)
@@ -202,9 +203,7 @@ func RenderMindmap(source string, useASCII bool) *renderer.Canvas {
 	totalHeight := endR - startR + 2
 
 	c := renderer.NewCanvas(totalWidth+1, totalHeight+1)
-	if useASCII {
-		c.SetCharSet(renderer.ASCII)
-	}
+	c.SetCharSet(cs)
 
 	vLine := '│'
 	tl := '╭'
