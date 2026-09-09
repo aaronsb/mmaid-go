@@ -51,10 +51,17 @@ func RenderGraphCanvas(g *graph.Graph, cs CharSet, paddingX, paddingY int, round
 	}
 
 	// Route edges
-	routed := routing.RouteEdges(g, l)
+	ellipsis := routing.Ellipsis
+	if useASCII {
+		ellipsis = "..."
+	}
+	routed := routing.RouteEdgesWith(g, l, ellipsis)
 
-	// Create canvas with a small margin
-	canvas := NewCanvas(l.CanvasWidth+4, l.CanvasHeight+4)
+	// The canvas covers every layout column and row, so an edge routed
+	// through the gap past the last node has cells to draw in, plus a
+	// small margin.
+	extentW, extentH := l.Extent()
+	canvas := NewCanvas(max(l.CanvasWidth, extentW)+4, max(l.CanvasHeight, extentH)+4)
 	canvas.SetCharSet(cs)
 
 	// Draw subgraph borders (background layer)
@@ -233,11 +240,8 @@ func drawEdges(canvas *Canvas, g *graph.Graph, l *layout.GridLayout, routed []ro
 	}
 
 	// Pass 2: Draw edge labels
-	var placedLabels []placedLabel
 	for _, re := range routed {
-		if re.Label != "" {
-			drawEdgeLabel(canvas, re, &placedLabels)
-		}
+		drawEdgeLabel(canvas, re)
 	}
 }
 
@@ -423,175 +427,16 @@ func drawBoxStart(canvas *Canvas, edgePoint, nextPoint routing.Point, style grap
 	canvas.Arm(edgePoint.Row, edgePoint.Col, a, w, false, "edge")
 }
 
-// placedLabel tracks a placed label for collision detection.
-type placedLabel struct {
-	row      int
-	colStart int
-	colEnd   int
-}
-
-// labelOverlaps checks if a label at (row, colStart..colEnd) overlaps any placed label.
-func labelOverlaps(row, colStart, colEnd int, placed []placedLabel) bool {
-	for _, pl := range placed {
-		if pl.row == row && colStart < pl.colEnd && colEnd > pl.colStart {
-			return true
-		}
-	}
-	return false
-}
-
-// tryPlaceLabel attempts to place a label on the canvas, checking for collisions.
-func tryPlaceLabel(canvas *Canvas, row, col int, label string, placed *[]placedLabel) bool {
-	colEnd := col + textwidth.String(label)
-	if col < 0 || row < 0 {
-		return false
-	}
-	if labelOverlaps(row, col, colEnd, *placed) {
-		return false
-	}
-	// Resize canvas if needed
-	if colEnd >= canvas.Width || row >= canvas.Height {
-		canvas.Resize(colEnd+2, row+2)
-	}
-	canvas.PutText(row, col, label, "edge_label")
-	*placed = append(*placed, placedLabel{row: row, colStart: col, colEnd: colEnd})
-	return true
-}
-
-// findLastTurn finds the index of the last direction change in a path.
-func findLastTurn(path []routing.Point) int {
-	if len(path) < 3 {
-		return -1
-	}
-	for i := len(path) - 2; i >= 1; i-- {
-		dxBefore := sign(path[i].Col - path[i-1].Col)
-		dyBefore := sign(path[i].Row - path[i-1].Row)
-		dxAfter := sign(path[i+1].Col - path[i].Col)
-		dyAfter := sign(path[i+1].Row - path[i].Row)
-		if dxBefore != dxAfter || dyBefore != dyAfter {
-			return i
-		}
-	}
-	return -1
-}
-
-// tryPlaceOnSegment attempts to place a label on a segment (vertical or horizontal).
-func tryPlaceOnSegment(canvas *Canvas, x1, y1, x2, y2 int, label string, placed *[]placedLabel, prevPoint *routing.Point, preferLeft bool, biasTarget bool) bool {
-	labelLen := textwidth.String(label)
-
-	if x1 == x2 {
-		// Vertical segment: place beside the line
-		minY, maxY := y1, y2
-		if minY > maxY {
-			minY, maxY = maxY, minY
-		}
-
-		midY := (minY + maxY) / 2
-		if biasTarget {
-			midY = maxY - 1
-		}
-
-		// Try right side first (unless preferLeft)
-		offsets := []int{1, -labelLen}
-		if preferLeft {
-			offsets = []int{-labelLen, 1}
-		}
-
-		for _, off := range offsets {
-			col := x1 + off
-			if tryPlaceLabel(canvas, midY, col, label, placed) {
-				return true
-			}
-		}
-	} else if y1 == y2 {
-		// Horizontal segment: center label above or below
-		minX, maxX := x1, x2
-		if minX > maxX {
-			minX, maxX = maxX, minX
-		}
-
-		midX := (minX+maxX)/2 - labelLen/2
-
-		// Try above first, then below
-		rows := []int{y1 - 1, y1 + 1}
-		for _, row := range rows {
-			if tryPlaceLabel(canvas, row, midX, label, placed) {
-				return true
-			}
-		}
-	}
-
-	return false
-}
-
-// drawEdgeLabel places a label along an edge path.
-func drawEdgeLabel(canvas *Canvas, re routing.RoutedEdge, placed *[]placedLabel) {
-	label := re.Label
-	path := re.DrawPath
-	if len(path) < 2 || label == "" {
+// drawEdgeLabel writes the label at the placement routing recorded.
+func drawEdgeLabel(canvas *Canvas, re routing.RoutedEdge) {
+	if re.LabelText == "" {
 		return
 	}
-
-	// Find best segment (prefer post-turn segments)
-	lastTurn := findLastTurn(path)
-
-	// Try segments after the last turn first
-	if lastTurn >= 0 && lastTurn < len(path)-1 {
-		for i := lastTurn; i < len(path)-1; i++ {
-			x1, y1 := path[i].Col, path[i].Row
-			x2, y2 := path[i+1].Col, path[i+1].Row
-			var prev *routing.Point
-			if i > 0 {
-				prev = &path[i-1]
-			}
-			if tryPlaceOnSegment(canvas, x1, y1, x2, y2, label, placed, prev, false, true) {
-				return
-			}
-		}
+	end := re.LabelCol + textwidth.String(re.LabelText)
+	if end >= canvas.Width || re.LabelRow >= canvas.Height {
+		canvas.Resize(end+2, re.LabelRow+2)
 	}
-
-	// Try all segments
-	for i := 0; i < len(path)-1; i++ {
-		x1, y1 := path[i].Col, path[i].Row
-		x2, y2 := path[i+1].Col, path[i+1].Row
-		var prev *routing.Point
-		if i > 0 {
-			prev = &path[i-1]
-		}
-		if tryPlaceOnSegment(canvas, x1, y1, x2, y2, label, placed, prev, false, false) {
-			return
-		}
-	}
-
-	// Fallback: force place at midpoint of the path
-	midIdx := len(path) / 2
-	midX := path[midIdx].Col
-	midY := path[midIdx].Row
-
-	// Try above, then below, then right
-	fallbackPositions := [][2]int{
-		{midY - 1, midX},
-		{midY + 1, midX},
-		{midY, midX + 1},
-	}
-	for _, pos := range fallbackPositions {
-		if tryPlaceLabel(canvas, pos[0], pos[1], label, placed) {
-			return
-		}
-	}
-
-	// Last resort: force place ignoring collisions
-	row := midY - 1
-	col := midX
-	if row < 0 {
-		row = midY + 1
-	}
-	labelWidth := textwidth.String(label)
-	if col+labelWidth >= canvas.Width || row >= canvas.Height {
-		canvas.Resize(col+labelWidth+2, row+2)
-	}
-	canvas.PutText(row, col, label, "edge_label")
-	*placed = append(*placed, placedLabel{row: row, colStart: col, colEnd: col + labelWidth})
+	canvas.PutText(re.LabelRow, re.LabelCol, re.LabelText, "edge_label")
 }
 
 // drawNotes draws notes attached to nodes.
