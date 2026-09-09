@@ -114,6 +114,14 @@ func detectDiagramType(source string) string {
 			return "journey"
 		case strings.HasPrefix(lower, "packet"):
 			return "packet"
+		case strings.HasPrefix(lower, "requirementdiagram"):
+			return "requirement"
+		case strings.HasPrefix(lower, "c4context"), strings.HasPrefix(lower, "c4container"),
+			strings.HasPrefix(lower, "c4component"), strings.HasPrefix(lower, "c4dynamic"),
+			strings.HasPrefix(lower, "c4deployment"):
+			return "c4"
+		case strings.HasPrefix(lower, "usecase"):
+			return "usecase"
 		default:
 			return "flowchart"
 		}
@@ -178,6 +186,15 @@ func Render(source string, opts ...Option) (result string) {
 		canvas = diagram.RenderJourney(source, cfg.useASCII, getThemePtr(cfg.theme))
 	case "packet":
 		canvas = diagram.RenderPacket(source, cfg.useASCII, getThemePtr(cfg.theme))
+	case "requirement":
+		g := diagram.ParseRequirementDiagram(source)
+		canvas = renderer.RenderGraphCanvas(g, cfg.useASCII, cfg.paddingX, cfg.paddingY, cfg.roundedEdges, diagram.UsableWidth())
+	case "c4":
+		g := diagram.ParseC4Diagram(source)
+		canvas = renderer.RenderGraphCanvas(g, cfg.useASCII, cfg.paddingX, cfg.paddingY, cfg.roundedEdges, diagram.UsableWidth())
+	case "usecase":
+		g := diagram.ParseUseCaseDiagram(source)
+		canvas = renderer.RenderGraphCanvas(g, cfg.useASCII, cfg.paddingX, cfg.paddingY, cfg.roundedEdges, diagram.UsableWidth())
 	default:
 		g := parser.ParseFlowchart(source)
 		canvas = renderer.RenderGraphCanvas(g, cfg.useASCII, cfg.paddingX, cfg.paddingY, cfg.roundedEdges, diagram.UsableWidth())

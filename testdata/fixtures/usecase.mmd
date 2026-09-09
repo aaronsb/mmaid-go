@@ -1,0 +1,12 @@
+usecase-beta
+    actor Customer("Customer")
+    actor Agent("Support Agent")
+    systemBoundary Storefront
+        Browse("Browse catalogue")
+        Checkout("Place order")
+        Pay("Take payment")
+    end
+    Customer --> Browse
+    Customer --> Checkout
+    Agent --> Checkout
+    Checkout ..> : include Pay

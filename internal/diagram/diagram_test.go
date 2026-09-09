@@ -1,9 +1,11 @@
 package diagram
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/aaronsb/mmaid-go/internal/graph"
 	"github.com/aaronsb/mmaid-go/internal/renderer"
 )
 
@@ -358,4 +360,522 @@ func TestTreemapBasic(t *testing.T) {
 	assertCanvasContains(t, c, "Section")
 	assertCanvasContains(t, c, "Item")
 	assertCanvasContains(t, c, "100")
+}
+
+// ── Requirement Diagram ─────────────────────────────────────────────────────
+
+const reqSrc = `requirementDiagram
+    requirement checkout_req {
+    id: 1
+    text: Orders must be payable online.
+    risk: high
+    verifymethod: test
+    }
+
+    functionalRequirement payment_req {
+    id: 1.1
+    text: Card payments must be authorised.
+    risk: high
+    verifymethod: test
+    }
+
+    element checkout_service {
+    type: service
+    docref: docs/checkout.md
+    }
+
+    checkout_req - contains -> payment_req
+    checkout_service - satisfies -> payment_req`
+
+func TestRequirementNodesAndShapes(t *testing.T) {
+	g := ParseRequirementDiagram(reqSrc)
+	if len(g.Nodes) != 3 {
+		t.Fatalf("expected 3 nodes, got %d", len(g.Nodes))
+	}
+	if got := g.Nodes["checkout_req"].Shape; got != graph.ShapeRectangle {
+		t.Errorf("requirement shape = %v, want rectangle", got)
+	}
+	if got := g.Nodes["checkout_service"].Shape; got != graph.ShapeRounded {
+		t.Errorf("element shape = %v, want rounded", got)
+	}
+	if g.Direction != graph.DirTB {
+		t.Errorf("direction = %v, want TB", g.Direction)
+	}
+}
+
+func TestRequirementLabelLines(t *testing.T) {
+	g := ParseRequirementDiagram(reqSrc)
+	label := g.Nodes["checkout_req"].Label
+	for _, want := range []string{"checkout_req", "id: 1", "Orders must be payable online.", "risk: high | verify: test"} {
+		if !strings.Contains(label, want) {
+			t.Errorf("requirement label missing %q\n%s", want, label)
+		}
+	}
+	elem := g.Nodes["checkout_service"].Label
+	for _, want := range []string{"[service]", "checkout_service", "docs/checkout.md"} {
+		if !strings.Contains(elem, want) {
+			t.Errorf("element label missing %q\n%s", want, elem)
+		}
+	}
+}
+
+func TestRequirementEdgeLabels(t *testing.T) {
+	g := ParseRequirementDiagram(reqSrc)
+	if len(g.Edges) != 2 {
+		t.Fatalf("expected 2 edges, got %d", len(g.Edges))
+	}
+	if g.Edges[0].Source != "checkout_req" || g.Edges[0].Target != "payment_req" || g.Edges[0].Label != "contains" {
+		t.Errorf("edge 0 = %+v", g.Edges[0])
+	}
+	if g.Edges[1].Label != "satisfies" {
+		t.Errorf("edge 1 label = %q, want satisfies", g.Edges[1].Label)
+	}
+}
+
+func TestRequirementReverseRelationAndDirection(t *testing.T) {
+	g := ParseRequirementDiagram("requirementDiagram\ndirection LR\nrequirement a {\nid: 1\n}\nelement b {\ntype: sim\n}\na <- copies - b")
+	if g.Direction != graph.DirLR || !g.DirectionExplicit {
+		t.Errorf("direction = %v (explicit %v), want LR", g.Direction, g.DirectionExplicit)
+	}
+	if len(g.Edges) != 1 {
+		t.Fatalf("expected 1 edge, got %d", len(g.Edges))
+	}
+	if g.Edges[0].Source != "b" || g.Edges[0].Target != "a" || g.Edges[0].Label != "copies" {
+		t.Errorf("reverse edge = %+v, want b -> a copies", g.Edges[0])
+	}
+}
+
+// ── C4 ──────────────────────────────────────────────────────────────────────
+
+const c4Src = `C4Context
+    title Internet Banking
+    Enterprise_Boundary(b0, "Bank") {
+        Person(customer, "Banking Customer", "A personal account holder.")
+        Person(staff, "Support Staff", "Answers customer queries.")
+        System(banking, "Internet Banking", "Accounts and payments.")
+    }
+    System_Ext(email, "E-mail System", "Microsoft Exchange.")
+
+    Rel(customer, banking, "Uses")
+    Rel(staff, banking, "Administers")
+    Rel(banking, email, "Sends mail", "SMTP")`
+
+func TestC4NodesAndBoundary(t *testing.T) {
+	g := ParseC4Diagram(c4Src)
+	if len(g.Nodes) != 4 {
+		t.Fatalf("expected 4 nodes, got %d", len(g.Nodes))
+	}
+	if len(g.Subgraphs) != 1 || g.Subgraphs[0].Label != "Bank" {
+		t.Fatalf("expected one boundary labelled Bank, got %+v", g.Subgraphs)
+	}
+	if got := len(g.Subgraphs[0].NodeIDs); got != 3 {
+		t.Errorf("boundary holds %d nodes, want 3", got)
+	}
+	if !strings.Contains(g.Nodes["customer"].Label, "[person]") {
+		t.Errorf("person label missing marker: %q", g.Nodes["customer"].Label)
+	}
+	if !strings.Contains(g.Nodes["email"].Label, "E-mail System (ext)") {
+		t.Errorf("external label missing (ext): %q", g.Nodes["email"].Label)
+	}
+}
+
+func TestC4RelationshipLabels(t *testing.T) {
+	g := ParseC4Diagram(c4Src)
+	if len(g.Edges) != 3 {
+		t.Fatalf("expected 3 edges, got %d", len(g.Edges))
+	}
+	if g.Edges[0].Label != "Uses" {
+		t.Errorf("edge 0 label = %q, want Uses", g.Edges[0].Label)
+	}
+	if g.Edges[2].Label != "Sends mail [SMTP]" {
+		t.Errorf("edge 2 label = %q, want the technology appended", g.Edges[2].Label)
+	}
+}
+
+func TestC4ShapesAndTechnology(t *testing.T) {
+	src := `C4Container
+    Container(api, "API", "Go", "Serves requests.")
+    ContainerDb(db, "Database", "Postgres")
+    ContainerQueue(bus, "Events", "NATS")
+    BiRel(api, db, "Reads")
+    Rel_Back(bus, api, "Notifies")`
+	g := ParseC4Diagram(src)
+	if got := g.Nodes["db"].Shape; got != graph.ShapeCylinder {
+		t.Errorf("Db shape = %v, want cylinder", got)
+	}
+	if got := g.Nodes["bus"].Shape; got != graph.ShapeStadium {
+		t.Errorf("Queue shape = %v, want stadium", got)
+	}
+	label := g.Nodes["api"].Label
+	for _, want := range []string{"API", "(Go)", "Serves requests."} {
+		if !strings.Contains(label, want) {
+			t.Errorf("container label missing %q\n%s", want, label)
+		}
+	}
+	if !g.Edges[0].IsBidirectional() {
+		t.Error("BiRel should carry arrows on both ends")
+	}
+	if g.Edges[1].Source != "api" || g.Edges[1].Target != "bus" {
+		t.Errorf("Rel_Back = %s -> %s, want api -> bus", g.Edges[1].Source, g.Edges[1].Target)
+	}
+}
+
+func TestC4DeploymentNodesAreSubgraphs(t *testing.T) {
+	src := `C4Deployment
+    Deployment_Node(plc, "Big Bank plc", "Data centre") {
+        Deployment_Node(dn, "api host", "Ubuntu") {
+            Container(api, "API", "Go")
+        }
+    }`
+	g := ParseC4Diagram(src)
+	if len(g.Subgraphs) != 1 || g.Subgraphs[0].Label != "Big Bank plc (Data centre)" {
+		t.Fatalf("outer node = %+v", g.Subgraphs)
+	}
+	inner := g.Subgraphs[0].Children
+	if len(inner) != 1 || !slices.Contains(inner[0].NodeIDs, "api") {
+		t.Fatalf("inner node = %+v", inner)
+	}
+}
+
+func TestC4StyleMacrosIgnored(t *testing.T) {
+	src := `C4Context
+    Person(a, "A")
+    System(b, "B")
+    Rel(a, b, "Uses")
+    UpdateElementStyle(a, $fontColor="red")
+    UpdateRelStyle(a, b, $textColor="blue")
+    UpdateLayoutConfig($c4ShapeInRow="3")`
+	g := ParseC4Diagram(src)
+	if len(g.Nodes) != 2 || len(g.Edges) != 1 {
+		t.Errorf("styling macros leaked: %d nodes, %d edges", len(g.Nodes), len(g.Edges))
+	}
+}
+
+// ── Use Case ────────────────────────────────────────────────────────────────
+
+const useCaseSrc = `usecase-beta
+    actor Customer("Customer")
+    actor Agent("Support Agent")
+    systemBoundary Storefront
+        Browse("Browse catalogue")
+        Checkout("Place order")
+        Pay("Take payment")
+    end
+    Customer --> Browse
+    Customer --> Checkout
+    Agent --> Checkout
+    Checkout ..> : include Pay`
+
+func TestUseCaseNodesAndShapes(t *testing.T) {
+	g := ParseUseCaseDiagram(useCaseSrc)
+	if len(g.Nodes) != 5 {
+		t.Fatalf("expected 5 nodes, got %d", len(g.Nodes))
+	}
+	if got := g.Nodes["Customer"].Shape; got != graph.ShapeRectangle {
+		t.Errorf("actor shape = %v, want rectangle", got)
+	}
+	if !strings.Contains(g.Nodes["Customer"].Label, "[actor]") {
+		t.Errorf("actor label missing marker: %q", g.Nodes["Customer"].Label)
+	}
+	if got := g.Nodes["Browse"].Shape; got != graph.ShapeStadium {
+		t.Errorf("use case shape = %v, want stadium", got)
+	}
+	if g.Nodes["Browse"].Label != "Browse catalogue" {
+		t.Errorf("use case label = %q", g.Nodes["Browse"].Label)
+	}
+}
+
+func TestUseCaseBoundary(t *testing.T) {
+	g := ParseUseCaseDiagram(useCaseSrc)
+	if len(g.Subgraphs) != 1 || g.Subgraphs[0].Label != "Storefront" {
+		t.Fatalf("expected one Storefront boundary, got %+v", g.Subgraphs)
+	}
+	want := []string{"Browse", "Checkout", "Pay"}
+	if !slices.Equal(g.Subgraphs[0].NodeIDs, want) {
+		t.Errorf("boundary members = %v, want %v", g.Subgraphs[0].NodeIDs, want)
+	}
+}
+
+func TestUseCaseIncludeIsDashed(t *testing.T) {
+	g := ParseUseCaseDiagram(useCaseSrc)
+	last := g.Edges[len(g.Edges)-1]
+	if last.Source != "Checkout" || last.Target != "Pay" {
+		t.Fatalf("include edge = %s -> %s", last.Source, last.Target)
+	}
+	if last.Style != graph.EdgeDotted || last.Label != "<<include>>" {
+		t.Errorf("include edge = %+v, want a dotted <<include>>", last)
+	}
+}
+
+func TestUseCaseRelationshipForms(t *testing.T) {
+	src := `usecase-beta
+direction LR
+actor Admin
+actor Person
+usecase (Do thing) as Thing
+Report[Generate report]
+Admin --|> Person
+Admin -- "runs" --> Thing
+Thing ..> Report : <<extend>>
+Person --o Thing
+Person --x Report`
+	g := ParseUseCaseDiagram(src)
+	if g.Direction != graph.DirLR {
+		t.Errorf("direction = %v, want LR", g.Direction)
+	}
+	if g.Nodes["Thing"].Label != "Do thing" {
+		t.Errorf("inline use case label = %q, want Do thing", g.Nodes["Thing"].Label)
+	}
+	if g.Nodes["Report"].Label != "Generate report" {
+		t.Errorf("bracket use case label = %q", g.Nodes["Report"].Label)
+	}
+
+	byPair := map[string]graph.Edge{}
+	for _, e := range g.Edges {
+		byPair[e.Source+"->"+e.Target] = e
+	}
+	if e, ok := byPair["Admin->Person"]; !ok || !e.HasArrowEnd {
+		t.Errorf("generalization edge = %+v (found %v)", e, ok)
+	}
+	if e := byPair["Admin->Thing"]; e.Label != "runs" {
+		t.Errorf("labelled association = %q, want runs", e.Label)
+	}
+	if e := byPair["Thing->Report"]; e.Style != graph.EdgeDotted || e.Label != "<<extend>>" {
+		t.Errorf("extend edge = %+v", e)
+	}
+	if e := byPair["Person->Thing"]; e.ArrowTypeEnd != graph.ArrowTypeCircle {
+		t.Errorf("--o arrow = %v, want circle", e.ArrowTypeEnd)
+	}
+	if e := byPair["Person->Report"]; e.ArrowTypeEnd != graph.ArrowTypeCross {
+		t.Errorf("--x arrow = %v, want cross", e.ArrowTypeEnd)
+	}
+}
+
+func TestUseCaseInlineAndReversed(t *testing.T) {
+	g := ParseUseCaseDiagram("usecase-beta\nactor \"Main administrator\" as Admin\nAdmin --> (Reset password)\nAdmin -- (Reset password)\n(Reset password) <-- Admin")
+	if g.Nodes["Admin"].Label != joinLabel([]string{"[actor]", "Main administrator"}) {
+		t.Errorf("aliased actor label = %q", g.Nodes["Admin"].Label)
+	}
+	if _, ok := g.Nodes["Reset_password"]; !ok {
+		t.Fatalf("inline use case not created: %v", g.NodeOrder)
+	}
+	if len(g.Edges) != 3 {
+		t.Fatalf("expected 3 edges, got %d", len(g.Edges))
+	}
+	if g.Edges[1].HasArrowEnd {
+		t.Error("a bare -- association should carry no arrowhead")
+	}
+	if g.Edges[2].Source != "Admin" || g.Edges[2].Target != "Reset_password" || !g.Edges[2].HasArrowEnd {
+		t.Errorf("reversed association = %+v", g.Edges[2])
+	}
+}
+
+// ── Review regressions ──────────────────────────────────────────────────────
+
+// An explicit edge ID belongs to the operator, not to the source endpoint.
+func TestUseCaseEdgeIDsAreNotNodes(t *testing.T) {
+	g := ParseUseCaseDiagram(`usecase-beta
+actor Customer
+Checkout
+Payment
+Customer opens@-- "starts checkout" ---> Checkout
+Checkout payment@..> : include Payment`)
+
+	for _, id := range g.NodeOrder {
+		if strings.Contains(id, "@") || strings.Contains(id, "opens") || strings.Contains(id, "payment") {
+			t.Errorf("edge ID leaked into node %q (nodes: %v)", id, g.NodeOrder)
+		}
+	}
+	if len(g.Nodes) != 3 {
+		t.Fatalf("expected 3 nodes, got %d: %v", len(g.Nodes), g.NodeOrder)
+	}
+	if e := g.Edges[0]; e.Source != "Customer" || e.Target != "Checkout" || e.Label != "starts checkout" {
+		t.Errorf("labelled association = %+v", e)
+	}
+	if e := g.Edges[1]; e.Source != "Checkout" || e.Target != "Payment" || e.Label != "<<include>>" {
+		t.Errorf("include edge = %+v", e)
+	}
+}
+
+// A keyword is only a keyword when a separator follows it and its case matches.
+func TestUseCaseKeywordNamedNodes(t *testing.T) {
+	g := ParseUseCaseDiagram(`usecase-beta
+actor User
+System("The System")
+Title("Set title")
+Note("Take note")
+User --> System
+User --> Title
+User --> Note`)
+
+	if len(g.Subgraphs) != 0 {
+		t.Errorf("a node named System opened a boundary: %+v", g.Subgraphs)
+	}
+	for _, id := range []string{"System", "Title", "Note"} {
+		if _, ok := g.Nodes[id]; !ok {
+			t.Errorf("node %q was swallowed by a keyword regex (nodes: %v)", id, g.NodeOrder)
+		}
+	}
+	if g.Nodes["System"] != nil && g.Nodes["System"].Label != "The System" {
+		t.Errorf("System label = %q", g.Nodes["System"].Label)
+	}
+	if len(g.Edges) != 3 {
+		t.Errorf("expected 3 edges, got %d", len(g.Edges))
+	}
+}
+
+// Multi-line constructs are consumed whole rather than one node per line.
+func TestUseCaseMultiLineConstructs(t *testing.T) {
+	g := ParseUseCaseDiagram(`usecase-beta
+accDescr {
+    A customer signs in.
+    Then they pay.
+}
+json Payload@{
+  "status": "pending",
+  "count": 3
+}:::data
+Reset("` + "`Reset`" + `
+` + "`password`" + `")
+actor User
+User --> Reset`)
+
+	if len(g.Nodes) != 2 {
+		t.Fatalf("expected 2 nodes, got %d: %v", len(g.Nodes), g.NodeOrder)
+	}
+	if _, ok := g.Nodes["Reset"]; !ok {
+		t.Fatalf("multi-line label did not resolve to one node: %v", g.NodeOrder)
+	}
+	if !strings.Contains(g.Nodes["Reset"].Label, labelSep) {
+		t.Errorf("multi-line label lost its break: %q", g.Nodes["Reset"].Label)
+	}
+}
+
+// A line that matches no statement shape is dropped, not promoted to a node.
+func TestUseCaseUnknownLineIsDropped(t *testing.T) {
+	g := ParseUseCaseDiagram("usecase-beta\nactor User\nthis is not a statement, at all!\n")
+	if len(g.Nodes) != 1 {
+		t.Errorf("unknown line fabricated a node: %v", g.NodeOrder)
+	}
+}
+
+// Metadata-only statements attach to something that already exists; they never
+// declare one.
+func TestUseCaseMetadataOnlyStatements(t *testing.T) {
+	g := ParseUseCaseDiagram(`usecase-beta
+systemBoundary "Payment service"
+  actor Clerk("Payment clerk")
+  Authorize("Authorize payment")
+end
+Payment_service@{ type: package }
+Clerk starts@--> Authorize
+starts@{ animation: fast }`)
+
+	if _, ok := g.Nodes["Payment_service"]; ok {
+		t.Errorf("boundary metadata created a node: %v", g.NodeOrder)
+	}
+	if _, ok := g.Nodes["starts"]; ok {
+		t.Errorf("edge metadata created a node: %v", g.NodeOrder)
+	}
+	if len(g.Nodes) != 2 {
+		t.Errorf("expected 2 nodes, got %d: %v", len(g.Nodes), g.NodeOrder)
+	}
+}
+
+// A colon inside a quoted label is label text, not a relationship separator.
+func TestUseCaseColonInsideLabel(t *testing.T) {
+	g := ParseUseCaseDiagram("usecase-beta\nactor Customer\nCustomer --> Time(\"Set time: 10:00\")")
+	if _, ok := g.Nodes["Time"]; !ok {
+		t.Fatalf("target lost its identifier: %v", g.NodeOrder)
+	}
+	if got := g.Nodes["Time"].Label; got != "Set time: 10:00" {
+		t.Errorf("label = %q, want the colon kept", got)
+	}
+	if len(g.Edges) != 1 || g.Edges[0].Label != "" {
+		t.Errorf("edges = %+v, want one unlabelled association", g.Edges)
+	}
+}
+
+// A C4 boundary whose brace is on the next line still opens, and its `}` closes
+// it rather than the parent.
+func TestC4BoundaryBraceOnNextLine(t *testing.T) {
+	g := ParseC4Diagram(`C4Context
+Enterprise_Boundary(b0, "Bank") {
+    Boundary(b1, "Inner")
+    {
+      System(s1, "S1")
+    }
+    System(s2, "S2")
+}`)
+
+	if len(g.Subgraphs) != 1 || g.Subgraphs[0].Label != "Bank" {
+		t.Fatalf("top-level boundaries = %+v", g.Subgraphs)
+	}
+	bank := g.Subgraphs[0]
+	if len(bank.Children) != 1 || bank.Children[0].Label != "Inner" {
+		t.Fatalf("Inner boundary missing: %+v", bank.Children)
+	}
+	if !slices.Contains(bank.Children[0].NodeIDs, "s1") {
+		t.Errorf("s1 = %v, want inside Inner", bank.Children[0].NodeIDs)
+	}
+	if !slices.Contains(bank.NodeIDs, "s2") {
+		t.Errorf("s2 = %v, want inside Bank", bank.NodeIDs)
+	}
+}
+
+// An accDescr block's closing brace must not pop an open boundary.
+func TestC4AccDescrBlockSkipped(t *testing.T) {
+	g := ParseC4Diagram(`C4Context
+accDescr {
+    A bank and its systems.
+}
+Enterprise_Boundary(b0, "Bank") {
+    System(s1, "S1")
+    accDescr {
+        Nested prose.
+    }
+    System(s2, "S2")
+}`)
+
+	if len(g.Subgraphs) != 1 {
+		t.Fatalf("boundaries = %+v", g.Subgraphs)
+	}
+	if got := g.Subgraphs[0].NodeIDs; !slices.Equal(got, []string{"s1", "s2"}) {
+		t.Errorf("Bank holds %v, want both systems", got)
+	}
+	if len(g.Nodes) != 2 {
+		t.Errorf("accDescr prose became nodes: %v", g.NodeOrder)
+	}
+}
+
+// The requirement lexer skips whitespace, so the arrow's spacing is free.
+func TestRequirementRelationWhitespace(t *testing.T) {
+	g := ParseRequirementDiagram(`requirementDiagram
+requirement a {
+id: 1
+}
+element b {
+type: sim
+}
+element c {
+type: sim
+}
+a - satisfies ->b
+b- derives -> c
+c   -   verifies   ->   a`)
+
+	if len(g.Edges) != 3 {
+		t.Fatalf("expected 3 edges, got %d: %+v", len(g.Edges), g.Edges)
+	}
+	want := []struct{ source, target, label string }{
+		{"a", "b", "satisfies"},
+		{"b", "c", "derives"},
+		{"c", "a", "verifies"},
+	}
+	for i, w := range want {
+		e := g.Edges[i]
+		if e.Source != w.source || e.Target != w.target || e.Label != w.label {
+			t.Errorf("edge %d = %s -> %s %q, want %s -> %s %q", i, e.Source, e.Target, e.Label, w.source, w.target, w.label)
+		}
+	}
 }

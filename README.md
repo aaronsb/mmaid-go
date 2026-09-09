@@ -8,7 +8,7 @@
 
 ## Features
 
-- **17 diagram types:** flowcharts, sequence, class, ER, state, block, git graphs, pie charts, treemaps, gantt, timeline, kanban, mindmap, quadrant, XY charts, user journey, packet
+- **20 diagram types:** flowcharts, sequence, class, ER, state, block, git graphs, pie charts, treemaps, gantt, timeline, kanban, mindmap, quadrant, XY charts, user journey, packet, requirement, C4, use case
 - **Zero dependencies:** pure Go, single portable binary
 - **11 color themes:** including 5 solid-background themes with depth-based region coloring
 - **Anti-aliased pie charts:** circular rendering with half-block characters and supersampled edges
@@ -123,6 +123,11 @@ Every type below has a rendered example in the [gallery](docs/gallery/README.md)
 | Quadrant | `quadrantChart` | 2x2 matrix plots with data points |
 | XY Chart | `xychart-beta` | Bar and line charts on axes |
 | Treemap | `treemap-beta` | Proportional area treemaps |
+| User Journey | `journey` | Journey stages with satisfaction scores |
+| Packet | `packet-beta` | Bit-field network packet layouts |
+| Requirement | `requirementDiagram` | SysML requirements, elements, traceability |
+| C4 | `C4Context` / `C4Container` / `C4Component` / `C4Dynamic` / `C4Deployment` | Context, container, component and deployment views |
+| Use Case | `usecase-beta` | UML actors, use cases and system boundaries |
 
 ### Node shapes
 

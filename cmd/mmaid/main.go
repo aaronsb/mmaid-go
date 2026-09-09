@@ -416,6 +416,9 @@ func printUsage() {
 		{"treemap-beta", "Proportional treemaps"},
 		{"journey", "User journey maps"},
 		{"packet-beta", "Network packet layouts"},
+		{"requirementDiagram", "SysML requirements and elements"},
+		{"C4Context", "C4 context, container, component, deployment"},
+		{"usecase-beta", "UML actors, use cases and boundaries"},
 	}
 	maxKW := 0
 	for _, t := range types {
@@ -506,6 +509,52 @@ var demoSamples = map[string]string{
     96-99: "Data Offset"
     100-111: "Flags"
     112-127: "Window"`,
+	"requirement": `requirementDiagram
+    requirement checkout_req {
+    id: 1
+    text: Orders must be payable online.
+    risk: high
+    verifymethod: test
+    }
+
+    functionalRequirement payment_req {
+    id: 1.1
+    text: Card payments must be authorised.
+    risk: high
+    verifymethod: test
+    }
+
+    element checkout_service {
+    type: service
+    docref: docs/checkout.md
+    }
+
+    checkout_req - contains -> payment_req
+    checkout_service - satisfies -> payment_req`,
+	"c4": `C4Context
+    title Internet Banking
+    Enterprise_Boundary(b0, "Bank") {
+        Person(customer, "Banking Customer", "A personal account holder.")
+        Person(staff, "Support Staff", "Answers customer queries.")
+        System(banking, "Internet Banking", "Accounts and payments.")
+    }
+    System_Ext(email, "E-mail System", "Microsoft Exchange.")
+
+    Rel(customer, banking, "Uses")
+    Rel(staff, banking, "Administers")
+    Rel(banking, email, "Sends mail", "SMTP")`,
+	"usecase": `usecase-beta
+    actor Customer("Customer")
+    actor Agent("Support Agent")
+    systemBoundary Storefront
+        Browse("Browse catalogue")
+        Checkout("Place order")
+        Pay("Take payment")
+    end
+    Customer --> Browse
+    Customer --> Checkout
+    Agent --> Checkout
+    Checkout ..> : include Pay`,
 	"quadrant": `quadrantChart
     title Priority Matrix
     x-axis Low Effort --> High Effort
@@ -583,6 +632,9 @@ var demoTypes = []struct{ name, key string }{
 	{"Treemap", "treemap"},
 	{"User Journey", "journey"},
 	{"Packet Diagram", "packet"},
+	{"Requirement Diagram", "requirement"},
+	{"C4 Diagram", "c4"},
+	{"Use Case Diagram", "usecase"},
 }
 
 func runDemo(w io.Writer, themeName, diagramType string) {

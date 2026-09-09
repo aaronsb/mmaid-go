@@ -1,0 +1,12 @@
+C4Context
+    title Internet Banking
+    Enterprise_Boundary(b0, "Bank") {
+        Person(customer, "Banking Customer", "A personal account holder.")
+        Person(staff, "Support Staff", "Answers customer queries.")
+        System(banking, "Internet Banking", "Accounts and payments.")
+    }
+    System_Ext(email, "E-mail System", "Microsoft Exchange.")
+
+    Rel(customer, banking, "Uses")
+    Rel(staff, banking, "Administers")
+    Rel(banking, email, "Sends mail", "SMTP")
