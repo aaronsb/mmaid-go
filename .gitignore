@@ -13,3 +13,5 @@ termaid
 /dist/
 # make package dry run
 /pkgbuild-check/
+# make snap output
+/.snap/

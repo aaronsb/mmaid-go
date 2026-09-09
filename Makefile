@@ -1,7 +1,8 @@
-.PHONY: help all build test test-short test-visual clean install lint vet dist release check package version
+.PHONY: help all build test test-short test-visual clean install lint vet dist release check package version snap golden golden-record
 
 BINARY := mmaid
 BUILD_DIR := .
+SNAP_DIR := .snap
 GITHUB_REPO := aaronsb/mmaid-go
 
 build:
@@ -21,6 +22,23 @@ test-visual: build
 
 vet:
 	go vet ./...
+
+# --- Snapshots and goldens ---
+
+# make snap FILE=path.mmd [ARGS="-t blueprint -w 100"]
+snap: build ## Render FILE=path.mmd to .snap/<stem>.png with lint findings
+	@if [ -z "$(FILE)" ]; then echo 'usage: make snap FILE=path.mmd [ARGS="-t blueprint -w 100"]'; exit 1; fi
+	@mkdir -p $(SNAP_DIR)
+	@stem=$$(basename "$(FILE)" .mmd); \
+	./$(BINARY) $(ARGS) --cells-lint --cells "$(SNAP_DIR)/$$stem.cells" "$(FILE)" && \
+	python3 tools/cells2png.py "$(SNAP_DIR)/$$stem.cells" "$(SNAP_DIR)/$$stem.png" && \
+	echo "$(SNAP_DIR)/$$stem.png"
+
+golden: ## Compare fixtures against reference frames and run the lint
+	go test ./ -run 'TestGolden|TestFixturesLint' -v
+
+golden-record: ## Rewrite reference frames (say which changed and why in the commit)
+	GOLDEN_RECORD=1 go test ./ -run TestGolden
 
 lint: vet
 	@echo "Lint passed (go vet)"
