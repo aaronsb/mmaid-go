@@ -372,13 +372,43 @@ func TestLintReadsASCIIArrowheadsFedByAnArm(t *testing.T) {
 		"+-+-+",
 		"  |  ",
 		"  v  ",
-		"+-+-+",
+		"+---+",
 		"| B |",
 		"+---+",
 	)
-	found := Lint(f)
-	if !findRule(found, 3, 5, 2) {
-		t.Errorf("rule 3 did not flag the ASCII tee under the arrowhead:\n%s", show(found))
+	if found := Lint(f); len(found) != 0 {
+		t.Errorf("a fed ASCII arrowhead produced findings:\n%s", show(found))
+	}
+}
+
+// An ASCII rule carries an arm only where a neighbour feeds it, so text that
+// happens to contain one of these glyphs is not a dangling arm.
+
+func TestLintReadsAnASCIIRuleInTextAsText(t *testing.T) {
+	if found := Lint(frameOf("a.b")); len(found) != 0 {
+		t.Errorf("a period in a label produced findings:\n%s", show(found))
+	}
+}
+
+func TestLintPassesAnASCIIBox(t *testing.T) {
+	f := frameOf(
+		"+--+",
+		"|  |",
+		"+--+",
+	)
+	if found := Lint(f); len(found) != 0 {
+		t.Errorf("an ASCII box produced findings:\n%s", show(found))
+	}
+}
+
+func TestLintPassesAnASCIIEdgeOffABoxSide(t *testing.T) {
+	f := frameOf(
+		"+--+",
+		"|  +--->",
+		"+--+",
+	)
+	if found := Lint(f); len(found) != 0 {
+		t.Errorf("an ASCII edge produced findings:\n%s", show(found))
 	}
 }
 
