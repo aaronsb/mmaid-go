@@ -393,8 +393,8 @@ func parseBlockToken(token string) *blockNode {
 }
 
 func stripBlockQuotes(text string) string {
-	if len(text) >= 2 && text[0] == '"' && text[len(text)-1] == '"' {
-		return text[1 : len(text)-1]
+	if len(text) >= 2 && text[0] == '"' && text[len(text)-1] == '"' { // bytes, not columns
+		return text[1 : len(text)-1] // bytes, not columns
 	}
 	return text
 }

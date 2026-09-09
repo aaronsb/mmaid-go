@@ -606,9 +606,9 @@ func TestWideParticipantLifelineCentred(t *testing.T) {
 	}
 }
 
-func TestNoByteLengthLabelsInLayoutAndRenderer(t *testing.T) {
+func TestNoByteLengthLabelsInLayoutRendererAndDiagram(t *testing.T) {
 	pattern := regexp.MustCompile(`len\([A-Za-z_.\[\]]*([Ll]abel|[Tt]itle|[Tt]ext|[Nn]ame)\)`)
-	for _, dir := range []string{"internal/layout", "internal/renderer"} {
+	for _, dir := range []string{"internal/layout", "internal/renderer", "internal/diagram"} {
 		entries, err := os.ReadDir(dir)
 		if err != nil {
 			t.Fatal(err)
@@ -623,6 +623,9 @@ func TestNoByteLengthLabelsInLayoutAndRenderer(t *testing.T) {
 				t.Fatal(err)
 			}
 			for i, line := range strings.Split(string(src), "\n") {
+				if strings.Contains(line, "// bytes, not columns") {
+					continue
+				}
 				if m := pattern.FindString(line); m != "" {
 					t.Errorf("%s:%d measures a label by bytes: %s", path, i+1, m)
 				}

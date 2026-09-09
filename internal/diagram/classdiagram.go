@@ -229,7 +229,7 @@ func parseClassMember(text string) *member {
 	m := &member{}
 
 	// Extract visibility
-	if len(text) > 0 {
+	if len(text) > 0 { // bytes, not columns
 		switch text[0] {
 		case '+', '-', '#', '~':
 			m.visibility = string(text[0])
@@ -241,10 +241,10 @@ func parseClassMember(text string) *member {
 	text = strings.TrimSpace(text)
 	if strings.HasSuffix(text, "$") {
 		m.classifier = "$"
-		text = text[:len(text)-1]
+		text = text[:len(text)-1] // bytes, not columns
 	} else if strings.HasSuffix(text, "*") {
 		m.classifier = "*"
-		text = text[:len(text)-1]
+		text = text[:len(text)-1] // bytes, not columns
 	}
 
 	// Check for return type after last colon (not inside parens)
