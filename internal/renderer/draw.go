@@ -1,6 +1,7 @@
 package renderer
 
 import (
+	"fmt"
 	"os"
 	"strings"
 
@@ -49,6 +50,9 @@ func RenderGraphCanvas(g *graph.Graph, cs CharSet, paddingX, paddingY int, round
 		needFlipV = false
 		needFlipH = false
 		l = layout.ComputeLayout(g, paddingX, paddingY, layoutMaxW)
+	}
+	for _, w := range l.Warnings {
+		fmt.Fprintln(os.Stderr, w)
 	}
 
 	// Route edges

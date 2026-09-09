@@ -452,6 +452,7 @@ func printUsage() {
 		{"venn-beta", "Set overlaps as filled circles"},
 		{"wardley-beta", "Value chain over evolution"},
 		{"cynefin-beta", "Sense-making across five domains"},
+		{"swimlane-beta", "Flowchart in lanes across the flow"},
 		{"sankey-beta", "Flows between nodes, sized by value"},
 		{"zenuml", "Sequences in ZenUML's syntax"},
 	}
@@ -747,6 +748,19 @@ Electricity,"Losses, grid",15`,
       "Unknown failure mode"
     complex --> complicated : "Pattern identified"
     clear --> chaotic : "Complacency"`,
+	"swimlane": `swimlane-beta LR
+    subgraph customer["Customer"]
+        A[Place order]
+        E[Receive goods]
+    end
+    subgraph warehouse["Warehouse"]
+        B[Pick items]
+        D[Ship]
+    end
+    subgraph finance["Finance"]
+        C[Take payment]
+    end
+    A --> B --> C --> D --> E`,
 }
 
 var demoTypes = []struct{ name, key string }{
@@ -777,6 +791,7 @@ var demoTypes = []struct{ name, key string }{
 	{"Venn Diagram", "venn"},
 	{"Wardley Map", "wardley"},
 	{"Cynefin Framework", "cynefin"},
+	{"Swimlane", "swimlane"},
 	{"Sankey Diagram", "sankey"},
 	{"ZenUML Sequence", "zenuml"},
 }

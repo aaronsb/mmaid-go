@@ -68,19 +68,21 @@ func layoutHierarchy(g *graph.Graph) (map[string]GridCoord, map[*graph.Subgraph]
 
 	positions := make(map[string]GridCoord, len(g.NodeOrder))
 	rects := make(map[*graph.Subgraph]posRect)
-	var flatten func(b *block, origin GridCoord)
-	flatten = func(b *block, origin GridCoord) {
-		for nid, p := range b.nodes {
-			positions[nid] = GridCoord{origin.Col + p.Col, origin.Row + p.Row}
-		}
-		for _, cb := range b.children {
-			at := GridCoord{origin.Col + cb.at.Col, origin.Row + cb.at.Row}
-			rects[cb.sg] = posRect{at.Col, at.Row, at.Col + cb.b.w - 1, at.Row + cb.b.h - 1}
-			flatten(cb.b, at)
-		}
-	}
-	flatten(root, GridCoord{})
+	flattenBlock(root, GridCoord{}, positions, rects)
 	return positions, rects
+}
+
+// flattenBlock records the position of every node a block holds and the rect
+// of every block nested in it, each relative to origin.
+func flattenBlock(b *block, origin GridCoord, positions map[string]GridCoord, rects map[*graph.Subgraph]posRect) {
+	for nid, p := range b.nodes {
+		positions[nid] = GridCoord{origin.Col + p.Col, origin.Row + p.Row}
+	}
+	for _, cb := range b.children {
+		at := GridCoord{origin.Col + cb.at.Col, origin.Row + cb.at.Row}
+		rects[cb.sg] = posRect{at.Col, at.Row, at.Col + cb.b.w - 1, at.Row + cb.b.h - 1}
+		flattenBlock(cb.b, at, positions, rects)
+	}
 }
 
 // rep maps an edge endpoint to its vertex in scope: the node itself when it

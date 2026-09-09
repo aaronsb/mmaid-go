@@ -203,7 +203,7 @@ func computeSubgraphBounds(g *graph.Graph, layout *GridLayout) {
 		}
 	}
 
-	for _, sg := range g.Subgraphs {
+	for _, sg := range layout.rootSubgraphs(g) {
 		if bounds := compute(sg); bounds != nil {
 			layout.SubgraphBounds = append(layout.SubgraphBounds, *bounds)
 		}

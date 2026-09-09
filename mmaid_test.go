@@ -482,6 +482,33 @@ func TestDetectPacket(t *testing.T) {
 	}
 }
 
+func TestDetectSwimlane(t *testing.T) {
+	if dt := detectDiagramType("swimlane-beta TB\n  A --> B"); dt != "swimlane" {
+		t.Errorf("expected swimlane, got %s", dt)
+	}
+	if dt := detectDiagramType("swimlane LR\n  A --> B"); dt != "swimlane" {
+		t.Errorf("expected swimlane (no -beta), got %s", dt)
+	}
+}
+
+func TestRenderSwimlaneDispatch(t *testing.T) {
+	src := `swimlane-beta TB
+    subgraph cust["Customer"]
+        A[Place order]
+    end
+    subgraph wh["Warehouse"]
+        B[Pick items]
+    end
+    A --> B`
+	if g := Parse(src); !g.Lanes || len(g.Subgraphs) != 2 {
+		t.Errorf("Parse gave lanes=%v, %d subgraphs", g.Lanes, len(g.Subgraphs))
+	}
+	out := Render(src)
+	for _, want := range []string{"Customer", "Warehouse", "Place order", "Pick items"} {
+		assertContains(t, out, want)
+	}
+}
+
 func TestRenderJourneyDispatch(t *testing.T) {
 	out := Render("journey\n  title Day\n  section Work\n    Tea: 5: Me")
 	if !strings.Contains(out, "Tea") || !strings.Contains(out, "Work") {

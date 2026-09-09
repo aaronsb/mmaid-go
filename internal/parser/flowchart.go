@@ -9,6 +9,7 @@ package parser
 
 import (
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -90,6 +91,11 @@ var atShapeMap = map[string]graph.NodeShape{
 	"dbl-circ":   graph.ShapeDoubleCircle,
 }
 
+// headerKeywords lists the first words of a header this parser reads. The
+// swimlane forms carry flowchart syntax; `graph.Lanes`, which ParseSwimlane
+// sets, is what tells the layout to band the top-level subgraphs.
+var headerKeywords = []string{"graph", "flowchart", "swimlane-beta", "swimlane"}
+
 // validDirections lists all valid flowchart directions.
 var validDirections = []graph.Direction{
 	graph.DirTB, graph.DirTD, graph.DirLR, graph.DirBT, graph.DirRL,
@@ -126,7 +132,9 @@ var (
 	rePlainNode = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
 	// Subgraph bracket pattern
-	reSubgraphBracket = regexp.MustCompile(`^(\S+)\s+\[(.+)\]`)
+	// An id and a bracketed label, with or without a space between them:
+	// `subgraph id["Label"]` is how the swimlane docs declare a lane.
+	reSubgraphBracket = regexp.MustCompile(`^([^\s\[]+)\s*\[(.+)\]`)
 
 	// click ID "url" and click ID href "url", with an optional tooltip or
 	// target after the URL.
@@ -171,11 +179,20 @@ func ParseFlowchart(text string) *graph.Graph {
 	return p.parse()
 }
 
+// ParseSwimlane parses mermaid swimlane-beta text. The syntax is the
+// flowchart's with the header swapped; the flag it sets makes every
+// top-level subgraph a lane.
+func ParseSwimlane(text string) *graph.Graph {
+	g := ParseFlowchart(text)
+	g.Lanes = true
+	return g
+}
+
 type flowchartParser struct {
-	text           string
-	g              *graph.Graph
-	subgraphStack  []*graph.Subgraph
-	shapedNodeIDs  map[string]struct{}
+	text          string
+	g             *graph.Graph
+	subgraphStack []*graph.Subgraph
+	shapedNodeIDs map[string]struct{}
 }
 
 func (p *flowchartParser) parse() *graph.Graph {
@@ -217,7 +234,7 @@ func (p *flowchartParser) parseHeader(line string) {
 		return
 	}
 	keyword := strings.ToLower(parts[0])
-	if keyword != "graph" && keyword != "flowchart" {
+	if !slices.Contains(headerKeywords, keyword) {
 		return
 	}
 

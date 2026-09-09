@@ -100,8 +100,14 @@ type GridLayout struct {
 	SubgraphBounds []SubgraphBounds
 	OffsetX        int
 	OffsetY        int
+	// Warnings are what the layout has to say to the user; the renderer
+	// prints them.
+	Warnings []string
 	// blocks holds each subgraph's block of positions.
 	blocks map[*graph.Subgraph]posRect
+	// laneRoots holds the lanes of a swimlane layout in declaration order,
+	// the trailing lane for undeclared nodes included.
+	laneRoots []*graph.Subgraph
 }
 
 // NewGridLayout returns a GridLayout initialized with empty maps.
@@ -192,8 +198,20 @@ func ComputeLayout(g *graph.Graph, paddingX, paddingY, maxWidth int) *GridLayout
 		return layout
 	}
 
-	// Step 1: Layer and order every scope, place the nodes
-	positions, blocks := layoutHierarchy(g)
+	// Step 1: Layer and order every scope, place the nodes. A flagged
+	// graph takes the lane path, where the whole graph is one scope and a
+	// node's cross-axis position is constrained to its lane's band.
+	var positions map[string]GridCoord
+	var blocks map[*graph.Subgraph]posRect
+	if g.Lanes {
+		var unlaned []string
+		positions, blocks, layout.laneRoots, unlaned = layoutLanes(g)
+		if len(unlaned) > 0 {
+			layout.Warnings = append(layout.Warnings, unlanedWarning(unlaned))
+		}
+	} else {
+		positions, blocks = layoutHierarchy(g)
+	}
 	placeNodes(layout, positions)
 	layout.blocks = blocks
 
