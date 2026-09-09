@@ -1,13 +1,10 @@
 # Fixtures whose frames trip the structural lint today. One stem per line.
 # The chart renderers leave as each is fixed.
 #
-# Two sources:
-#   - a port one edge leaves through and another enters, so the source tee's
-#     arm meets the incoming arrowhead's tip (in/out port sharing, ADR-102)
-#   - arms running off the canvas edge or into text in chart-style renderers
+# One source: arms running off the canvas edge or into text in chart-style
+# renderers.
 
 class
-flowchart-cross # in/out port sharing at A, D and E; ADR-102 spreads the ports
 gantt
 gitgraph
 journey
@@ -15,6 +12,5 @@ kanban
 mindmap
 quadrant
 sequence
-state
 timeline
 xychart
