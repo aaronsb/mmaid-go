@@ -76,10 +76,10 @@ func layoutHierarchy(g *graph.Graph) (map[string]GridCoord, map[*graph.Subgraph]
 // of every block nested in it, each relative to origin.
 func flattenBlock(b *block, origin GridCoord, positions map[string]GridCoord, rects map[*graph.Subgraph]posRect) {
 	for nid, p := range b.nodes {
-		positions[nid] = GridCoord{origin.Col + p.Col, origin.Row + p.Row}
+		positions[nid] = GridCoord{Col: origin.Col + p.Col, Row: origin.Row + p.Row}
 	}
 	for _, cb := range b.children {
-		at := GridCoord{origin.Col + cb.at.Col, origin.Row + cb.at.Row}
+		at := GridCoord{Col: origin.Col + cb.at.Col, Row: origin.Row + cb.at.Row}
 		rects[cb.sg] = posRect{at.Col, at.Row, at.Col + cb.b.w - 1, at.Row + cb.b.h - 1}
 		flattenBlock(cb.b, at, positions, rects)
 	}
@@ -459,7 +459,7 @@ func placeNodes(layout *GridLayout, positions map[string]GridCoord) {
 		layout.Placements[nid] = &NodePlacement{NodeID: nid, Grid: gc, Min: gc, Max: gc}
 		for dc := -1; dc <= 1; dc++ {
 			for dr := -1; dr <= 1; dr++ {
-				layout.GridOccupied[GridCoord{gc.Col + dc, gc.Row + dr}] = nid
+				layout.GridOccupied[GridCoord{Col: gc.Col + dc, Row: gc.Row + dr}] = nid
 			}
 		}
 	}

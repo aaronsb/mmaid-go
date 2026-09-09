@@ -26,13 +26,13 @@ func (s Side) Vertical() bool {
 func (s Side) AttachCell(gc GridCoord) GridCoord {
 	switch s {
 	case Top:
-		return GridCoord{gc.Col, gc.Row - 1}
+		return GridCoord{Col: gc.Col, Row: gc.Row - 1}
 	case Bottom:
-		return GridCoord{gc.Col, gc.Row + 1}
+		return GridCoord{Col: gc.Col, Row: gc.Row + 1}
 	case Left:
-		return GridCoord{gc.Col - 1, gc.Row}
+		return GridCoord{Col: gc.Col - 1, Row: gc.Row}
 	default:
-		return GridCoord{gc.Col + 1, gc.Row}
+		return GridCoord{Col: gc.Col + 1, Row: gc.Row}
 	}
 }
 
@@ -40,22 +40,27 @@ func (s Side) AttachCell(gc GridCoord) GridCoord {
 // a side: the border cell of a node, or the gap cell just outside a
 // subgraph's block at the middle of that side.
 func (p *NodePlacement) Attach(side Side) GridCoord {
-	mid := GridCoord{(p.Min.Col + p.Max.Col) / 2, (p.Min.Row + p.Max.Row) / 2}
+	mid := GridCoord{Col: (p.Min.Col + p.Max.Col) / 2, Row: (p.Min.Row + p.Max.Row) / 2}
 	mid.Col -= (mid.Col - 1) % Stride
 	mid.Row -= (mid.Row - 1) % Stride
 	out := 1
-	if p.Block {
+	switch {
+	case p.Block:
 		out = 2
+	case p.Point:
+		// A one-cell node is its own attach cell: the arms of the edges
+		// that reach it resolve there to a tee or a cross.
+		return mid
 	}
 	switch side {
 	case Top:
-		return GridCoord{mid.Col, p.Min.Row - out}
+		return GridCoord{Col: mid.Col, Row: p.Min.Row - out}
 	case Bottom:
-		return GridCoord{mid.Col, p.Max.Row + out}
+		return GridCoord{Col: mid.Col, Row: p.Max.Row + out}
 	case Left:
-		return GridCoord{p.Min.Col - out, mid.Row}
+		return GridCoord{Col: p.Min.Col - out, Row: mid.Row}
 	default:
-		return GridCoord{p.Max.Col + out, mid.Row}
+		return GridCoord{Col: p.Max.Col + out, Row: mid.Row}
 	}
 }
 
@@ -209,7 +214,7 @@ func (l *GridLayout) Reserve(col, row int) {
 	if l.Reserved == nil {
 		l.Reserved = make(map[GridCoord]bool)
 	}
-	l.Reserved[GridCoord{col, row}] = true
+	l.Reserved[GridCoord{Col: col, Row: row}] = true
 }
 
 // ReserveDraw reserves every grid cell whose draw rectangle meets the draw

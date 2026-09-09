@@ -24,7 +24,15 @@ const (
 	ShapeStartState                        // [*] start (filled circle)
 	ShapeEndState                          // [*] end (bullseye)
 	ShapeForkJoin                          // <<fork>>/<<join>> (thick bar)
+	ShapeJunction                          // architecture `junction`: one cell, drawn by nothing
 )
+
+// GridCoord is a position on the logical layout grid. It lives here so a
+// parser can set Graph.Positions; internal/layout names it GridCoord too.
+type GridCoord struct {
+	Col int
+	Row int
+}
 
 // ArrowType represents the tip style of an edge arrow.
 type ArrowType int
@@ -171,6 +179,9 @@ type Graph struct {
 	// layering runs over the whole graph and each node's cross-axis
 	// position is constrained to its lane's band.
 	Lanes bool
+	// Positions, when non-empty, are the grid cells the layout places the
+	// nodes at, and layering, ordering and placement are skipped (ADR-104).
+	Positions map[string]GridCoord
 }
 
 // NewGraph returns a Graph initialized with default values.

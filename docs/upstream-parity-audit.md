@@ -15,45 +15,23 @@ version numbers. This audit compares *capabilities*, not version strings.
 | flowchart, sequence, class, ER, state, block, git, pie, treemap, gantt, timeline, kanban, mindmap, quadrant, XY | ✅ | ✅ | Parity |
 | **user journey** (`journey`) | ✅ | ✅ | **Ported this branch** |
 | **packet** (`packet-beta`) | ✅ | ✅ | **Ported this branch** |
-| **architecture** (`architecture-beta`) | ✅ | ❌ | **Deferred — see below** |
+| **architecture** (`architecture-beta`) | ✅ | ✅ | **Ported — ADR-104** |
 
-Result: 17/18 upstream diagram types. Architecture is the only gap.
+Result: 18/18 upstream diagram types.
 
-## Architecture diagram — why deferred (not "skipped")
+## Architecture diagram — how it was done
 
-Upstream's `architecture.py` (332 lines) does not have its own renderer. It
-builds a standard `Graph` and sets **`graph.grid_positions`** — explicit
-(col,row) coordinates derived from `db:R -- L:server` direction hints — then
-relies on the shared layout engine to honor those positions.
-
-mmaid-go's layout engine cannot do this today:
-
-- `internal/graph/model.go` `Graph` has **no explicit-position field**.
-- `internal/layout/grid.go` (1455 lines, on the priority-split list) runs an
-  unconditional Sugiyama auto-layout (`assignLayers` → `orderLayers` →
-  `placeNodes`) with no hook to accept pre-set positions.
-
-A reduced-fidelity port (build the graph, let auto-layout place it) would
-**break the one feature the `architecture-beta` syntax exists for** — spatial
-placement. Upstream lists architecture with no caveat, so shipping degraded
-placement would be dishonest parity. Absence is better than a diagram users
-will read as "broken."
-
-### Scoped follow-up (when picked up)
-
-This is its own PR, and because it touches the priority-flagged `grid.go`, it
-**warrants an ADR** ("explicit-position layout path") rather than being
-smuggled under a diagram port.
-
-1. `internal/graph/model.go`: add `GridPositions map[string]GridCoord` to
-   `Graph`; add `ShapeJunction` to `NodeShape`. (~15 lines)
-2. `internal/layout/grid.go`: a *parallel* entry path in `ComputeLayout` — if
-   `GridPositions` is set, skip layering/ordering/placement and feed positions
-   straight into `computeSizes`/`computeSubgraphBounds`/`GridToDraw`.
-   Addition, not edit, to the existing pipeline. (~200 lines)
-3. `internal/parser/architecture.go`: port the parser — junction elimination,
-   direction-hint resolver, nested subgraphs. (~350 lines Go)
-4. Renderer: `ShapeJunction` renders as a no-op in `drawNodes`.
+`architecture-beta`'s syntax exists for spatial placement, so the port keeps it
+rather than handing the nodes to the auto-layout. `graph.Graph` carries
+`Positions`; `ComputeLayout` takes them in place of layering, ordering and
+placement, and runs port counting, sizing, gap expansion, group bounds and draw
+coordinates as it does for any graph, with a group's box the bounding box of
+its members' cells. A breadth-first walk over the `db:R -- L:server` hints in
+`internal/parser/architecture.go` resolves those cells first-fit and reports on
+stderr the hint it cannot honour. A `junction` is a node that draws nothing and
+occupies one cell, so the edges reaching it resolve to a tee or a cross through
+ADR-400's arm tables. ADR-104 records the decision; the `architecture` and
+`architecture-nested` fixtures are its gate.
 
 ## Non-diagram drift (upstream 0.3.0 → 0.6.1)
 
@@ -75,8 +53,7 @@ without deeper verification. None auto-ported, per scope.
 
 1. **Wide-character display width** — broad correctness impact, evidence-backed.
 2. **`NO_COLOR`** — trivial, standard, expected by users.
-3. Architecture diagram (separate ADR + PR per above).
-4. Everything else as discrete, low-urgency issues.
+3. Everything else as discrete, low-urgency issues.
 
 ## What shipped on this branch
 

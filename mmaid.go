@@ -178,6 +178,8 @@ func detectDiagramType(source string) string {
 			return "cynefin"
 		case strings.HasPrefix(lower, "swimlane"):
 			return "swimlane"
+		case strings.HasPrefix(lower, "architecture"):
+			return "architecture"
 		default:
 			return "flowchart"
 		}
@@ -272,6 +274,9 @@ func Render(source string, opts ...Option) (result string) {
 		canvas = diagram.RenderCynefin(source, cs, getThemePtr(cfg.theme))
 	case "swimlane":
 		g := parser.ParseSwimlane(source)
+		canvas = renderer.RenderGraphCanvas(g, cs, cfg.paddingX, cfg.paddingY, cfg.roundedEdges, diagram.UsableWidth())
+	case "architecture":
+		g := parser.ParseArchitecture(source)
 		canvas = renderer.RenderGraphCanvas(g, cs, cfg.paddingX, cfg.paddingY, cfg.roundedEdges, diagram.UsableWidth())
 	default:
 		g := parser.ParseFlowchart(source)

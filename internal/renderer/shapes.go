@@ -243,6 +243,11 @@ func DrawForkJoin(c *Canvas, x, y, width, height int, label string, cs CharSet, 
 	}
 }
 
+// DrawJunction draws nothing. An architecture junction is the one cell its
+// edges meet in, and the arms they leave there resolve to a tee or a cross.
+func DrawJunction(c *Canvas, x, y, width, height int, label string, cs CharSet, style string) {
+}
+
 // ShapeRenderers maps each NodeShape constant to its renderer function.
 var ShapeRenderers = map[graph.NodeShape]func(*Canvas, int, int, int, int, string, CharSet, string){
 	graph.ShapeRectangle:        DrawRectangle,
@@ -262,4 +267,5 @@ var ShapeRenderers = map[graph.NodeShape]func(*Canvas, int, int, int, int, strin
 	graph.ShapeStartState:       DrawStartState,
 	graph.ShapeEndState:         DrawEndState,
 	graph.ShapeForkJoin:         DrawForkJoin,
+	graph.ShapeJunction:         DrawJunction,
 }

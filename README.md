@@ -8,7 +8,7 @@
 
 ## Features
 
-- **30 diagram types:** flowcharts, sequence, class, ER, state, block, git graphs, pie charts, treemaps, tree views, gantt, timeline, kanban, mindmap, quadrant, XY charts, user journey, packet, event modeling, ishikawa, requirement, C4, use case, radar, venn, Wardley maps, Cynefin, swimlanes, sankey, ZenUML
+- **31 diagram types:** flowcharts, sequence, class, ER, state, block, git graphs, pie charts, treemaps, tree views, gantt, timeline, kanban, mindmap, quadrant, XY charts, user journey, packet, event modeling, ishikawa, requirement, C4, use case, radar, venn, Wardley maps, Cynefin, swimlanes, sankey, ZenUML, architecture
 - **Zero dependencies:** pure Go, single portable binary
 - **11 color themes:** including 5 solid-background themes with depth-based region coloring
 - **Anti-aliased pie charts:** circular rendering with half-block characters and supersampled edges
@@ -138,6 +138,7 @@ Every type below has a rendered example in the [gallery](docs/gallery/README.md)
 | Swimlane | `swimlane-beta` | Flowchart whose top-level subgraphs are lanes across the flow |
 | Sankey | `sankey-beta` | Flows between nodes, drawn as bands sized by value |
 | ZenUML | `zenuml` | Sequences in ZenUML's syntax, drawn by the sequence renderer |
+| Architecture | `architecture-beta` | Services and groups placed by the direction hints between them |
 
 ### Node shapes
 

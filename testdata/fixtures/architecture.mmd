@@ -1,0 +1,13 @@
+architecture-beta
+    group api(cloud)[API]
+
+    service db(database)[Database] in api
+    service server(server)[Server] in api
+    junction split in api
+    service disk1(disk)[Storage] in api
+    service disk2(disk)[Storage] in api
+
+    db:L -- R:server
+    db:B -- T:split
+    split:L -- R:disk1
+    split:R -- L:disk2
