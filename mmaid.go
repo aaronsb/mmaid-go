@@ -154,6 +154,8 @@ func detectDiagramType(source string) string {
 			return "packet"
 		case strings.HasPrefix(lower, "eventmodeling"):
 			return "eventmodeling"
+		case strings.HasPrefix(lower, "ishikawa"):
+			return "ishikawa"
 		case strings.HasPrefix(lower, "requirementdiagram"):
 			return "requirement"
 		case strings.HasPrefix(lower, "c4context"), strings.HasPrefix(lower, "c4container"),
@@ -231,6 +233,8 @@ func Render(source string, opts ...Option) (result string) {
 		canvas = diagram.RenderPacket(source, cs, getThemePtr(cfg.theme))
 	case "eventmodeling":
 		canvas = diagram.RenderEventModeling(source, cs, getThemePtr(cfg.theme))
+	case "ishikawa":
+		canvas = diagram.RenderIshikawa(source, cs, getThemePtr(cfg.theme))
 	case "requirement":
 		g := diagram.ParseRequirementDiagram(source)
 		canvas = renderer.RenderGraphCanvas(g, cs, cfg.paddingX, cfg.paddingY, cfg.roundedEdges, diagram.UsableWidth())

@@ -1037,3 +1037,64 @@ func TestEventModelingRendersLanesAndFrames(t *testing.T) {
 	assertCanvasContains(t, c, "CartUI")
 	assertCanvasContains(t, c, "AddItem")
 }
+
+// ── Ishikawa ────────────────────────────────────────────────────────────────
+
+// The first line is the effect and the rest nest by indentation.
+func TestIshikawaHierarchy(t *testing.T) {
+	root := parseIshikawa(`ishikawa-beta
+    Blurry Photo
+        Process
+            Out of focus
+        User
+            Shaky hands`)
+
+	if root == nil || root.text != "Blurry Photo" {
+		t.Fatalf("effect = %+v", root)
+	}
+	if len(root.children) != 2 {
+		t.Fatalf("categories = %d, want Process and User", len(root.children))
+	}
+	if got := root.children[0]; got.text != "Process" || len(got.children) != 1 || got.children[0].text != "Out of focus" {
+		t.Errorf("Process = %+v", got)
+	}
+	if got := root.children[1]; got.text != "User" || got.children[0].text != "Shaky hands" {
+		t.Errorf("User = %+v", got)
+	}
+}
+
+// The first cause sets the base level, so an effect indented more than its
+// causes still parses.
+func TestIshikawaEffectIndentedMoreThanCauses(t *testing.T) {
+	root := parseIshikawa("ishikawa-beta\n    Problem\nCause A\n  Subcause A1\nCause B")
+	if root.text != "Problem" {
+		t.Fatalf("effect = %q", root.text)
+	}
+	if len(root.children) != 2 {
+		t.Fatalf("categories = %d, want Cause A and Cause B", len(root.children))
+	}
+	if got := root.children[0]; len(got.children) != 1 || got.children[0].text != "Subcause A1" {
+		t.Errorf("Cause A children = %+v", got.children)
+	}
+}
+
+// A cause below the first level keeps its place in the list, one marker per
+// level under the category.
+func TestIshikawaFlattensDeepCauses(t *testing.T) {
+	root := parseIshikawa("ishikawa\nEffect\n  Process\n    Slow\n      Queued\n    Manual")
+	var causes []string
+	ishikawaCauses(root.children[0], 0, "- ", &causes)
+	want := []string{"Slow", "- Queued", "Manual"}
+	if !slices.Equal(causes, want) {
+		t.Errorf("causes = %v, want %v", causes, want)
+	}
+}
+
+func TestIshikawaRendersSpineAndBones(t *testing.T) {
+	c := RenderIshikawa("ishikawa-beta\nLate Delivery\n  Process\n    Slow handoffs\n  People", renderer.UNICODE, nil)
+	assertCanvasContains(t, c, "Late Delivery")
+	assertCanvasContains(t, c, "╲")
+	assertCanvasContains(t, c, "╱")
+	assertCanvasContains(t, c, "━")
+	assertCanvasContains(t, c, "Slow handoffs")
+}

@@ -444,6 +444,7 @@ func printUsage() {
 		{"journey", "User journey maps"},
 		{"packet-beta", "Network packet layouts"},
 		{"eventmodeling", "Event-model swimlanes over time"},
+		{"ishikawa-beta", "Fishbone cause-and-effect"},
 		{"requirementDiagram", "SysML requirements and elements"},
 		{"C4Context", "C4 context, container, component, deployment"},
 		{"usecase-beta", "UML actors, use cases and boundaries"},
@@ -655,6 +656,18 @@ var demoSamples = map[string]string{
     tf 03 evt ItemAdded ->> 02
     tf 04 rmo CartView ->> 03
     tf 05 ui CartScreen ->> 04`,
+	"ishikawa": `ishikawa-beta
+    Late Delivery
+        Process
+            Slow handoffs
+            Manual steps
+        People
+            Understaffed
+        Tooling
+            Flaky CI
+            No cache
+        Environment
+            Remote timezones`,
 }
 
 var demoTypes = []struct{ name, key string }{
@@ -677,6 +690,7 @@ var demoTypes = []struct{ name, key string }{
 	{"User Journey", "journey"},
 	{"Packet Diagram", "packet"},
 	{"Event Modeling", "eventmodeling"},
+	{"Ishikawa Diagram", "ishikawa"},
 	{"Requirement Diagram", "requirement"},
 	{"C4 Diagram", "c4"},
 	{"Use Case Diagram", "usecase"},
@@ -712,6 +726,7 @@ func runDemo(w io.Writer, themeName, diagramType string, opts ...mmaid.Option) {
 			"quadrantchart": "quadrant",
 			"treeview-beta": "treeview", "tree": "treeview",
 			"eventmodel": "eventmodeling", "em": "eventmodeling",
+			"ishikawa-beta": "ishikawa", "fishbone": "ishikawa",
 		}
 		if mapped, ok2 := aliases[strings.ToLower(diagramType)]; ok2 {
 			source = demoSamples[mapped]
