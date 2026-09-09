@@ -202,6 +202,26 @@ func wardleyMarks(cs renderer.CharSet) map[string]rune {
 	}
 }
 
+// wardleyLayout is where the frame, the bands and every point sit once the
+// canvas width is known. The draw helpers take it rather than recomputing it.
+type wardleyLayout struct {
+	c                        *renderer.Canvas
+	cs                       renderer.CharSet
+	marks                    chartMarks
+	top, bottom, left, right int
+	inTop, inBottom          int
+	inLeft, inRight          int
+	at                       map[string][2]int
+}
+
+func (l wardleyLayout) colOf(evo float64) int {
+	return l.inLeft + int(clamp01(evo)*float64(l.inRight-l.inLeft))
+}
+
+func (l wardleyLayout) rowOf(vis float64) int {
+	return l.inBottom - int(clamp01(vis)*float64(l.inBottom-l.inTop))
+}
+
 // RenderWardley parses and renders a Mermaid Wardley map.
 func RenderWardley(source string, cs renderer.CharSet, theme *renderer.Theme) *renderer.Canvas {
 	wm := parseWardley(source)
@@ -210,10 +230,6 @@ func RenderWardley(source string, cs renderer.CharSet, theme *renderer.Theme) *r
 		c.PutText(0, 0, "[wardley] no components", "default")
 		return c
 	}
-
-	marks := wardleyMarks(cs)
-	point, anchorPoint, inertiaBar := cs.Dot, cs.DoubleRing, cs.CrossEndpoint
-	arrowRight, arrowLeft := cs.ArrowRight, cs.ArrowLeft
 
 	const leftPad = 2 // the value-chain caption and a gap
 	plotH := 22
@@ -224,7 +240,7 @@ func RenderWardley(source string, cs renderer.CharSet, theme *renderer.Theme) *r
 		titleRows = 2
 	}
 	canvasWidth := leftPad + plotW + 1
-	canvasHeight := titleRows + plotH + 3
+	canvasHeight := titleRows + plotH + 4
 
 	c := renderer.NewCanvas(canvasWidth, canvasHeight)
 	c.SetCharSet(cs)
@@ -239,103 +255,139 @@ func RenderWardley(source string, cs renderer.CharSet, theme *renderer.Theme) *r
 		c.PutText(0, max((canvasWidth-textwidth.String(wm.title))/2, 0), wm.title, "bold_label")
 	}
 
-	top, bottom := titleRows, titleRows+plotH-1
-	left, right := leftPad, leftPad+plotW-1
-	c.Segment(top, left, top, right, glyph.Light, false, "edge")
-	c.Segment(bottom, left, bottom, right, glyph.Light, false, "edge")
-	c.Segment(top, left, bottom, left, glyph.Light, false, "edge")
-	c.Segment(top, right, bottom, right, glyph.Light, false, "edge")
-
-	inLeft, inRight := left+1, right-1
-	inTop, inBottom := top+1, bottom-1
-	colOf := func(evo float64) int {
-		return inLeft + int(clamp01(evo)*float64(inRight-inLeft))
+	l := wardleyLayout{
+		c: c, cs: cs, marks: marksFor(cs),
+		top: titleRows, bottom: titleRows + plotH - 1,
+		left: leftPad, right: leftPad + plotW - 1,
+		inTop: titleRows + 1, inBottom: titleRows + plotH - 2,
+		inLeft: leftPad + 1, inRight: leftPad + plotW - 2,
+		at: map[string][2]int{},
 	}
-	rowOf := func(vis float64) int {
-		return inBottom - int(clamp01(vis)*float64(inBottom-inTop))
+	for _, n := range wm.nodes {
+		l.at[n.name] = [2]int{l.rowOf(n.vis), l.colOf(n.evo)}
 	}
 
-	// Evolution bands, each closed on the frame at both ends so its dashed
-	// run resolves into a tee rather than ending in the air.
+	l.drawFrame(wm, plotH)
+	l.drawLinks(wm)
+	l.drawEvolves(wm)
+	l.drawMarks(wm)
+	l.drawLabels(wm)
+	l.drawNotes(wm)
+	return c
+}
+
+// drawFrame draws the plot border, the evolution bands and their names, and
+// the value-chain caption up the left margin.
+func (l wardleyLayout) drawFrame(wm *wardleyMap, plotH int) {
+	c := l.c
+	c.Segment(l.top, l.left, l.top, l.right, glyph.Light, false, "edge")
+	c.Segment(l.bottom, l.left, l.bottom, l.right, glyph.Light, false, "edge")
+	c.Segment(l.top, l.left, l.bottom, l.left, glyph.Light, false, "edge")
+	c.Segment(l.top, l.right, l.bottom, l.right, glyph.Light, false, "edge")
+
+	// Each band closes on the frame at both ends, so its dashed run resolves
+	// into a tee rather than ending in the air. A name wider than its band is
+	// cut; one that would land on the name beside it drops a row.
 	start := 0.0
 	for i, st := range wm.stages {
 		if i < len(wm.stages)-1 {
-			c.Segment(top, colOf(st.end), bottom, colOf(st.end), glyph.Dashed, false, "edge")
+			c.Segment(l.top, l.colOf(st.end), l.bottom, l.colOf(st.end), glyph.Dashed, false, "edge")
 		}
-		mid := colOf((start+st.end)/2) - textwidth.String(st.name)/2
-		c.PutText(bottom+1, min(max(mid, 0), canvasWidth-textwidth.String(st.name)), st.name, "label")
+		name := truncateMark(st.name, l.colOf(st.end)-l.colOf(start)-1, l.marks)
+		mid := l.colOf((start+st.end)/2) - textwidth.String(name)/2
+		col := min(max(mid, 0), c.Width-textwidth.String(name))
+		placeText(c, l.bottom+1, col, 2, name, "label", l.marks, spanFree)
 		start = st.end
 	}
 
-	// The value chain runs up the left margin, a letter to a row.
 	caption := "Value chain"
 	for i, r := range caption {
-		row := top + (plotH-len(caption))/2 + i
-		if row > bottom {
+		row := l.top + (plotH-len(caption))/2 + i
+		if row > l.bottom {
 			break
 		}
 		c.Put(row, 0, r, "label")
 	}
+}
 
-	// Dependencies before the points, so a point and its label sit over the
-	// line rather than under it.
-	at := map[string][2]int{}
-	for _, n := range wm.nodes {
-		at[n.name] = [2]int{rowOf(n.vis), colOf(n.evo)}
-	}
-	for _, l := range wm.links {
-		a, b := at[l.from], at[l.to]
-		c.Segment(a[0], a[1], b[0], a[1], glyph.Light, false, "edge")
-		c.Segment(b[0], a[1], b[0], b[1], glyph.Light, false, "edge")
-		if l.label != "" {
-			w := textwidth.String(l.label)
-			lo, hi := min(a[1], b[1]), max(a[1], b[1])
-			if hi-lo >= w+2 {
-				c.PutText(b[0], (lo+hi-w)/2, l.label, "label")
-			}
+// drawLinks draws each dependency as two axis-aligned legs, so a crossing
+// merges into a junction instead of overwriting one.
+func (l wardleyLayout) drawLinks(wm *wardleyMap) {
+	for _, link := range wm.links {
+		a, b := l.at[link.from], l.at[link.to]
+		l.c.Segment(a[0], a[1], b[0], a[1], glyph.Light, false, "edge")
+		l.c.Segment(b[0], a[1], b[0], b[1], glyph.Light, false, "edge")
+		if link.label == "" {
+			continue
+		}
+		w := textwidth.String(link.label)
+		lo, hi := min(a[1], b[1]), max(a[1], b[1])
+		if hi-lo >= w+2 {
+			col := (lo + hi - w) / 2
+			clearSpan(l.c, b[0], col, w)
+			l.c.PutText(b[0], col, link.label, "label")
 		}
 	}
+}
 
-	// Evolution arrows run a row under their component, clear of the
-	// dependency legs that lie on a source's column and a target's row, and
-	// they stand down where something already reaches the arrowhead's point.
+// drawEvolves draws each evolution arrow a row off its component, clear of the
+// dependency legs that lie on a source's column and a target's row.
+//
+// An arrow is never dropped for want of a clear row: the statement is the
+// user's and the map has to carry it. Where every row within reach is taken
+// the arrow is drawn anyway and its head, a literal, wins the cell it lands
+// on, which still satisfies ADR-101's rule 1 for the arm that was there.
+func (l wardleyLayout) drawEvolves(wm *wardleyMap) {
 	for _, e := range wm.evolves {
-		p := at[e.name]
-		row, target := min(p[0]+1, inBottom), colOf(e.target)
+		p := l.at[e.name]
+		target := l.colOf(e.target)
 		if target == p[1] {
 			continue
 		}
-		head, beyond := arrowRight, glyph.W
+		head, beyond := l.cs.ArrowRight, glyph.W
 		if target < p[1] {
-			head, beyond = arrowLeft, glyph.E
+			head, beyond = l.cs.ArrowLeft, glyph.E
 		}
-		if c.Arms(row, target+sign(target-p[1]))&beyond != 0 {
-			continue
+		row := p[0]
+		for _, candidate := range []int{p[0] + 1, p[0] + 2, p[0] - 1, p[0] - 2} {
+			if candidate < l.inTop || candidate > l.inBottom {
+				continue
+			}
+			row = candidate
+			if l.c.Arms(candidate, target+sign(target-p[1]))&beyond == 0 {
+				break
+			}
 		}
-		c.Segment(row, p[1], row, target, glyph.Light, false, "arrow")
-		c.Put(row, target, head, "arrow")
+		l.c.Segment(row, p[1], row, target, glyph.Light, false, "arrow")
+		l.c.Put(row, target, head, "arrow")
 	}
+}
 
-	for _, n := range wm.notes {
-		col := min(max(colOf(n.evo), inLeft), inRight)
-		c.PutText(rowOf(n.vis), col, textwidth.Truncate(n.text, inRight-col+1), "label")
-	}
-
+// drawMarks draws a point per component, its glyph chosen by the sourcing
+// decorator, with an inertia mark beside it.
+func (l wardleyLayout) drawMarks(wm *wardleyMap) {
+	byDecorator := wardleyMarks(l.cs)
 	for _, n := range wm.nodes {
-		p := at[n.name]
-		mark := point
-		if m, ok := marks[n.sourced]; ok {
+		p := l.at[n.name]
+		mark := l.cs.Dot
+		if m, ok := byDecorator[n.sourced]; ok {
 			mark = m
 		} else if n.anchor {
-			mark = anchorPoint
+			mark = l.cs.DoubleRing
 		}
-		c.Put(p[0], p[1], mark, "arrow")
+		l.c.Put(p[0], p[1], mark, "arrow")
 		if n.inertia {
-			c.Put(p[0], min(p[1]+1, inRight), inertiaBar, "arrow")
+			l.c.Put(p[0], min(p[1]+1, l.inRight), l.cs.CrossEndpoint, "arrow")
 		}
 	}
+}
+
+// drawLabels writes each component's name beside its point, clearing the cells
+// first: `Put` skips a space, so a label written straight over a dependency
+// leg would keep the leg between its words and read as one.
+func (l wardleyLayout) drawLabels(wm *wardleyMap) {
 	for _, n := range wm.nodes {
-		p := at[n.name]
+		p := l.at[n.name]
 		style := "label"
 		if n.anchor {
 			style = "bold_label"
@@ -345,14 +397,25 @@ func RenderWardley(source string, cs renderer.CharSet, theme *renderer.Theme) *r
 		if n.inertia {
 			gap = 3
 		}
-		if p[1]+gap+w <= inRight {
-			c.PutText(p[0], p[1]+gap, n.label, style)
-			continue
+		col := p[1] + gap
+		if col+w > l.inRight {
+			col = max(p[1]-w-1, l.inLeft)
 		}
-		c.PutText(p[0], max(p[1]-w-1, inLeft), n.label, style)
+		clearSpan(l.c, p[0], col, w)
+		l.c.PutText(p[0], col, n.label, style)
 	}
+}
 
-	return c
+// drawNotes writes the notes last, over nothing: a note that would land on a
+// mark or a label drops to the next free row, and where none is free within
+// reach it is cut to the space it has.
+func (l wardleyLayout) drawNotes(wm *wardleyMap) {
+	for _, n := range wm.notes {
+		col := min(max(l.colOf(n.evo), l.inLeft), l.inRight)
+		text := truncateMark(n.text, l.inRight-col+1, l.marks)
+		row := min(max(l.rowOf(n.vis), l.inTop), l.inBottom)
+		placeText(l.c, row, col, 3, text, "label", l.marks, spanClearOfText)
+	}
 }
 
 func clamp01(v float64) float64 {

@@ -1552,6 +1552,34 @@ func TestVennRegionLabelKeepsItsSpaces(t *testing.T) {
 	assertCanvasContains(t, c, "Ship it")
 }
 
+func TestWardleyLabelKeepsItsSpacesOverALeg(t *testing.T) {
+	// Every dependency draws its horizontal leg on the target's row, which is
+	// the target's label row.
+	c := RenderWardley("wardley-beta\n  component Web App [0.75, 0.20]\n  component API Gateway [0.70, 0.90]\n  Web App -> API Gateway", renderer.UNICODE, nil)
+	assertCanvasContains(t, c, "Web App")
+	assertCanvasContains(t, c, "API Gateway")
+}
+
+func TestWardleyEvolveSurvivesABlockedRow(t *testing.T) {
+	// B's incoming leg runs along A's row + 1, where A's evolve arrow would
+	// go; the arrow moves rather than vanishing.
+	src := "wardley-beta\n  component A [0.60, 0.20]\n  component B [0.55, 0.90]\n  component C [0.90, 0.40]\n  C -> B\n  evolve A 0.70"
+	c := RenderWardley(src, renderer.UNICODE, nil)
+	if !strings.Contains(c.ToString(), string(renderer.UNICODE.ArrowRight)) {
+		t.Errorf("the evolve arrow is missing\n---\n%s\n---", c.ToString())
+	}
+}
+
+func TestWardleyStageNamesDoNotMerge(t *testing.T) {
+	src := "wardley-beta\n  evolution Genesis / Concept -> Custom / Emerging -> Product / Converging -> Commodity / Accepted\n  component Novel Idea [0.05, 0.20]"
+	out := RenderWardley(src, renderer.UNICODE, nil).ToString()
+	for _, merged := range []string{"ConceptCustom", "EmergingProduct", "ConvergingCommodity"} {
+		if strings.Contains(out, merged) {
+			t.Errorf("stage names merged as %q\n---\n%s\n---", merged, out)
+		}
+	}
+}
+
 func TestTruncateMarkSaysWhereItCut(t *testing.T) {
 	m := marksFor(renderer.UNICODE)
 	if got := truncateMark("emergent practice", 30, m); got != "emergent practice" {
