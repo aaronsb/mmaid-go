@@ -32,6 +32,7 @@ type Canvas struct {
 	linkGrid  [][]string // hyperlink layer: the URL a cell belongs to, if any
 	lines     [][]lineCell
 	literal   [][]bool
+	text      [][]bool // cells written through PutText or PutStyledText
 	cs        CharSet
 
 	// currentLink is stamped on every cell of text written while it is set,
@@ -53,6 +54,7 @@ func NewCanvas(width, height int) *Canvas {
 	c.linkGrid = make([][]string, 0, height)
 	c.lines = make([][]lineCell, 0, height)
 	c.literal = make([][]bool, 0, height)
+	c.text = make([][]bool, 0, height)
 	for range height {
 		c.appendRow(width)
 	}
@@ -74,6 +76,7 @@ func (c *Canvas) appendRow(width int) {
 	c.linkGrid = append(c.linkGrid, make([]string, width))
 	c.lines = append(c.lines, make([]lineCell, width))
 	c.literal = append(c.literal, make([]bool, width))
+	c.text = append(c.text, make([]bool, width))
 }
 
 // SetCharSet selects the tables the line layer resolves through.
@@ -221,10 +224,14 @@ func (c *Canvas) putWide(row, col int, ch rune, style string) int {
 		c.Resize(c.Width+1, c.Height)
 	}
 	c.Put(row, col, ch, style)
+	if c.inBounds(row, col) {
+		c.text[row][col] = true
+	}
 	if w == 2 {
 		c.Put(row, col+1, Continuation, style)
 		if c.inBounds(row, col+1) {
 			c.lines[row][col+1] = lineCell{}
+			c.text[row][col+1] = true
 		}
 	}
 	if c.currentLink != "" {
@@ -266,6 +273,7 @@ func (c *Canvas) ClearCell(row, col int) {
 	c.linkGrid[row][col] = ""
 	c.lines[row][col] = lineCell{}
 	c.literal[row][col] = false
+	c.text[row][col] = false
 }
 
 // SetFill sets a background fill style at (row, col).
@@ -365,6 +373,7 @@ func (c *Canvas) Resize(newWidth, newHeight int) {
 			c.linkGrid[r] = append(c.linkGrid[r], "")
 			c.lines[r] = append(c.lines[r], lineCell{})
 			c.literal[r] = append(c.literal[r], false)
+			c.text[r] = append(c.text[r], false)
 		}
 	}
 	for range h - c.Height {
@@ -444,11 +453,13 @@ func (c *Canvas) FlipVertical() {
 		c.fillGrid[i], c.fillGrid[j] = c.fillGrid[j], c.fillGrid[i]
 		c.lines[i], c.lines[j] = c.lines[j], c.lines[i]
 		c.literal[i], c.literal[j] = c.literal[j], c.literal[i]
+		c.text[i], c.text[j] = c.text[j], c.text[i]
+		c.linkGrid[i], c.linkGrid[j] = c.linkGrid[j], c.linkGrid[i]
 	}
 	for r := range c.Height {
 		for col := range c.Width {
 			c.lines[r][col].arms = swapArms(c.lines[r][col].arms, glyph.N, glyph.S)
-			if mapped, ok := flipVerticalMap[c.grid[r][col]]; ok && c.literal[r][col] {
+			if mapped, ok := flipVerticalMap[c.grid[r][col]]; ok && c.literal[r][col] && !c.text[r][col] {
 				c.grid[r][col] = mapped
 			}
 		}
@@ -465,21 +476,57 @@ func (c *Canvas) FlipHorizontal() {
 			c.fillGrid[r][i], c.fillGrid[r][j] = c.fillGrid[r][j], c.fillGrid[r][i]
 			c.lines[r][i], c.lines[r][j] = c.lines[r][j], c.lines[r][i]
 			c.literal[r][i], c.literal[r][j] = c.literal[r][j], c.literal[r][i]
+			c.text[r][i], c.text[r][j] = c.text[r][j], c.text[r][i]
+			c.linkGrid[r][i], c.linkGrid[r][j] = c.linkGrid[r][j], c.linkGrid[r][i]
 		}
-		// Reversal puts each continuation cell before its wide rune
-		for col := 0; col < c.Width-1; col++ {
-			if c.grid[r][col] == Continuation && textwidth.Rune(c.grid[r][col+1]) == 2 {
-				c.grid[r][col], c.grid[r][col+1] = c.grid[r][col+1], c.grid[r][col]
-				c.styleGrid[r][col], c.styleGrid[r][col+1] = c.styleGrid[r][col+1], c.styleGrid[r][col]
-			}
-		}
+		c.unmirrorText(r)
 		for col := range c.Width {
 			c.lines[r][col].arms = swapArms(c.lines[r][col].arms, glyph.E, glyph.W)
-			if mapped, ok := flipHorizontalMap[c.grid[r][col]]; ok && c.literal[r][col] {
+			if mapped, ok := flipHorizontalMap[c.grid[r][col]]; ok && c.literal[r][col] && !c.text[r][col] {
 				c.grid[r][col] = mapped
 			}
 		}
 	}
+}
+
+// unmirrorText reverses each run of text cells in row r back to reading
+// order after the row's columns were reversed. A wide rune and its
+// continuation travel as one unit, so the continuation follows its rune.
+func (c *Canvas) unmirrorText(r int) {
+	col := 0
+	for col < c.Width {
+		if !c.text[r][col] {
+			col++
+			continue
+		}
+		start := col
+		for col < c.Width && c.text[r][col] {
+			col++
+		}
+		c.reverseCells(r, start, col)
+		// Reversal puts each continuation before its rune; re-pair.
+		for k := start; k+1 < col; k++ {
+			if c.grid[r][k] == Continuation && textwidth.Rune(c.grid[r][k+1]) == 2 {
+				c.swapCells(r, k, k+1)
+			}
+		}
+	}
+}
+
+func (c *Canvas) reverseCells(r, from, to int) {
+	for i, j := from, to-1; i < j; i, j = i+1, j-1 {
+		c.swapCells(r, i, j)
+	}
+}
+
+func (c *Canvas) swapCells(r, i, j int) {
+	c.grid[r][i], c.grid[r][j] = c.grid[r][j], c.grid[r][i]
+	c.styleGrid[r][i], c.styleGrid[r][j] = c.styleGrid[r][j], c.styleGrid[r][i]
+	c.fillGrid[r][i], c.fillGrid[r][j] = c.fillGrid[r][j], c.fillGrid[r][i]
+	c.lines[r][i], c.lines[r][j] = c.lines[r][j], c.lines[r][i]
+	c.literal[r][i], c.literal[r][j] = c.literal[r][j], c.literal[r][i]
+	c.text[r][i], c.text[r][j] = c.text[r][j], c.text[r][i]
+	c.linkGrid[r][i], c.linkGrid[r][j] = c.linkGrid[r][j], c.linkGrid[r][i]
 }
 
 // swapArms exchanges the two given arm bits in a.
