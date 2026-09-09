@@ -11,13 +11,11 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 )
-
-// unicodeVersion is the UCD release the input files are taken from.
-const unicodeVersion = "16.0.0"
 
 // outPath is relative to the working directory.
 const outPath = "tables.go"
@@ -28,6 +26,11 @@ func main() {
 	if len(os.Args) != 3 {
 		fmt.Fprintln(os.Stderr, "usage: gen-widths EastAsianWidth.txt emoji-data.txt")
 		os.Exit(2)
+	}
+
+	unicodeVersion, err := agreedVersion(os.Args[1], os.Args[2])
+	if err != nil {
+		fatal(err)
 	}
 
 	eaw, err := parse(os.Args[1])
@@ -43,9 +46,12 @@ func main() {
 	wide = append(wide, emoji["Emoji_Presentation"]...)
 	ambiguous := eaw["A"]
 
-	// Zero-width codepoints outside the Mn/Me categories, which are
+	// Zero-width codepoints outside the Mn, Me and Cf categories, which are
 	// consulted at lookup time.
 	zero := []rng{
+		{0x1160, 0x11FF}, // Hangul jungseong and jongseong: EAW=N, but they
+		// conjoin with a leading jamo, and wcwidth and terminals give the
+		// syllable the leading jamo's two columns
 		{0x200B, 0x200B}, // zero width space
 		{0x200D, 0x200D}, // zero width joiner
 		{0xFE00, 0xFE0F}, // variation selectors
@@ -63,6 +69,77 @@ func main() {
 	if err := os.WriteFile(outPath, []byte(b.String()), 0o644); err != nil {
 		fatal(err)
 	}
+}
+
+// versionPatterns match the two ways a UCD file states its release: the
+// "# EastAsianWidth-16.0.0.txt" name line, and the "# Used with Emoji Version
+// 16.0" line that emoji-data.txt carries instead.
+var versionPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`^#\s*\S+-([0-9]+(?:\.[0-9]+)+)\.txt`),
+	regexp.MustCompile(`^#.*\bVersion\s+([0-9]+(?:\.[0-9]+)+)`),
+}
+
+// agreedVersion reads both files' declared release and returns it. The two
+// must name the same major and minor version.
+func agreedVersion(a, b string) (string, error) {
+	va, err := fileVersion(a)
+	if err != nil {
+		return "", err
+	}
+	vb, err := fileVersion(b)
+	if err != nil {
+		return "", err
+	}
+	if release(va) != release(vb) {
+		return "", fmt.Errorf("%s is Unicode %s but %s is Unicode %s", a, va, b, vb)
+	}
+	if strings.Count(va, ".") >= strings.Count(vb, ".") {
+		return pad(va), nil
+	}
+	return pad(vb), nil
+}
+
+// fileVersion reads the release a UCD file declares in its header comment.
+func fileVersion(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		line := sc.Text()
+		if !strings.HasPrefix(line, "#") {
+			break
+		}
+		for _, re := range versionPatterns {
+			if m := re.FindStringSubmatch(line); m != nil {
+				return m[1], nil
+			}
+		}
+	}
+	if err := sc.Err(); err != nil {
+		return "", err
+	}
+	return "", fmt.Errorf("%s: no Unicode version in the header", path)
+}
+
+// release is the major and minor of a version.
+func release(v string) string {
+	parts := strings.SplitN(v, ".", 3)
+	if len(parts) < 2 {
+		return v
+	}
+	return parts[0] + "." + parts[1]
+}
+
+// pad extends a two-part version to three.
+func pad(v string) string {
+	if strings.Count(v, ".") == 1 {
+		return v + ".0"
+	}
+	return v
 }
 
 // parse reads a UCD data file and groups its ranges by property value.

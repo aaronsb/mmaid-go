@@ -60,7 +60,7 @@ func Rune(r rune) int {
 	if r < 0xA0 {
 		return 1
 	}
-	if inTable(zero, r) || unicode.Is(unicode.Mn, r) || unicode.Is(unicode.Me, r) {
+	if inTable(zero, r) || unicode.In(r, unicode.Mn, unicode.Me, unicode.Cf) {
 		return 0
 	}
 	if inTable(wide, r) {

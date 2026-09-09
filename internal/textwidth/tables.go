@@ -316,6 +316,7 @@ var ambiguous = [][2]rune{
 
 // zero: Zero-width codepoints outside categories Mn and Me.
 var zero = [][2]rune{
+	{0x1160, 0x11FF},
 	{0x200B, 0x200B},
 	{0x200D, 0x200D},
 	{0xFE00, 0xFE0F},

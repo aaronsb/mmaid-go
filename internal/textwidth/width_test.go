@@ -20,6 +20,10 @@ func TestRuneWidths(t *testing.T) {
 		{0x1FB00, 1, "sextant"},
 		{0x0301, 0, "combining acute"},
 		{0x200D, 0, "zero width joiner"},
+		{0x200C, 0, "zero width non-joiner"},
+		{0xE0020, 0, "tag space"},
+		{0x1161, 0, "hangul jungseong A"},
+		{0x11A8, 0, "hangul jongseong kiyeok"},
 	}
 	for _, c := range cases {
 		if got := Rune(c.r); got != c.want {
@@ -35,6 +39,7 @@ func TestStringWidth(t *testing.T) {
 	}{
 		{"日本語テキスト", 14},
 		{"emoji 🚀 ok", 11},
+		{"각", 2}, // 각 decomposed into conjoining jamo
 		{"", 0},
 		{"abc", 3},
 	}
