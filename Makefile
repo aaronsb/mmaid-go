@@ -33,7 +33,7 @@ snap: build ## Render FILE=path.mmd to .snap/<stem>.png with lint findings
 	@mkdir -p $(SNAP_DIR)
 	@stem=$$(basename "$(FILE)" .mmd); \
 	./$(BINARY) $(ARGS) --cells-lint --cells "$(SNAP_DIR)/$$stem.cells" "$(FILE)" && \
-	python3 tools/cells2png.py "$(SNAP_DIR)/$$stem.cells" "$(SNAP_DIR)/$$stem.png" && \
+	MMAID_SNAP_RULERS=1 python3 tools/cells2png.py "$(SNAP_DIR)/$$stem.cells" "$(SNAP_DIR)/$$stem.png" && \
 	echo "$(SNAP_DIR)/$$stem.png"
 
 golden: ## Compare fixtures against reference frames and run the lint
