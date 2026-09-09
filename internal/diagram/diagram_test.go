@@ -1,6 +1,7 @@
 package diagram
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -441,5 +442,111 @@ func TestRequirementReverseRelationAndDirection(t *testing.T) {
 	}
 	if g.Edges[0].Source != "b" || g.Edges[0].Target != "a" || g.Edges[0].Label != "copies" {
 		t.Errorf("reverse edge = %+v, want b -> a copies", g.Edges[0])
+	}
+}
+
+// ── C4 ──────────────────────────────────────────────────────────────────────
+
+const c4Src = `C4Context
+    title Internet Banking
+    Enterprise_Boundary(b0, "Bank") {
+        Person(customer, "Banking Customer", "A personal account holder.")
+        Person(staff, "Support Staff", "Answers customer queries.")
+        System(banking, "Internet Banking", "Accounts and payments.")
+    }
+    System_Ext(email, "E-mail System", "Microsoft Exchange.")
+
+    Rel(customer, banking, "Uses")
+    Rel(staff, banking, "Administers")
+    Rel(banking, email, "Sends mail", "SMTP")`
+
+func TestC4NodesAndBoundary(t *testing.T) {
+	g := ParseC4Diagram(c4Src)
+	if len(g.Nodes) != 4 {
+		t.Fatalf("expected 4 nodes, got %d", len(g.Nodes))
+	}
+	if len(g.Subgraphs) != 1 || g.Subgraphs[0].Label != "Bank" {
+		t.Fatalf("expected one boundary labelled Bank, got %+v", g.Subgraphs)
+	}
+	if got := len(g.Subgraphs[0].NodeIDs); got != 3 {
+		t.Errorf("boundary holds %d nodes, want 3", got)
+	}
+	if !strings.Contains(g.Nodes["customer"].Label, "[person]") {
+		t.Errorf("person label missing marker: %q", g.Nodes["customer"].Label)
+	}
+	if !strings.Contains(g.Nodes["email"].Label, "E-mail System (ext)") {
+		t.Errorf("external label missing (ext): %q", g.Nodes["email"].Label)
+	}
+}
+
+func TestC4RelationshipLabels(t *testing.T) {
+	g := ParseC4Diagram(c4Src)
+	if len(g.Edges) != 3 {
+		t.Fatalf("expected 3 edges, got %d", len(g.Edges))
+	}
+	if g.Edges[0].Label != "Uses" {
+		t.Errorf("edge 0 label = %q, want Uses", g.Edges[0].Label)
+	}
+	if g.Edges[2].Label != "Sends mail [SMTP]" {
+		t.Errorf("edge 2 label = %q, want the technology appended", g.Edges[2].Label)
+	}
+}
+
+func TestC4ShapesAndTechnology(t *testing.T) {
+	src := `C4Container
+    Container(api, "API", "Go", "Serves requests.")
+    ContainerDb(db, "Database", "Postgres")
+    ContainerQueue(bus, "Events", "NATS")
+    BiRel(api, db, "Reads")
+    Rel_Back(bus, api, "Notifies")`
+	g := ParseC4Diagram(src)
+	if got := g.Nodes["db"].Shape; got != graph.ShapeCylinder {
+		t.Errorf("Db shape = %v, want cylinder", got)
+	}
+	if got := g.Nodes["bus"].Shape; got != graph.ShapeStadium {
+		t.Errorf("Queue shape = %v, want stadium", got)
+	}
+	label := g.Nodes["api"].Label
+	for _, want := range []string{"API", "(Go)", "Serves requests."} {
+		if !strings.Contains(label, want) {
+			t.Errorf("container label missing %q\n%s", want, label)
+		}
+	}
+	if !g.Edges[0].IsBidirectional() {
+		t.Error("BiRel should carry arrows on both ends")
+	}
+	if g.Edges[1].Source != "api" || g.Edges[1].Target != "bus" {
+		t.Errorf("Rel_Back = %s -> %s, want api -> bus", g.Edges[1].Source, g.Edges[1].Target)
+	}
+}
+
+func TestC4DeploymentNodesAreSubgraphs(t *testing.T) {
+	src := `C4Deployment
+    Deployment_Node(plc, "Big Bank plc", "Data centre") {
+        Deployment_Node(dn, "api host", "Ubuntu") {
+            Container(api, "API", "Go")
+        }
+    }`
+	g := ParseC4Diagram(src)
+	if len(g.Subgraphs) != 1 || g.Subgraphs[0].Label != "Big Bank plc (Data centre)" {
+		t.Fatalf("outer node = %+v", g.Subgraphs)
+	}
+	inner := g.Subgraphs[0].Children
+	if len(inner) != 1 || !slices.Contains(inner[0].NodeIDs, "api") {
+		t.Fatalf("inner node = %+v", inner)
+	}
+}
+
+func TestC4StyleMacrosIgnored(t *testing.T) {
+	src := `C4Context
+    Person(a, "A")
+    System(b, "B")
+    Rel(a, b, "Uses")
+    UpdateElementStyle(a, $fontColor="red")
+    UpdateRelStyle(a, b, $textColor="blue")
+    UpdateLayoutConfig($c4ShapeInRow="3")`
+	g := ParseC4Diagram(src)
+	if len(g.Nodes) != 2 || len(g.Edges) != 1 {
+		t.Errorf("styling macros leaked: %d nodes, %d edges", len(g.Nodes), len(g.Edges))
 	}
 }

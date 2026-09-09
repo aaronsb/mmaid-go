@@ -417,6 +417,7 @@ func printUsage() {
 		{"journey", "User journey maps"},
 		{"packet-beta", "Network packet layouts"},
 		{"requirementDiagram", "SysML requirements and elements"},
+		{"C4Context", "C4 context, container, component, deployment"},
 	}
 	maxKW := 0
 	for _, t := range types {
@@ -529,6 +530,18 @@ var demoSamples = map[string]string{
 
     checkout_req - contains -> payment_req
     checkout_service - satisfies -> payment_req`,
+	"c4": `C4Context
+    title Internet Banking
+    Enterprise_Boundary(b0, "Bank") {
+        Person(customer, "Banking Customer", "A personal account holder.")
+        Person(staff, "Support Staff", "Answers customer queries.")
+        System(banking, "Internet Banking", "Accounts and payments.")
+    }
+    System_Ext(email, "E-mail System", "Microsoft Exchange.")
+
+    Rel(customer, banking, "Uses")
+    Rel(staff, banking, "Administers")
+    Rel(banking, email, "Sends mail", "SMTP")`,
 	"quadrant": `quadrantChart
     title Priority Matrix
     x-axis Low Effort --> High Effort
@@ -607,6 +620,7 @@ var demoTypes = []struct{ name, key string }{
 	{"User Journey", "journey"},
 	{"Packet Diagram", "packet"},
 	{"Requirement Diagram", "requirement"},
+	{"C4 Diagram", "c4"},
 }
 
 func runDemo(w io.Writer, themeName, diagramType string) {
