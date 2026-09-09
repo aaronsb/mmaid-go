@@ -82,9 +82,10 @@ moved. `TestFixturesLint` stays clean.
 - Labels as obstacles can push a later edge onto a longer path.
 - Three numbers (6, 3, 4) are tuned by eye on the fixture set and are
   the kind of constant a later diagram will want to move.
-- Routing runs on a grid whose cells are a node wide, so two edges that
-  share one grid cell share up to a node's width of draw cells; ports
-  separate them only at the node.
+- Routing runs on a grid whose cells are a node wide. Two edges that share
+  a gap cell are spread across the gap's draw rows by the lanes below; a
+  gap past the last node is one draw cell, and two edges routed through it
+  meet on that cell.
 
 ### Neutral
 
@@ -115,6 +116,26 @@ moved. `TestFixturesLint` stays clean.
   still fits nowhere is dropped.
 - The preferred and alternative side pairs are compared by path cost, not
   path length, so the crossing costs decide sides as well as routes.
+- A gap row or column is one grid cell across but several draw cells, and
+  a run through it lies on its centre line. Gap lanes spread the runs that
+  share a gap: after the second pass, every run between two turns is
+  grouped with the runs of the same gap along the same axis, the runs that
+  overlap take distinct offsets from the centre line, and each connected
+  group is centred on it. The runs of a gap are ordered from its near side
+  (up, or left) to its far side by where their ends turn: both toward the
+  near side, then one each way, then both toward the far side; among two
+  cups the narrower is nearer, among two caps the narrower is farther, and
+  among two staircases the one whose near-side end lies inside the other's
+  extent is nearer, so a run's turn stays out of the run beside it. A
+  lane a run cannot take, because a neighbouring run would lose its
+  direction or the cell its arrowhead needs, or the run would cross an
+  arrowhead, a node, a border, or a title, falls back to the nearest lane
+  from the centre outward that it can, and to the centre when none is
+  free. The layout supplies the gap's draw extent; a third pass converts
+  every path again with its runs in their lanes and places every label
+  again, so the second pass's draw paths and labels are provisional. A
+  perpendicular run through a lane is still a crossing. The first and last
+  runs are anchored at their ports and keep the port's offset.
 
 ## Alternatives Considered
 

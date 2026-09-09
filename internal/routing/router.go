@@ -65,12 +65,14 @@ func RouteEdges(g *graph.Graph, l *layout.GridLayout) []RoutedEdge {
 // RouteEdgesWith is RouteEdges with the ellipsis a shrunk label ends in and
 // the writer a dropped label is reported to (nil for none).
 //
-// Routing takes two passes over the edges. The first chooses each edge's
+// Routing takes three passes over the edges. The first chooses each edge's
 // sides on the bare grid; ports are then assigned per side. The second
 // routes each edge through its chosen sides, moves each subgraph border
 // crossing to a free cell of the border, places its label, and reserves
-// the label's cells against the edges after it. A line is never drawn under
-// a label: a label a later path runs under is placed again, or dropped.
+// the label's cells against the edges after it. The third assigns gap lanes
+// from every grid path, then converts each path again with its runs in
+// their lanes and places every label again. A line is never drawn under a
+// label: a label a later path runs under is placed again, or dropped.
 func RouteEdgesWith(g *graph.Graph, l *layout.GridLayout, ellipsis string, warn io.Writer) []RoutedEdge {
 	direction := g.Direction.Normalized()
 	l.Reserved = nil
@@ -151,24 +153,17 @@ func RouteEdgesWith(g *graph.Graph, l *layout.GridLayout, ellipsis string, warn 
 		reqEnd[i].ports[reqWhich[i]] = port
 	}
 
-	// Pass 2: paths, draw paths, labels.
-	soft = make(map[Point]Axis)
-	space := newLabelSpace(g, l, aprons(g, ends, direction), warn)
-	borders := newBorderPorts(l)
-	var routed []RoutedEdge
+	// finish converts edge i's grid path to its draw path and places its
+	// label, appending to routed.
+	apr := aprons(g, ends, direction)
+	paths := make([][]Point, len(g.Edges))
+	arrows := make([][2]bool, len(g.Edges))
 	for i, edge := range g.Edges {
-		e := ends[i]
-		if e == nil {
-			continue
-		}
-		var path []Point
-		if e.self {
-			path = selfPath(e.src)
-		} else {
-			path = routeThrough(e, ends, l, direction, &Obstacles{Soft: soft, Border: border})
-		}
-		Occupy(soft, path)
-
+		arrows[i] = [2]bool{edge.HasArrowStart, edge.HasArrowEnd}
+	}
+	var routed []RoutedEdge
+	finish := func(i int, space *labelSpace, borders *borderPorts, lanes []int) {
+		e, edge, path := ends[i], g.Edges[i], paths[i]
 		var srcSG, tgtSG *layout.SubgraphBounds
 		if e.src.Block {
 			srcSG = sgBounds[edge.Source]
@@ -176,7 +171,7 @@ func RouteEdgesWith(g *graph.Graph, l *layout.GridLayout, ellipsis string, warn 
 		if e.tgt.Block {
 			tgtSG = sgBounds[edge.Target]
 		}
-		dp, crossings := borders.route(e, ends, l, path, srcSG, tgtSG, space.lines, [2]bool{edge.HasArrowStart, edge.HasArrowEnd})
+		dp, crossings := borders.route(e, ends, l, path, srcSG, tgtSG, space.lines, arrows[i], lanes)
 
 		re := RoutedEdge{
 			Edge:          edge,
@@ -204,6 +199,38 @@ func RouteEdgesWith(g *graph.Graph, l *layout.GridLayout, ellipsis string, warn 
 				}
 			}
 		}
+	}
+
+	// Pass 2: paths, with each label placed so the edges after it route
+	// around it. These draw paths and labels are provisional.
+	soft = make(map[Point]Axis)
+	space := newLabelSpace(g, l, apr, nil)
+	borders := newBorderPorts(l)
+	for i := range g.Edges {
+		e := ends[i]
+		if e == nil {
+			continue
+		}
+		if e.self {
+			paths[i] = selfPath(e.src)
+		} else {
+			paths[i] = routeThrough(e, ends, l, direction, &Obstacles{Soft: soft, Border: border})
+		}
+		Occupy(soft, paths[i])
+		finish(i, space, borders, nil)
+	}
+
+	// Pass 3: gap lanes, then the draw paths and labels again.
+	l.Reserved = nil
+	space = newLabelSpace(g, l, apr, warn)
+	lanes := gapLanes(l, ends, paths, arrows, space.blocked)
+	borders = newBorderPorts(l)
+	routed = nil
+	for i := range g.Edges {
+		if ends[i] == nil {
+			continue
+		}
+		finish(i, space, borders, lanes[i])
 	}
 
 	return routed
@@ -359,11 +386,26 @@ func selfPath(src *layout.NodePlacement) []Point {
 	}
 }
 
-// drawPath converts a grid path to draw coordinates. Each end sits at its
-// port on the node border; the first and last runs carry the port's offset
-// to their first turn, and a path with no turn jogs between its two ports
-// on the centre line of its first gap cell.
-func drawPath(l *layout.GridLayout, path []Point, sides [2]AttachDir, ports [2]int) []Point {
+// drawPath converts a grid path to draw coordinates: the points of
+// drawPoints, each run moved to its gap lane, and straight runs joined.
+// lanes holds an offset per run of the points, or is nil.
+func drawPath(l *layout.GridLayout, path []Point, sides [2]AttachDir, ports [2]int, lanes []int) []Point {
+	pts := drawPoints(l, path, sides, ports)
+	for i, off := range lanes {
+		if off == 0 || i+1 >= len(pts) {
+			continue
+		}
+		vertical := pts[i].Col == pts[i+1].Col
+		pts[i], pts[i+1] = shifted(pts, i, vertical, cross(pts[i], vertical)+off)
+	}
+	return straighten(pts)
+}
+
+// drawPoints converts a grid path to one draw point per turn. Each end sits
+// at its port on the node border; the first and last runs carry the port's
+// offset to their first turn, and a path with no turn jogs between its two
+// ports on the centre line of its first gap cell.
+func drawPoints(l *layout.GridLayout, path []Point, sides [2]AttachDir, ports [2]int) []Point {
 	simp := SimplifyPath(path)
 	pts := make([]Point, len(simp))
 	for i, p := range simp {
@@ -391,20 +433,19 @@ func drawPath(l *layout.GridLayout, path []Point, sides [2]AttachDir, ports [2]i
 		} else {
 			j1, j2 = Point{pts[0].Col, corr.Row}, Point{pts[1].Col, corr.Row}
 		}
-		pts = []Point{pts[0], j1, j2, pts[1]}
-	} else {
-		if simp[1].Row == simp[0].Row {
-			pts[1].Row = pts[0].Row
-		} else {
-			pts[1].Col = pts[0].Col
-		}
-		if simp[m].Row == simp[m-1].Row {
-			pts[m-1].Row = pts[m].Row
-		} else {
-			pts[m-1].Col = pts[m].Col
-		}
+		return []Point{pts[0], j1, j2, pts[1]}
 	}
-	return straighten(pts)
+	if simp[1].Row == simp[0].Row {
+		pts[1].Row = pts[0].Row
+	} else {
+		pts[1].Col = pts[0].Col
+	}
+	if simp[m].Row == simp[m-1].Row {
+		pts[m-1].Row = pts[m].Row
+	} else {
+		pts[m-1].Col = pts[m].Col
+	}
+	return pts
 }
 
 // straighten drops repeated points and points inside a straight run. Unlike

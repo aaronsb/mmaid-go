@@ -103,7 +103,7 @@ func TestDrawPathPorts(t *testing.T) {
 			[]Point{{6, 3}, {9, 3}, {9, 10}, {11, 10}}},
 	}
 	for _, c := range cases {
-		got := drawPath(l, c.path, sides, c.ports)
+		got := drawPath(l, c.path, sides, c.ports, nil)
 		if len(got) != len(c.want) {
 			t.Errorf("%s: %v, want %v", c.name, got, c.want)
 			continue
