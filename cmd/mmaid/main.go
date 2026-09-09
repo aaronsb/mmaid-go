@@ -452,6 +452,7 @@ func printUsage() {
 		{"venn-beta", "Set overlaps as filled circles"},
 		{"wardley-beta", "Value chain over evolution"},
 		{"cynefin-beta", "Sense-making across five domains"},
+		{"sankey-beta", "Flows between nodes, sized by value"},
 	}
 	maxKW := 0
 	for _, t := range types {
@@ -660,6 +661,15 @@ var demoSamples = map[string]string{
     tf 03 evt ItemAdded ->> 02
     tf 04 rmo CartView ->> 03
     tf 05 ui CartScreen ->> 04`,
+	"sankey": `sankey-beta
+
+%% source,target,value
+Coal,Electricity,45
+Gas,Electricity,30
+Solar,Electricity,15
+Electricity,Homes,40
+Electricity,Industry,35
+Electricity,"Losses, grid",15`,
 	"ishikawa": `ishikawa-beta
     Late Delivery
         Process
@@ -750,6 +760,7 @@ var demoTypes = []struct{ name, key string }{
 	{"Venn Diagram", "venn"},
 	{"Wardley Map", "wardley"},
 	{"Cynefin Framework", "cynefin"},
+	{"Sankey Diagram", "sankey"},
 }
 
 func runDemo(w io.Writer, themeName, diagramType string, opts ...mmaid.Option) {
@@ -787,6 +798,7 @@ func runDemo(w io.Writer, themeName, diagramType string, opts ...mmaid.Option) {
 			"venn-beta":    "venn",
 			"wardley-beta": "wardley",
 			"cynefin-beta": "cynefin",
+			"sankey-beta":  "sankey",
 		}
 		if mapped, ok2 := aliases[strings.ToLower(diagramType)]; ok2 {
 			source = demoSamples[mapped]

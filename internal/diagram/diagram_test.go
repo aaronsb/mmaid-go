@@ -1622,3 +1622,84 @@ func TestCellPathClipsToItsRectangle(t *testing.T) {
 		}
 	}
 }
+
+// ── Sankey ──────────────────────────────────────────────────────────────────
+
+func TestSankeyRowsAndNodeOrder(t *testing.T) {
+	sd := parseSankey(`sankey-beta
+
+%% source,target,value
+Coal,Electricity,45
+Gas,Electricity,30
+Electricity,Homes,60`)
+
+	if len(sd.links) != 3 {
+		t.Fatalf("links = %d, want 3", len(sd.links))
+	}
+	want := []string{"Coal", "Electricity", "Gas", "Homes"}
+	got := make([]string, len(sd.nodes))
+	for i, n := range sd.nodes {
+		got[i] = n.name
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("nodes = %v, want %v", got, want)
+	}
+	if e := sd.nodes[sd.index["Electricity"]]; e.in != 75 || e.out != 60 || e.value() != 75 {
+		t.Errorf("Electricity in=%v out=%v value=%v, want 75 60 75", e.in, e.out, e.value())
+	}
+}
+
+// A quoted field carries commas, and a pair of quotes inside one is a single
+// quote.
+func TestSankeyQuotedFields(t *testing.T) {
+	sd := parseSankey(`sankey
+Pumped heat,"Heating and cooling, ""homes""",193.026`)
+
+	if len(sd.links) != 1 {
+		t.Fatalf("links = %+v", sd.links)
+	}
+	if got := sd.links[0].target; got != `Heating and cooling, "homes"` {
+		t.Errorf("target = %q", got)
+	}
+	if sd.links[0].value != 193.026 {
+		t.Errorf("value = %v, want 193.026", sd.links[0].value)
+	}
+}
+
+// A row is dropped when it does not hold three fields, or when the third one
+// is not a number.
+func TestSankeyMalformedRowsDropped(t *testing.T) {
+	sd := parseSankey("sankey\nA,B\nA,B,C,4\nA,B,many\nA,B,1")
+	if len(sd.links) != 1 {
+		t.Fatalf("links = %+v, want the last row only", sd.links)
+	}
+}
+
+// Depth is the longest path from a source, so a node sits right of every node
+// feeding it.
+func TestSankeyDepthIsLongestPath(t *testing.T) {
+	sd := parseSankey("sankey\nA,B,1\nB,C,1\nA,C,1")
+	sankeyDepths(sd)
+	for name, want := range map[string]int{"A": 0, "B": 1, "C": 2} {
+		if got := sd.nodes[sd.index[name]].depth; got != want {
+			t.Errorf("%s depth = %d, want %d", name, got, want)
+		}
+	}
+}
+
+// A cycle stops the depth walk instead of running forever.
+func TestSankeyCycleTerminates(t *testing.T) {
+	assertCanvasNotEmpty(t, RenderSankey("sankey\nA,B,1\nB,A,1", renderer.UNICODE, nil))
+}
+
+func TestSankeyRendersLabelsWithValues(t *testing.T) {
+	c := RenderSankey("sankey-beta\nCoal,Electricity,45\nElectricity,Homes,45", renderer.UNICODE, nil)
+	assertCanvasContains(t, c, "Coal 45")
+	assertCanvasContains(t, c, "Electricity 45")
+	assertCanvasContains(t, c, "Homes 45")
+}
+
+func TestSankeyEmpty(t *testing.T) {
+	c := RenderSankey("sankey-beta", renderer.UNICODE, nil)
+	assertCanvasContains(t, c, "[sankey] no links")
+}
