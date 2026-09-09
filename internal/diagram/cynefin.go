@@ -25,18 +25,29 @@ import (
 // cliff among them.
 
 type cynefinDomain struct {
-	key      string
-	name     string
-	practice string
+	key   string
+	name  string
+	model []string // the decision model, one step per entry
+	kind  string   // the practice the model yields
+}
+
+// practice reads "Probe · Sense · Respond — emergent practice", the
+// punctuation coming from the glyph set so an ASCII render carries no
+// Unicode. The string is the port's own, not the grammar's.
+func (d cynefinDomain) practice(m chartMarks) string {
+	if len(d.model) == 0 {
+		return d.kind
+	}
+	return strings.Join(d.model, " "+m.separate+" ") + " " + m.dash + " " + d.kind
 }
 
 // cynefinDomains is the fixed five, in the order they are drawn.
 var cynefinDomains = []cynefinDomain{
-	{"complex", "Complex", "Probe · Sense · Respond — emergent practice"},
-	{"complicated", "Complicated", "Sense · Analyse · Respond — good practice"},
-	{"chaotic", "Chaotic", "Act · Sense · Respond — novel practice"},
-	{"clear", "Clear", "Sense · Categorise · Respond — best practice"},
-	{"confusion", "Confusion", "which domain is unknown"},
+	{"complex", "Complex", []string{"Probe", "Sense", "Respond"}, "emergent practice"},
+	{"complicated", "Complicated", []string{"Sense", "Analyse", "Respond"}, "good practice"},
+	{"chaotic", "Chaotic", []string{"Act", "Sense", "Respond"}, "novel practice"},
+	{"clear", "Clear", []string{"Sense", "Categorise", "Respond"}, "best practice"},
+	{"confusion", "Confusion", nil, "which domain is unknown"},
 }
 
 type cynefinMove struct {
@@ -99,10 +110,24 @@ func parseCynefin(source string) *cynefinFramework {
 	return cf
 }
 
+// cynefinLayout is where the frame, the four quadrants and the Confusion
+// region sit once the canvas width is known.
+type cynefinLayout struct {
+	c                        *renderer.Canvas
+	cs                       renderer.CharSet
+	marks                    chartMarks
+	theme                    *renderer.Theme
+	region                   bool
+	top, bottom, left, right int
+	midRow, midCol           int
+	confTop, confBottom      int
+	confLeft, confRight      int
+	quadrants                [4][4]int // top, bottom, left, right per domain
+}
+
 // RenderCynefin parses and renders a Mermaid Cynefin diagram.
 func RenderCynefin(source string, cs renderer.CharSet, theme *renderer.Theme) *renderer.Canvas {
 	cf := parseCynefin(source)
-	bullet, arrowRight := cs.Dot, cs.ArrowRight
 
 	plotH := 24
 	plotW := scaleWidth(4, 60, maxScaledWidth)
@@ -131,123 +156,166 @@ func RenderCynefin(source string, cs renderer.CharSet, theme *renderer.Theme) *r
 		c.PutText(0, max((canvasWidth-textwidth.String(cf.title))/2, 0), cf.title, "bold_label")
 	}
 
-	top, bottom := titleRows, titleRows+plotH-1
-	left, right := 0, plotW-1
 	midCol := plotW / 2
-	midRow := top + plotH/2
-
-	confHalf := 11
-	confLeft, confRight := midCol-confHalf, midCol+confHalf
-	confTop, confBottom := midRow-2, midRow+3
-
-	// Regions first, so the frame and the text sit over the fill.
-	regions := [][4]int{
-		{top + 1, midRow - 1, left + 1, midCol - 1},     // complex
-		{top + 1, midRow - 1, midCol + 1, right - 1},    // complicated
-		{midRow + 1, bottom - 1, left + 1, midCol - 1},  // chaotic
-		{midRow + 1, bottom - 1, midCol + 1, right - 1}, // clear
+	midRow := titleRows + plotH/2
+	const confHalf = 11
+	l := cynefinLayout{
+		c: c, cs: cs, marks: marksFor(cs), theme: theme,
+		region:     theme != nil && theme.HasDepthColors(),
+		top:        titleRows,
+		bottom:     titleRows + plotH - 1,
+		left:       0,
+		right:      plotW - 1,
+		midRow:     midRow,
+		midCol:     midCol,
+		confTop:    midRow - 2,
+		confBottom: midRow + 3,
+		confLeft:   midCol - confHalf,
+		confRight:  midCol + confHalf,
 	}
-	useRegion := theme != nil && theme.HasDepthColors()
-	if useRegion {
-		for i, reg := range regions {
-			fill := "_ansi:" + theme.RegionStyle(i, 0)
-			for r := reg[0]; r <= reg[1]; r++ {
-				for col := reg[2]; col <= reg[3]; col++ {
-					c.SetFill(r, col, fill)
-				}
-			}
-		}
+	l.quadrants = [4][4]int{
+		{l.top + 1, midRow - 1, l.left + 1, midCol - 1},     // complex
+		{l.top + 1, midRow - 1, midCol + 1, l.right - 1},    // complicated
+		{midRow + 1, l.bottom - 1, l.left + 1, midCol - 1},  // chaotic
+		{midRow + 1, l.bottom - 1, midCol + 1, l.right - 1}, // clear
 	}
 
-	c.Segment(top, left, top, right, glyph.Light, false, "edge")
-	c.Segment(bottom, left, bottom, right, glyph.Light, false, "edge")
-	c.Segment(top, left, bottom, left, glyph.Light, false, "edge")
-	c.Segment(top, right, bottom, right, glyph.Light, false, "edge")
-
-	// The ordered and unordered halves part along the middle, the divider
-	// opening around the Confusion region rather than running through it.
-	c.Segment(top, midCol, confTop, midCol, glyph.Light, false, "edge")
-	c.Segment(confBottom, midCol, bottom, midCol, glyph.Light, false, "edge")
-	c.Segment(midRow, left, midRow, confLeft, glyph.Light, false, "edge")
-	c.Segment(midRow, confRight, midRow, right, glyph.Light, false, "edge")
-
-	c.Segment(confTop, confLeft, confTop, confRight, glyph.Light, false, "node")
-	c.Segment(confBottom, confLeft, confBottom, confRight, glyph.Light, false, "node")
-	c.Segment(confTop, confLeft, confBottom, confLeft, glyph.Light, false, "node")
-	c.Segment(confTop, confRight, confBottom, confRight, glyph.Light, false, "node")
-	for r := confTop; r <= confBottom; r++ {
-		for col := confLeft; col <= confRight; col++ {
-			c.SetFill(r, col, "subgraph_fill")
-		}
-	}
-
-	// The Confusion region reaches into all four quadrants, so the two below
-	// it start under it and the two above it end over it.
-	for i, d := range cynefinDomains[:4] {
-		reg := regions[i]
-		style, subStyle := "subgraph_label", "label"
-		if useRegion {
-			style = "_ansi:" + theme.RegionLabelStyle(i, 0)
-			subStyle = style
-		}
-		col := reg[2] + 1
-		width := reg[3] - col + 1
-		nameRow, lastRow := reg[0]+1, confTop-1
-		if i >= 2 {
-			nameRow, lastRow = confBottom+1, reg[1]
-		}
-		c.PutText(nameRow, col, d.name, style)
-		c.PutText(nameRow+1, col, textwidth.Truncate(d.practice, width), subStyle)
-		row := nameRow + 3
-		for _, item := range cf.items[d.key] {
-			if row > lastRow {
-				break
-			}
-			c.Put(row, col, bullet, subStyle)
-			c.PutText(row, col+2, textwidth.Truncate(item, width-2), subStyle)
-			row++
-		}
-	}
-
-	// Confusion: a centred label and up to three items, the rest counted.
-	c.PutText(confTop+1, midCol-textwidth.String(cynefinDomains[4].name)/2, cynefinDomains[4].name, "subgraph_label")
-	conf := cf.items["confusion"]
-	shown := min(len(conf), 2)
-	for i, item := range conf[:shown] {
-		text := textwidth.Truncate(item, confRight-confLeft-1)
-		c.PutText(confTop+2+i, midCol-textwidth.String(text)/2, text, "label")
-	}
-	if len(conf) > shown {
-		more := fmt.Sprintf("+%d more", len(conf)-shown)
-		c.PutText(confTop+2+shown, midCol-textwidth.String(more)/2, more, "label")
-	}
-
-	drawCynefinMoves(c, cf.moves, bottom+2, plotW, arrowRight)
+	l.fillRegions()
+	l.drawFrame()
+	l.drawQuadrants(cf)
+	l.drawConfusion(cf)
+	l.drawMoves(cf)
 	return c
 }
 
-// drawCynefinMoves lists the transitions under the frame, each an arrow from
-// one domain name to the other with its label beside it.
-func drawCynefinMoves(c *renderer.Canvas, moves []cynefinMove, row, width int, arrowRight rune) {
+// fillRegions paints the four quadrants before anything is drawn over them.
+func (l cynefinLayout) fillRegions() {
+	if !l.region {
+		return
+	}
+	for i, q := range l.quadrants {
+		fill := "_ansi:" + l.theme.RegionStyle(i, 0)
+		for r := q[0]; r <= q[1]; r++ {
+			for col := q[2]; col <= q[3]; col++ {
+				l.c.SetFill(r, col, fill)
+			}
+		}
+	}
+}
+
+// drawFrame draws the border, the two dividers and the Confusion box. The
+// dividers stop on the box rather than running through it, so its border
+// resolves into tees and the centre reads as a region, not a crossing.
+func (l cynefinLayout) drawFrame() {
+	c := l.c
+	c.Segment(l.top, l.left, l.top, l.right, glyph.Light, false, "edge")
+	c.Segment(l.bottom, l.left, l.bottom, l.right, glyph.Light, false, "edge")
+	c.Segment(l.top, l.left, l.bottom, l.left, glyph.Light, false, "edge")
+	c.Segment(l.top, l.right, l.bottom, l.right, glyph.Light, false, "edge")
+
+	c.Segment(l.top, l.midCol, l.confTop, l.midCol, glyph.Light, false, "edge")
+	c.Segment(l.confBottom, l.midCol, l.bottom, l.midCol, glyph.Light, false, "edge")
+	c.Segment(l.midRow, l.left, l.midRow, l.confLeft, glyph.Light, false, "edge")
+	c.Segment(l.midRow, l.confRight, l.midRow, l.right, glyph.Light, false, "edge")
+
+	c.Segment(l.confTop, l.confLeft, l.confTop, l.confRight, glyph.Light, false, "node")
+	c.Segment(l.confBottom, l.confLeft, l.confBottom, l.confRight, glyph.Light, false, "node")
+	c.Segment(l.confTop, l.confLeft, l.confBottom, l.confLeft, glyph.Light, false, "node")
+	c.Segment(l.confTop, l.confRight, l.confBottom, l.confRight, glyph.Light, false, "node")
+	for r := l.confTop; r <= l.confBottom; r++ {
+		for col := l.confLeft; col <= l.confRight; col++ {
+			c.SetFill(r, col, "subgraph_fill")
+		}
+	}
+}
+
+// drawQuadrants writes each domain's name, its decision model and practice
+// type, and its items. The Confusion region reaches into all four quadrants,
+// so the two below it start under it and the two above it end over it, and a
+// quadrant with more items than rows counts the rest the way Confusion does.
+func (l cynefinLayout) drawQuadrants(cf *cynefinFramework) {
+	for i, d := range cynefinDomains[:4] {
+		q := l.quadrants[i]
+		style, subStyle := "subgraph_label", "label"
+		if l.region {
+			style = "_ansi:" + l.theme.RegionLabelStyle(i, 0)
+			subStyle = style
+		}
+		col := q[2] + 1
+		width := q[3] - col + 1
+		nameRow, lastRow := q[0]+1, l.confTop-1
+		if i >= 2 {
+			nameRow, lastRow = l.confBottom+1, q[1]
+		}
+		l.c.PutText(nameRow, col, d.name, style)
+		l.c.PutText(nameRow+1, col, truncateMark(d.practice(l.marks), width, l.marks), subStyle)
+
+		items := cf.items[d.key]
+		rows := lastRow - (nameRow + 3) + 1
+		shown := len(items)
+		if shown > rows {
+			shown = max(rows-1, 0) // the last row counts what did not fit
+		}
+		row := nameRow + 3
+		for _, item := range items[:shown] {
+			l.c.Put(row, col, l.cs.Dot, subStyle)
+			l.c.PutText(row, col+2, truncateMark(item, width-2, l.marks), subStyle)
+			row++
+		}
+		if shown < len(items) && row <= lastRow {
+			l.c.PutText(row, col, fmt.Sprintf("+%d more", len(items)-shown), subStyle)
+		}
+	}
+}
+
+// drawConfusion writes the centre region's name and as many items as its box
+// holds, counting the rest.
+func (l cynefinLayout) drawConfusion(cf *cynefinFramework) {
+	name := cynefinDomains[4].name
+	l.c.PutText(l.confTop+1, l.midCol-textwidth.String(name)/2, name, "subgraph_label")
+
+	items := cf.items["confusion"]
+	rows := l.confBottom - (l.confTop + 2)
+	shown := len(items)
+	if shown > rows {
+		shown = max(rows-1, 0)
+	}
+	row := l.confTop + 2
+	for _, item := range items[:shown] {
+		text := truncateMark(item, l.confRight-l.confLeft-1, l.marks)
+		l.c.PutText(row, l.midCol-textwidth.String(text)/2, text, "label")
+		row++
+	}
+	if shown < len(items) {
+		more := fmt.Sprintf("+%d more", len(items)-shown)
+		l.c.PutText(row, l.midCol-textwidth.String(more)/2, more, "label")
+	}
+}
+
+// drawMoves lists the transitions under the frame, each an arrow from one
+// domain name to the other with its label beside it. Drawn across the
+// quadrants they would run through the item text they are about.
+func (l cynefinLayout) drawMoves(cf *cynefinFramework) {
 	name := map[string]string{}
 	for _, d := range cynefinDomains {
 		name[d.key] = d.name
 	}
 	fromW, toW := 0, 0
-	for _, m := range moves {
+	for _, m := range cf.moves {
 		fromW = max(fromW, textwidth.String(name[m.from]))
 		toW = max(toW, textwidth.String(name[m.to]))
 	}
-	for i, m := range moves {
-		r := row + i
-		c.PutText(r, 2, name[m.from], "label")
+	for i, m := range cf.moves {
+		r := l.bottom + 2 + i
+		l.c.PutText(r, 2, name[m.from], "label")
 		shaft := 2 + fromW + 1
-		c.Segment(r, shaft, r, shaft+3, glyph.Light, false, "arrow")
-		c.Put(r, shaft+3, arrowRight, "arrow")
-		c.PutText(r, shaft+5, name[m.to], "label")
-		if m.label != "" {
-			col := shaft + 5 + toW + 2
-			c.PutText(r, col, textwidth.Truncate(m.label, max(width-col-1, 0)), "label")
+		l.c.Segment(r, shaft, r, shaft+3, glyph.Light, false, "arrow")
+		l.c.Put(r, shaft+3, l.cs.ArrowRight, "arrow")
+		l.c.PutText(r, shaft+5, name[m.to], "label")
+		if m.label == "" {
+			continue
 		}
+		col := shaft + 5 + toW + 2
+		l.c.PutText(r, col, truncateMark(m.label, max(l.c.Width-col-1, 0), l.marks), "label")
 	}
 }

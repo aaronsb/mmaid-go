@@ -1580,6 +1580,22 @@ func TestWardleyStageNamesDoNotMerge(t *testing.T) {
 	}
 }
 
+func TestCynefinQuadrantCountsWhatDoesNotFit(t *testing.T) {
+	c := RenderCynefin("cynefin-beta\n  clear\n    \"One\"\n    \"Two\"\n    \"Three\"\n    \"Four\"\n    \"Five\"", renderer.UNICODE, nil)
+	assertCanvasContains(t, c, "+2 more")
+}
+
+func TestCynefinPracticeFollowsTheCharset(t *testing.T) {
+	unicode := cynefinDomains[0].practice(marksFor(renderer.UNICODE))
+	if unicode != "Probe · Sense · Respond — emergent practice" {
+		t.Errorf("unicode practice = %q", unicode)
+	}
+	ascii := cynefinDomains[0].practice(marksFor(renderer.ASCII))
+	if ascii != "Probe * Sense * Respond - emergent practice" {
+		t.Errorf("ascii practice = %q", ascii)
+	}
+}
+
 func TestTruncateMarkSaysWhereItCut(t *testing.T) {
 	m := marksFor(renderer.UNICODE)
 	if got := truncateMark("emergent practice", 30, m); got != "emergent practice" {
