@@ -1,4 +1,4 @@
-.PHONY: help all build test test-short test-visual clean install lint vet dist release check package version snap golden golden-record
+.PHONY: help all build test test-short test-visual clean install lint vet dist release check package version snap golden golden-record gallery
 
 BINARY := mmaid
 BUILD_DIR := .
@@ -41,6 +41,14 @@ golden: ## Compare fixtures against reference frames and run the lint
 
 golden-record: ## Rewrite reference frames (say which changed and why in the commit)
 	GOLDEN_RECORD=1 go test ./ -run TestGolden
+	$(MAKE) gallery
+
+GALLERY_DIR := docs/gallery
+
+gallery: ## Render every fixture from its reference frame into docs/gallery
+	@rm -rf $(SNAP_DIR)/gallery
+	GOLDEN_DUMP=$(SNAP_DIR)/gallery go test ./ -run TestGolden
+	python3 tools/gallery.py $(SNAP_DIR)/gallery testdata/fixtures $(GALLERY_DIR)
 
 lint: vet
 	@echo "Lint passed (go vet)"

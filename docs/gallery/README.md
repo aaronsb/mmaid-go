@@ -1,0 +1,380 @@
+# Gallery
+
+Every fixture in `testdata/fixtures`, rendered from its reference frame in
+`testdata/golden`. `make gallery` rebuilds this page; `make golden-record`
+rebuilds it after re-recording the references. A fixture's first line may
+carry a `%% mmaid:` directive naming the flags it renders with; the default
+is `-t default -w 120`.
+
+## block
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+block-beta
+    columns 3
+    A["Frontend"] B["API"] C["Database"]
+    D["Cache"]:2 E["Queue"]
+```
+
+![block](block.png)
+
+## class
+
+Rendered with `-t mono`.
+
+```mermaid
+classDiagram
+    class Animal {
+        +String name
+        +int age
+        +makeSound()
+    }
+    class Dog {
+        +fetch()
+    }
+    class Cat {
+        +purr()
+    }
+    Animal <|-- Dog
+    Animal <|-- Cat
+```
+
+![class](class.png)
+
+## edge-styles
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+graph LR
+    A -.-> B
+    B ==> C
+    C --- D
+    D <--> E
+```
+
+![edge-styles](edge-styles.png)
+
+## edge-styles-ascii
+
+Rendered with `-a`.
+
+```mermaid
+graph LR
+    A -.-> B
+    B ==> C
+    C --- D
+    D <--> E
+```
+
+![edge-styles-ascii](edge-styles-ascii.png)
+
+## er
+
+Rendered with `-a`.
+
+```mermaid
+erDiagram
+    CUSTOMER ||--o{ ORDER : places
+    ORDER ||--|{ LINE_ITEM : contains
+    PRODUCT ||--o{ LINE_ITEM : "ordered in"
+```
+
+![er](er.png)
+
+## flowchart
+
+Rendered with `-t blueprint`.
+
+```mermaid
+graph LR
+    A[Request] --> B{Auth?}
+    B -->|Yes| C[Process]
+    B -->|No| D[Reject]
+    C --> E[Response]
+```
+
+![flowchart](flowchart.png)
+
+## flowchart-cross
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+graph LR
+    A --> B
+    A --> C
+    A --> D
+    B --> E
+    C --> E
+    D --> E
+    E --> A
+    B --> D
+```
+
+![flowchart-cross](flowchart-cross.png)
+
+## gantt
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+gantt
+    title Sprint Plan
+    dateFormat YYYY-MM-DD
+    section Backend
+        API endpoints    :a1, 2026-03-17, 10d
+        Database work    :a2, 2026-03-20, 7d
+    section Frontend
+        UI components    :b1, 2026-03-19, 12d
+    section QA
+        Testing          :c1, after a2, 8d
+```
+
+![gantt](gantt.png)
+
+## gitgraph
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+gitGraph
+    commit
+    commit
+    branch develop
+    checkout develop
+    commit
+    commit
+    checkout main
+    merge develop
+    commit
+```
+
+![gitgraph](gitgraph.png)
+
+## journey
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+journey
+    title Ship a Feature
+    section Build
+        Write code   : 4: Dev
+        Run tests    : 3: Dev, CI
+    section Release
+        Code review  : 2: Dev, Lead
+        Deploy       : 5: Dev
+```
+
+![journey](journey.png)
+
+## kanban
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+kanban
+  col1[Backlog]
+    t1[Design API]
+    t2[Write tests]
+  col2[In Progress]
+    t3[Build parser]
+  col3[Done]
+    t4[Setup CI]
+```
+
+![kanban](kanban.png)
+
+## mindmap
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+mindmap
+  root((System))
+    Frontend
+      React
+      Tailwind
+    Backend
+      Go
+      PostgreSQL
+```
+
+![mindmap](mindmap.png)
+
+## packet
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+packet-beta
+    0-15: "Source Port"
+    16-31: "Destination Port"
+    32-63: "Sequence Number"
+    64-95: "Acknowledgment Number"
+    96-99: "Data Offset"
+    100-111: "Flags"
+    112-127: "Window"
+```
+
+![packet](packet.png)
+
+## pie
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+pie title Resource Allocation
+    "Compute" : 45
+    "Storage" : 25
+    "Network" : 15
+    "Security" : 10
+    "Other" : 5
+```
+
+![pie](pie.png)
+
+## quadrant
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+quadrantChart
+    title Priority Matrix
+    x-axis Low Effort --> High Effort
+    y-axis Low Impact --> High Impact
+    quadrant-1 Do First
+    quadrant-2 Schedule
+    quadrant-3 Delegate
+    quadrant-4 Eliminate
+    Feature A: [0.2, 0.8]
+    Feature B: [0.7, 0.9]
+    Feature C: [0.8, 0.3]
+    Feature D: [0.3, 0.4]
+```
+
+![quadrant](quadrant.png)
+
+## sequence
+
+Rendered with `-t blueprint`.
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant API
+    participant DB
+    Client->>API: GET /users
+    API->>DB: SELECT *
+    DB-->>API: rows
+    API-->>Client: 200 OK
+```
+
+![sequence](sequence.png)
+
+## state
+
+Rendered with `-t blueprint`.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Idle
+    Idle --> Processing : submit
+    Processing --> Review : complete
+    Review --> Idle : reject
+    Review --> Done : approve
+    Done --> [*]
+```
+
+![state](state.png)
+
+## state-label
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Idle
+    Idle --> Run : start
+    Run --> Idle : stop
+```
+
+![state-label](state-label.png)
+
+## subgraph-cross
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+graph LR
+    subgraph S1
+        A --> B
+    end
+    subgraph S2
+        C --> D
+    end
+    A --> C
+    B --> D
+```
+
+![subgraph-cross](subgraph-cross.png)
+
+## timeline
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+timeline
+    title Project Milestones
+    2024 Q1 : Requirements
+    2024 Q2 : Design : Prototype
+    2024 Q3 : Development
+    2024 Q4 : Launch
+```
+
+![timeline](timeline.png)
+
+## treemap
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+treemap-beta
+    "Services"
+        "API": 40
+        "Web": 30
+        "Worker": 20
+    "Infra"
+        "DB": 25
+        "Cache": 15
+```
+
+![treemap](treemap.png)
+
+## wide-label
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+graph LR
+    A[日本語テキスト] --> B[emoji 🚀 ok]
+```
+
+![wide-label](wide-label.png)
+
+## xychart
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+xychart-beta
+    title "Monthly Revenue"
+    x-axis [Jan, Feb, Mar, Apr, May]
+    y-axis "Revenue ($K)" 0 --> 100
+    bar [45, 52, 68, 73, 91]
+    line [45, 52, 68, 73, 91]
+```
+
+![xychart](xychart.png)
