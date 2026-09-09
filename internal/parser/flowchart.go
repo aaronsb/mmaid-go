@@ -127,6 +127,10 @@ var (
 
 	// Subgraph bracket pattern
 	reSubgraphBracket = regexp.MustCompile(`^(\S+)\s+\[(.+)\]`)
+
+	// click ID "url" and click ID href "url", with an optional tooltip or
+	// target after the URL.
+	reClick = regexp.MustCompile(`(?i)^click\s+(\S+)\s+(?:href\s+)?"([^"]*)"`)
 )
 
 // plainArrowDef defines a plain arrow pattern for matching.
@@ -268,6 +272,7 @@ func (p *flowchartParser) parseLine(line string) {
 		return
 	}
 	if strings.HasPrefix(lower, "click ") {
+		p.parseClick(line)
 		return
 	}
 
@@ -360,6 +365,18 @@ func (p *flowchartParser) parseClassAssignment(line string) {
 		if node, ok := p.g.Nodes[nodeID]; ok {
 			node.StyleClass = className
 		}
+	}
+}
+
+// parseClick records the URL from `click ID "url"` or `click ID href "url"` on
+// the node. A click that names a callback rather than a URL carries no link.
+func (p *flowchartParser) parseClick(line string) {
+	m := reClick.FindStringSubmatch(strings.TrimSpace(line))
+	if m == nil {
+		return
+	}
+	if node, ok := p.g.Nodes[m[1]]; ok {
+		node.Link = m[2]
 	}
 }
 

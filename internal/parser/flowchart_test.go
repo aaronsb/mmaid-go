@@ -186,6 +186,31 @@ func TestParseLinkStyle(t *testing.T) {
 	}
 }
 
+func TestParseClick(t *testing.T) {
+	g := ParseFlowchart(`graph LR
+  A[One] --> B[Two]
+  C[Three]
+  D[Four]
+  click A "https://example.com/a"
+  click B href "https://example.com/b" _blank
+  click C callback "a tooltip"
+`)
+	for id, want := range map[string]string{
+		"A": "https://example.com/a",
+		"B": "https://example.com/b",
+		"C": "",
+		"D": "",
+	} {
+		node, ok := g.Nodes[id]
+		if !ok {
+			t.Fatalf("node %s not found", id)
+		}
+		if node.Link != want {
+			t.Errorf("node %s link = %q, want %q", id, node.Link, want)
+		}
+	}
+}
+
 func TestSanitizeLabel_StripsControlChars(t *testing.T) {
 	tests := []struct {
 		input string
