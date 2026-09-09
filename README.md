@@ -149,7 +149,9 @@ Shapes are visually distinct and carry a small indicator in the upper-left corne
 mmaid [flags] [file]
 
 FLAGS
-  -a, --ascii          ASCII-only output
+  -a, --ascii          ASCII-only output (--glyphs ascii)
+      --glyphs NAME    Glyph set: unicode, rounded, heavy, double, legacy, ascii
+      --glyphs-sample  Print one sample line per glyph family and exit
   -t, --theme NAME     Color theme (use --themes to list)
   -v, --version        Print version
       --themes         List available themes
@@ -164,7 +166,7 @@ FLAGS
 
 SUBCOMMANDS
   mmaid config show    Every setting with its resolved value and source
-  mmaid config init    Probe the terminal and write its profile (not yet)
+  mmaid config init    Probe the terminal, ask what looks wrong, write its profile
 ```
 
 ## Configuration
@@ -194,6 +196,27 @@ and `false`. `mmaid config show` prints each one with the layer it came from.
 environment; `-t` still colours. `truecolor` false emits 256-colour
 approximations. `hyperlinks` true wraps the label of a node named by a
 `click ID "url"` line in an OSC 8 hyperlink, with or without a theme.
+
+### Glyph sets and families
+
+`--glyphs NAME` picks a built-in set: `unicode` (the default), `rounded`
+(every light corner rounded), `heavy`, `double`, `legacy` (bars and shades
+from Symbols for Legacy Computing), or `ascii`. The runes a set draws are
+grouped into families, `box-light`, `box-rounded`, `box-heavy`, `box-double`,
+`diagonals`, `arrows`, `blocks`, `braille`, `sextants`, `octants`,
+`legacy-fills` and `ascii`, and a profile's `failed` list names the ones the
+terminal's font lacks. A failed family is drawn from its fallback (heavy and
+double to light, light and the fills to ASCII) and nothing else changes.
+
+`mmaid config init` fills that list in. It keys the profile by `TERM_PROGRAM`,
+else `TERM`, names the terminal from its DA1 response in the report and the
+profile's `terminal` field, reads truecolor from `COLORTERM`, and measures how
+far each family's sample advances the cursor, marking a family whose advance
+is wrong as failed. It then prints one numbered line per family
+beside the same figure in the fallback set and asks which lines look wrong.
+The answers merge into the terminal's profile as `truecolor` and `failed`;
+`--no-probe` skips the terminal queries and `--force` replaces an existing
+profile without asking. `mmaid --glyphs-sample` prints the same sheet.
 
 ## Themes
 

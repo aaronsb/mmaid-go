@@ -97,7 +97,8 @@ func parseQuadrant(source string) *quadrantData {
 }
 
 // RenderQuadrantChart parses and renders a Mermaid quadrant chart.
-func RenderQuadrantChart(source string, useASCII bool, theme *renderer.Theme) *renderer.Canvas {
+func RenderQuadrantChart(source string, cs renderer.CharSet, theme *renderer.Theme) *renderer.Canvas {
+	useASCII := cs.ASCII
 	qd := parseQuadrant(source)
 
 	plotH := 20
@@ -121,9 +122,7 @@ func RenderQuadrantChart(source string, useASCII bool, theme *renderer.Theme) *r
 	canvasHeight := titleRows + plotH + 4 // +4 for x-axis labels and axis line
 
 	c := renderer.NewCanvas(canvasWidth, canvasHeight)
-	if useASCII {
-		c.SetCharSet(renderer.ASCII)
-	}
+	c.SetCharSet(cs)
 
 	// Wallpaper: base background behind entire diagram
 	if theme != nil && theme.HasDepthColors() {

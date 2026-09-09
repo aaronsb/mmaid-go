@@ -23,7 +23,7 @@ func TestEdgeInvariant(t *testing.T) {
 	const paddingX, paddingY = 4, 2
 	l := layout.ComputeLayout(g, paddingX, paddingY, 0)
 	routed := routing.RouteEdges(g, l)
-	canvas := RenderGraphCanvas(g, false, paddingX, paddingY, true, 0)
+	canvas := RenderGraphCanvas(g, UNICODE, paddingX, paddingY, true, 0)
 	if canvas == nil {
 		t.Fatal("no canvas")
 	}

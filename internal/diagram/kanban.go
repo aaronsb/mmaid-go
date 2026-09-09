@@ -64,7 +64,8 @@ func parseKanban(source string) *kanbanBoard {
 // RenderKanban parses and renders a Mermaid kanban board.
 // When a theme with depth colors is provided, each column gets a distinct hue
 // and cards get a lighter shade (per-section hue + per-depth shade).
-func RenderKanban(source string, useASCII bool, theme *renderer.Theme) *renderer.Canvas {
+func RenderKanban(source string, cs renderer.CharSet, theme *renderer.Theme) *renderer.Canvas {
+	useASCII := cs.ASCII
 	kb := parseKanban(source)
 	if len(kb.columns) == 0 {
 		c := renderer.NewCanvas(30, 1)
@@ -118,9 +119,7 @@ func RenderKanban(source string, useASCII bool, theme *renderer.Theme) *renderer
 	canvasHeight := colHeight + 1
 
 	c := renderer.NewCanvas(totalWidth+1, canvasHeight)
-	if useASCII {
-		c.SetCharSet(renderer.ASCII)
-	}
+	c.SetCharSet(cs)
 
 	vLine := '│'
 	tl := '┌'

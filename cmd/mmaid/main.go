@@ -18,6 +18,7 @@ import (
 	mmaid "github.com/aaronsb/mmaid-go"
 	"github.com/aaronsb/mmaid-go/internal/cells"
 	"github.com/aaronsb/mmaid-go/internal/diagram"
+	"github.com/aaronsb/mmaid-go/internal/glyph"
 	"github.com/aaronsb/mmaid-go/internal/ingest"
 	"github.com/aaronsb/mmaid-go/internal/renderer"
 	"github.com/aaronsb/mmaid-go/internal/textwidth"
@@ -41,12 +42,6 @@ const (
 )
 
 func main() {
-	// The config subcommand takes no flags and is dispatched before flag.Parse.
-	if len(os.Args) > 1 && os.Args[1] == "config" {
-		runConfig(os.Args[2:])
-		return
-	}
-
 	// GNU-style: both short (-a) and long (--ascii) forms
 	var (
 		ascii       bool
@@ -70,6 +65,8 @@ func main() {
 		cellsLint   bool
 		output      string
 		watch       bool
+		glyphs      string
+		glyphSample bool
 	)
 
 	flag.BoolVar(&ascii, "ascii", false, "")
@@ -98,9 +95,16 @@ func main() {
 	flag.BoolVar(&cellsLint, "cells-lint", false, "")
 	flag.StringVar(&output, "output", "", "")
 	flag.BoolVar(&watch, "watch", false, "")
+	flag.StringVar(&glyphs, "glyphs", "", "")
+	flag.BoolVar(&glyphSample, "glyphs-sample", false, "")
 
 	flag.Usage = func() { printUsage() }
 	flag.Parse()
+
+	// The config subcommand is dispatched once the settings are applied, so
+	// it measures text the way a render would; flag.Parse stops at its name
+	// and leaves it and its own flags in flag.Args.
+	isConfig := flag.Arg(0) == "config"
 
 	if cellsPath != "" && (markdown || insert != "") {
 		fmt.Fprintf(os.Stderr, "%smmaid:%s --cells cannot be combined with --markdown or --insert\n", ansiBold+ansiCyan, ansiReset)
@@ -131,15 +135,21 @@ func main() {
 	// Resolution order: flag, MMAID_*, the terminal's profile, the file's
 	// default section, the built-in default (ADR-500). A file that cannot be
 	// read is a warning: it must not stand between the user and a render.
+	// The config subcommand reports the file's problems itself.
 	res, _, err := resolveSettings()
-	if err != nil {
+	if err != nil && !isConfig {
 		fmt.Fprintf(os.Stderr, "%smmaid:%s config: %v\n", ansiBold+ansiCyan, ansiReset, err)
 	}
-	for _, w := range res.Warnings {
-		fmt.Fprintf(os.Stderr, "%smmaid:%s config: %s\n", ansiBold+ansiCyan, ansiReset, w)
+	if !isConfig {
+		for _, w := range res.Warnings {
+			fmt.Fprintf(os.Stderr, "%smmaid:%s config: %s\n", ansiBold+ansiCyan, ansiReset, w)
+		}
 	}
 	theme = res.Theme
-	ascii = res.Glyphs == "ascii"
+	glyphs = glyphSet(res.Glyphs).Name
+	if !isConfig {
+		warnUnknownFamilies(res.Failed)
+	}
 	paddingX, paddingY = res.PaddingX, res.PaddingY
 	sharpEdges = res.SharpEdges
 
@@ -156,18 +166,31 @@ func main() {
 	renderer.SetTruecolor(res.Truecolor)
 	textwidth.SetAmbiguousWide(res.AmbiguousWide)
 
+	if isConfig {
+		runConfig(flag.Args()[1:])
+		return
+	}
+
+	if glyphSample {
+		w, closeOut := openOutput(output)
+		fmt.Fprintln(w, mmaid.GlyphSheet(glyphs, res.Failed))
+		closeOut()
+		os.Exit(0)
+	}
+
 	if demo != "" {
 		if theme == "" {
 			theme = "default"
 		}
 		w, closeOut := openOutput(output)
-		runDemo(w, theme, demo)
+		runDemo(w, theme, demo, mmaid.WithGlyphs(glyphs, res.Failed))
 		closeOut()
 		os.Exit(0)
 	}
 
 	out := outputSpec{
-		ascii:      ascii,
+		glyphs:     glyphs,
+		failed:     res.Failed,
 		paddingX:   paddingX,
 		paddingY:   paddingY,
 		sharpEdges: sharpEdges,
@@ -240,7 +263,8 @@ func main() {
 
 // outputSpec is what the render pass needs after the settings are resolved.
 type outputSpec struct {
-	ascii      bool
+	glyphs     string
+	failed     []string
 	paddingX   int
 	paddingY   int
 	sharpEdges bool
@@ -255,8 +279,8 @@ type outputSpec struct {
 
 func render(source string, o outputSpec) string {
 	var opts []mmaid.Option
-	if o.ascii {
-		opts = append(opts, mmaid.WithASCII())
+	if o.glyphs != "" || len(o.failed) > 0 {
+		opts = append(opts, mmaid.WithGlyphs(o.glyphs, o.failed))
 	}
 	if o.paddingX != 4 || o.paddingY != 2 {
 		opts = append(opts, mmaid.WithPadding(o.paddingX, o.paddingY))
@@ -368,7 +392,9 @@ func printUsage() {
 	fmt.Fprintf(w, "    cat diagram.mmd | mmaid -t blueprint\n")
 	fmt.Fprintf(w, "    lsblk -Jb | mmaid --json treemap -t blueprint\n\n")
 	fmt.Fprintf(w, "  %sFLAGS%s\n", ansiBold+ansiWhite, ansiReset)
-	fmt.Fprintf(w, "    %s-a%s, %s--ascii%s          Use ASCII characters instead of Unicode\n", ansiYellow, ansiReset, ansiYellow, ansiReset)
+	fmt.Fprintf(w, "    %s-a%s, %s--ascii%s          Use ASCII characters instead of Unicode (%s--glyphs ascii%s)\n", ansiYellow, ansiReset, ansiYellow, ansiReset, ansiYellow, ansiReset)
+	fmt.Fprintf(w, "        %s--glyphs%s %sNAME%s    Glyph set: %s\n", ansiYellow, ansiReset, ansiDim, ansiReset, strings.Join(glyph.SetNames, ", "))
+	fmt.Fprintf(w, "        %s--glyphs-sample%s  Print one sample line per glyph family and exit\n", ansiYellow, ansiReset)
 	fmt.Fprintf(w, "    %s-t%s, %s--theme%s %sNAME%s    Color theme (use %s--themes%s to list)\n", ansiYellow, ansiReset, ansiYellow, ansiReset, ansiDim, ansiReset, ansiYellow, ansiReset)
 	fmt.Fprintf(w, "    %s-v%s, %s--version%s        Print version and exit\n", ansiYellow, ansiReset, ansiYellow, ansiReset)
 	fmt.Fprintf(w, "        %s--themes%s         List available color themes\n", ansiYellow, ansiReset)
@@ -387,7 +413,7 @@ func printUsage() {
 	fmt.Fprintf(w, "        %s--cells-lint%s     With %s--cells%s, print structural lint findings to stderr\n\n", ansiYellow, ansiReset, ansiYellow, ansiReset)
 	fmt.Fprintf(w, "  %sCONFIG%s\n", ansiBold+ansiWhite, ansiReset)
 	fmt.Fprintf(w, "    %smmaid config show%s  Every setting with its resolved value and source\n", ansiYellow, ansiReset)
-	fmt.Fprintf(w, "    %smmaid config init%s  Probe the terminal and write its profile (not implemented yet)\n", ansiYellow, ansiReset)
+	fmt.Fprintf(w, "    %smmaid config init%s  Probe the terminal, ask which glyph families look wrong, write its profile\n", ansiYellow, ansiReset)
 	fmt.Fprintf(w, "    %sFile%s      %s$XDG_CONFIG_HOME/mmaid/config.json%s, else ~/.config/mmaid/config.json\n", ansiDim, ansiReset, ansiDim, ansiReset)
 	fmt.Fprintf(w, "    %sOrder%s     flag, %sMMAID_*%s, the terminal's profile, the file's default, built in\n", ansiDim, ansiReset, ansiDim, ansiReset)
 	fmt.Fprintf(w, "    %sColour%s    %sNO_COLOR%s disables a theme that came from the file or the environment\n\n", ansiDim, ansiReset, ansiDim, ansiReset)
@@ -637,7 +663,7 @@ var demoTypes = []struct{ name, key string }{
 	{"Use Case Diagram", "usecase"},
 }
 
-func runDemo(w io.Writer, themeName, diagramType string) {
+func runDemo(w io.Writer, themeName, diagramType string, opts ...mmaid.Option) {
 	if _, ok := renderer.Themes[themeName]; !ok {
 		fmt.Fprintf(os.Stderr, "%smmaid:%s unknown theme %q (use --themes to list)\n", ansiBold+ansiCyan, ansiReset, themeName)
 		os.Exit(1)
@@ -648,7 +674,7 @@ func runDemo(w io.Writer, themeName, diagramType string) {
 	if diagramType == "all" {
 		for _, s := range demoTypes {
 			fmt.Fprintf(w, "\n  %s%s%s\n\n", ansiBold+ansiWhite, s.name, ansiReset)
-			result := mmaid.Render(demoSamples[s.key], mmaid.WithTheme(themeName))
+			result := mmaid.Render(demoSamples[s.key], append(opts, mmaid.WithTheme(themeName))...)
 			fmt.Fprintln(w, result)
 		}
 		return
@@ -675,7 +701,7 @@ func runDemo(w io.Writer, themeName, diagramType string) {
 		}
 	}
 
-	result := mmaid.Render(source, mmaid.WithTheme(themeName))
+	result := mmaid.Render(source, append(opts, mmaid.WithTheme(themeName))...)
 	fmt.Fprintln(w, result)
 }
 

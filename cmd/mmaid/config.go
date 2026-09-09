@@ -1,12 +1,16 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/aaronsb/mmaid-go/internal/config"
+	"github.com/aaronsb/mmaid-go/internal/glyph"
+	"github.com/aaronsb/mmaid-go/internal/tester"
 )
 
 // flagSettings reads the settings the command line actually named. A flag left
@@ -43,6 +47,8 @@ func flagSettings() config.Settings {
 		case "sharp-edges":
 			on := value == "true"
 			s.SharpEdges = &on
+		case "glyphs":
+			s.Glyphs = &value
 		}
 	})
 	return s
@@ -68,8 +74,7 @@ func runConfig(args []string) {
 	case "show":
 		printConfigShow()
 	case "init":
-		fmt.Fprintln(os.Stderr, "not implemented yet: see ADR-500")
-		os.Exit(2)
+		runConfigInit(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "%smmaid:%s config: unknown subcommand %q\n", ansiBold+ansiCyan, ansiReset, args[0])
 		printConfigUsage()
@@ -81,7 +86,115 @@ func printConfigUsage() {
 	w := os.Stderr
 	fmt.Fprintf(w, "\n  %smmaid config%s\n\n", ansiBold+ansiCyan, ansiReset)
 	fmt.Fprintf(w, "    %sshow%s   Print every setting with its resolved value and source\n", ansiYellow, ansiReset)
-	fmt.Fprintf(w, "    %sinit%s   Probe the terminal and write its profile (not implemented yet)\n\n", ansiYellow, ansiReset)
+	fmt.Fprintf(w, "    %sinit%s   Probe the terminal, ask which glyph families look wrong, write its profile\n", ansiYellow, ansiReset)
+	fmt.Fprintf(w, "           %s--no-probe%s asks only; %s--force%s replaces an existing profile without asking\n\n", ansiYellow, ansiReset, ansiYellow, ansiReset)
+}
+
+// glyphSet returns the built-in set a name selects, warning on stderr and
+// using unicode when the name is unknown.
+func glyphSet(name string) glyph.Set {
+	set, ok := glyph.LookupSet(name)
+	if !ok {
+		fmt.Fprintf(os.Stderr, "%smmaid:%s unknown glyph set %q (one of %s); using unicode\n",
+			ansiBold+ansiCyan, ansiReset, name, strings.Join(glyph.SetNames, ", "))
+		return glyph.DefaultSet()
+	}
+	return set
+}
+
+// warnUnknownFamilies reports failed-list entries that name no family.
+func warnUnknownFamilies(failed []string) {
+	_, unknown := glyph.ParseFamilies(failed)
+	for _, name := range unknown {
+		fmt.Fprintf(os.Stderr, "%smmaid:%s failed: %q is not a glyph family, ignored\n", ansiBold+ansiCyan, ansiReset, name)
+	}
+}
+
+// runConfigInit is the tester: probe, ask, write, show.
+func runConfigInit(args []string) {
+	fs := flag.NewFlagSet("config init", flag.ExitOnError)
+	noProbe := fs.Bool("no-probe", false, "ask only; do not query the terminal")
+	force := fs.Bool("force", false, "replace an existing profile without asking")
+	fs.Usage = func() {
+		fmt.Fprintln(os.Stderr, "usage: mmaid config init [--no-probe] [--force]")
+	}
+	if err := fs.Parse(args); err != nil {
+		os.Exit(2)
+	}
+	fail := func(err error) {
+		fmt.Fprintf(os.Stderr, "%smmaid:%s config init: %v\n", ansiBold+ansiCyan, ansiReset, err)
+		os.Exit(1)
+	}
+
+	_, path, err := resolveSettings()
+	if err != nil {
+		fail(err)
+	}
+	if path == "" {
+		fail(fmt.Errorf("nowhere to write: neither XDG_CONFIG_HOME nor HOME is set"))
+	}
+	// Every family in its own runes, whatever set the configuration names.
+	samples := tester.Samples()
+
+	// One reader on stdin: the probes read the file directly in raw mode
+	// and every cooked-mode prompt reads through this.
+	stdin := bufio.NewReader(os.Stdin)
+
+	probe := tester.FromEnv()
+	if !*noProbe {
+		var restoreErr error
+		probe, restoreErr = tester.Probe(os.Stdin, os.Stdout, samples)
+		if restoreErr != nil {
+			fmt.Fprintf(os.Stderr, "%smmaid:%s restoring the terminal: %v\n", ansiBold+ansiCyan, ansiReset, restoreErr)
+		}
+	}
+	if probe.Identity == "" {
+		fail(fmt.Errorf("no terminal identity: neither TERM_PROGRAM nor TERM is set"))
+	}
+	fmt.Printf("identity   %s\n", probe.Identity)
+	switch {
+	case probe.Terminal != "":
+		fmt.Printf("terminal   %s (DA1)\n", probe.Terminal)
+	case *noProbe:
+		fmt.Println("terminal   not probed (--no-probe)")
+	default:
+		fmt.Println("terminal   unknown (no DA1 answer)")
+	}
+	fmt.Printf("truecolor  %t (COLORTERM)\n", probe.Truecolor)
+	switch {
+	case *noProbe:
+		fmt.Println("probes     skipped (--no-probe)")
+	case probe.Probed:
+		fmt.Printf("probes     advance width checked for %d families; ambiguous_wide %t\n", len(samples)-1, probe.AmbiguousWide)
+	default:
+		fmt.Println("probes     skipped (not a terminal, or it did not answer)")
+	}
+	fmt.Println()
+
+	failures, err := tester.Ask(stdin, os.Stdout, samples, probe.Failed)
+	if err != nil {
+		fail(err)
+	}
+	tester.Report(os.Stdout, failures)
+	fmt.Println()
+
+	file, err := config.Load(path)
+	if err != nil {
+		fail(err)
+	}
+	if _, exists := file.Profiles[probe.Identity]; exists && !*force {
+		prompt := fmt.Sprintf("Profile %q exists in %s. Replace its truecolor, ambiguous_wide and failed keys?", probe.Identity, path)
+		if !tester.Confirm(stdin, os.Stdout, prompt) {
+			fmt.Println("left as it was")
+			return
+		}
+	}
+	tester.Merge(&file, probe, failures)
+	if err := config.Save(path, file); err != nil {
+		fail(err)
+	}
+	fmt.Printf("wrote %s\n\n", path)
+	printConfigShow()
 }
 
 // printConfigShow prints the resolved value and the source of every setting.

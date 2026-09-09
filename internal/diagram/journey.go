@@ -119,7 +119,7 @@ func journeyActorSymbols(useASCII bool) []rune {
 // `direction TB` directive in the diagram, or --orientation tb on the CLI,
 // renders it vertically instead — useful when many tasks would otherwise
 // sprawl past the terminal width.
-func RenderJourney(source string, useASCII bool, theme *renderer.Theme) *renderer.Canvas {
+func RenderJourney(source string, cs renderer.CharSet, theme *renderer.Theme) *renderer.Canvas {
 	jd := parseJourney(source)
 	if len(jd.sections) == 0 {
 		c := renderer.NewCanvas(30, 1)
@@ -127,14 +127,15 @@ func RenderJourney(source string, useASCII bool, theme *renderer.Theme) *rendere
 		return c
 	}
 	if resolveVertical(source, false) {
-		return renderJourneyVertical(jd, useASCII, theme)
+		return renderJourneyVertical(jd, cs, theme)
 	}
-	return renderJourneyHorizontal(jd, useASCII, theme)
+	return renderJourneyHorizontal(jd, cs, theme)
 }
 
 // renderJourneyHorizontal renders the journey as a left-to-right timeline of
 // task boxes grouped by section, with a satisfaction face under each task.
-func renderJourneyHorizontal(jd *journeyData, useASCII bool, theme *renderer.Theme) *renderer.Canvas {
+func renderJourneyHorizontal(jd *journeyData, cs renderer.CharSet, theme *renderer.Theme) *renderer.Canvas {
+	useASCII := cs.ASCII
 	var tl, tr, bl, br, vt, arrow rune
 	if useASCII {
 		tl, tr, bl, br, vt, arrow = '+', '+', '+', '+', '|', '>'
@@ -207,9 +208,7 @@ func renderJourneyHorizontal(jd *journeyData, useASCII bool, theme *renderer.The
 	totalH := faceRow + 2
 
 	c := renderer.NewCanvas(totalW+1, totalH+1)
-	if useASCII {
-		c.SetCharSet(renderer.ASCII)
-	}
+	c.SetCharSet(cs)
 
 	if jd.title != "" {
 		c.PutText(titleRow, 2, jd.title, "bold_label")
@@ -318,7 +317,8 @@ func renderJourneyHorizontal(jd *journeyData, useASCII bool, theme *renderer.The
 // with section headers, task boxes hanging off it, and the satisfaction face
 // plus actor markers to the right of each box. Used when `direction TB` or
 // --orientation tb is in effect; stays narrow regardless of task count.
-func renderJourneyVertical(jd *journeyData, useASCII bool, theme *renderer.Theme) *renderer.Canvas {
+func renderJourneyVertical(jd *journeyData, cs renderer.CharSet, theme *renderer.Theme) *renderer.Canvas {
+	useASCII := cs.ASCII
 	var hz, vt, tl, tr, bl, br, tee rune
 	if useASCII {
 		hz, vt, tl, tr, bl, br, tee = '-', '|', '+', '+', '+', '+', '+'
@@ -393,9 +393,7 @@ func renderJourneyVertical(jd *journeyData, useASCII bool, theme *renderer.Theme
 	totalRows := row + 1
 
 	c := renderer.NewCanvas(canvasW+1, totalRows)
-	if useASCII {
-		c.SetCharSet(renderer.ASCII)
-	}
+	c.SetCharSet(cs)
 	if useRegion {
 		for r := range totalRows {
 			for col := range canvasW + 1 {

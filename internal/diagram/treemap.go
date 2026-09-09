@@ -57,9 +57,9 @@ const (
 var reTreemapNode = regexp.MustCompile(`^(\s*)"([^"]+)"(?:\s*:\s*([0-9]+(?:\.[0-9]*)?))?`)
 
 // RenderTreemap parses and renders a Mermaid treemap diagram.
-func RenderTreemap(source string, useASCII bool, theme *renderer.Theme) *renderer.Canvas {
+func RenderTreemap(source string, cs renderer.CharSet, theme *renderer.Theme) *renderer.Canvas {
 	tm := parseTreemap(source)
-	return renderTreemap(tm, useASCII, theme)
+	return renderTreemap(tm, cs, theme)
 }
 
 func parseTreemap(source string) *treemap {
@@ -134,12 +134,7 @@ func parseTreemap(source string) *treemap {
 
 // ── renderer ─────────────────────────────────────────────────────
 
-func renderTreemap(tm *treemap, useASCII bool, theme *renderer.Theme) *renderer.Canvas {
-	cs := renderer.UNICODE
-	if useASCII {
-		cs = renderer.ASCII
-	}
-
+func renderTreemap(tm *treemap, cs renderer.CharSet, theme *renderer.Theme) *renderer.Canvas {
 	if len(tm.roots) == 0 {
 		return renderer.NewCanvas(1, 1)
 	}
@@ -158,9 +153,7 @@ func renderTreemap(tm *treemap, useASCII bool, theme *renderer.Theme) *renderer.
 	canvasW := max(minW, min(termW-2, max(60, int(float64(minW)*1.6))))
 
 	c := renderer.NewCanvas(canvasW, canvasH)
-	if useASCII {
-		c.SetCharSet(renderer.ASCII)
-	}
+	c.SetCharSet(cs)
 
 	// Render each root with its own section index for per-hue coloring
 	tmLayoutRoots(c, cs, tm.roots, 0, 0, canvasW, canvasH, theme)

@@ -279,17 +279,13 @@ type classBoxInfo struct {
 }
 
 // RenderClassDiagram parses and renders a Mermaid class diagram.
-func RenderClassDiagram(source string, useASCII bool) *renderer.Canvas {
+func RenderClassDiagram(source string, cs renderer.CharSet) *renderer.Canvas {
+	useASCII := cs.ASCII
 	cd := parseClassDiagram(source)
 	if len(cd.classOrder) == 0 {
 		c := renderer.NewCanvas(35, 1)
 		c.PutText(0, 0, "[class] no classes defined", "default")
 		return c
-	}
-
-	cs := renderer.UNICODE
-	if useASCII {
-		cs = renderer.ASCII
 	}
 
 	isLR := cd.direction == "LR"

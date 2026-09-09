@@ -7,17 +7,12 @@ import (
 )
 
 // RenderERDiagram parses and renders a Mermaid ER diagram.
-func RenderERDiagram(source string, useASCII bool) *renderer.Canvas {
+func RenderERDiagram(source string, cs renderer.CharSet) *renderer.Canvas {
 	erd := parseERDiagram(source)
 	if len(erd.entityOrder) == 0 {
 		c := renderer.NewCanvas(35, 1)
 		c.PutText(0, 0, "[er] no entities defined", "default")
 		return c
-	}
-
-	cs := renderer.UNICODE
-	if useASCII {
-		cs = renderer.ASCII
 	}
 
 	isLR := erd.direction == "LR"

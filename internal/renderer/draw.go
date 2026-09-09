@@ -15,8 +15,8 @@ import (
 const graphFillPercent = 75
 
 // RenderGraph renders a graph to a string.
-func RenderGraph(g *graph.Graph, useASCII bool, paddingX, paddingY int, roundedEdges bool) string {
-	canvas := RenderGraphCanvas(g, useASCII, paddingX, paddingY, roundedEdges, 0)
+func RenderGraph(g *graph.Graph, cs CharSet, paddingX, paddingY int, roundedEdges bool) string {
+	canvas := RenderGraphCanvas(g, cs, paddingX, paddingY, roundedEdges, 0)
 	if canvas == nil {
 		return ""
 	}
@@ -25,15 +25,9 @@ func RenderGraph(g *graph.Graph, useASCII bool, paddingX, paddingY int, roundedE
 
 // RenderGraphCanvas renders a graph to a Canvas.
 // maxWidth, if > 0, hints the target canvas width for gap scaling.
-func RenderGraphCanvas(g *graph.Graph, useASCII bool, paddingX, paddingY int, roundedEdges bool, maxWidth int) *Canvas {
+func RenderGraphCanvas(g *graph.Graph, cs CharSet, paddingX, paddingY int, roundedEdges bool, maxWidth int) *Canvas {
 	if len(g.NodeOrder) == 0 {
 		return nil
-	}
-
-	// Select charset
-	cs := UNICODE
-	if useASCII {
-		cs = ASCII
 	}
 
 	// Handle BT/RL by rendering as TB/LR then flipping

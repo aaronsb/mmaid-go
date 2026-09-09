@@ -1,5 +1,5 @@
 ---
-status: Proposed
+status: Accepted
 date: 2026-09-09
 deciders:
   - aaronsb
@@ -68,13 +68,16 @@ answer is asked.
 
 Probed, with a 200 ms timeout on each query:
 
-- terminal identity: `TERM_PROGRAM` when set, else DA1 (`ESC [ c`)
-  mapped to a known name, else `TERM`;
+- terminal identity: `TERM_PROGRAM` when set, else `TERM`; DA1 (`ESC [ c`)
+  names the terminal in the report and in the profile's `terminal` field;
 - truecolor: `COLORTERM` equal to `truecolor` or `24bit`;
 - advance width per family: print the family's sample with the cursor
   at a known column, request a cursor position report (`ESC [ 6 n`),
   and compare. A family whose sample advances by a different count than
-  its ADR-401 width is marked failed with the cause `advance`.
+  its ADR-401 width is marked failed with the cause `advance`;
+- ambiguous width, from the box-light sample's advance: twice its width
+  sets `ambiguous_wide` and fails nothing, and the other samples are then
+  judged against their ambiguous-wide widths.
 
 Raw mode for the probes uses `ioctl` through the `syscall` package on
 Linux and macOS. On Windows and on a non-tty, the probes are skipped and
@@ -105,8 +108,8 @@ Config is JSON at `$XDG_CONFIG_HOME/mmaid/config.json`, defaulting to
 }
 ```
 
-Profile keys are terminal identities as the probe reports them. Every
-key accepted in a profile is accepted in `default`: `theme`, `glyphs`,
+Profile keys are `TERM_PROGRAM`, else `TERM`. Every key accepted in a
+profile is accepted in `default`: `theme`, `glyphs`,
 `width`, `orientation`, `padding_x`, `padding_y`, `sharp_edges`,
 `truecolor`, `hyperlinks`, `ambiguous_wide`, `failed`.
 
@@ -157,6 +160,8 @@ clearing the screen between renders, polling at 250 ms.
   keys the profile to the wrong terminal. `mmaid config show` makes
   that visible.
 - Five resolution sources for each setting is a debugging surface.
+- Terminals that set neither `TERM_PROGRAM` nor a distinctive `TERM` share
+  a profile.
 
 ### Neutral
 
@@ -165,6 +170,18 @@ clearing the screen between renders, polling at 250 ms.
 - The CLI grows a `config` subcommand beside its flags.
 - Theme colours are unchanged by this ADR; base16 scheme files are a
   separate decision.
+- Only a family marked failed moves. Its chain walk skips failed links, so
+  `braille` and `blocks` both failed draws braille's roles in ASCII; an
+  unmarked family stays itself even when its fallback failed, so `blocks`
+  failed alone leaves the braille circle in place.
+- The `legacy` set binds the fills role to `legacy-fills`: bars and shades
+  from the U+1FB9x fills, and the pie's half-cell circle from the U+1FB8E
+  and U+1FB8F medium-shade halves, so it dithers. Everything else is the
+  unicode set.
+- The diamond and hexagon indicators belong to `diagonals` with the chamfers
+  they accompany; the circle markers belong to `arrows` with the endpoints.
+- The sample sheet is a specimen, not a diagram: the structural lint skips
+  it, as it skips ASCII frames.
 
 ## Alternatives Considered
 
@@ -175,7 +192,8 @@ clearing the screen between renders, polling at 250 ms.
   are answered by the terminal in under a second and a human answers
   them worse.
 - **TOML or YAML config.** Rejected: JSON needs no dependency.
-- **Key profiles by `TERM`.** Rejected: `xterm-256color` is every
-  terminal.
+- **Key profiles by `TERM` alone.** Rejected as the only key:
+  `xterm-256color` is every terminal. It is the fallback when
+  `TERM_PROGRAM` is absent.
 - **Detect the terminal on every run and skip the file.** Rejected: the
   visual answers cannot be re-derived on every run.

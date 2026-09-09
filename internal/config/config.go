@@ -28,6 +28,10 @@ type Settings struct {
 	Hyperlinks    *bool    `json:"hyperlinks,omitempty"`
 	AmbiguousWide *bool    `json:"ambiguous_wide,omitempty"`
 	Failed        []string `json:"failed,omitempty"`
+
+	// Terminal is the name the tester's DA1 probe detected. It is for the
+	// reader; resolution ignores it.
+	Terminal *string `json:"terminal,omitempty"`
 }
 
 // File is the on-disk shape: a default section and one section per terminal
@@ -171,6 +175,21 @@ func Load(path string) (File, error) {
 	return f, nil
 }
 
+// Save writes the file to path, creating its directory.
+func Save(path string, f File) error {
+	if path == "" {
+		return errors.New("no config path: neither XDG_CONFIG_HOME nor HOME is set")
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(f, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(data, '\n'), 0o644)
+}
+
 // isAbsent reports whether the error means there is no configuration file
 // there: no such path, a directory in place of the file, or a file where a
 // directory was expected.
@@ -181,7 +200,7 @@ func isAbsent(err error) bool {
 }
 
 // TerminalIdentity returns the key a profile is looked up by: TERM_PROGRAM when
-// the terminal sets it, else TERM.
+// the terminal sets it, else TERM. The tester and a render use the same key.
 func TerminalIdentity() string {
 	if p := os.Getenv("TERM_PROGRAM"); p != "" {
 		return p
@@ -189,11 +208,49 @@ func TerminalIdentity() string {
 	return os.Getenv("TERM")
 }
 
-// identityFromDA1 will map a DA1 response (ESC [ c) to a terminal name. The
-// probe needs raw mode, which arrives with the guided tester in the second half
-// of ADR-500; until then it reports nothing and TerminalIdentity falls back to
-// the environment.
-func identityFromDA1() string { return "" }
+// da1Names maps the parameters of a primary device attributes response,
+// `ESC [ ? Ps c` without its frame, to the terminal that sends them. Only
+// responses that name one terminal are listed; `1;2` is every VT100 clone.
+var da1Names = map[string]string{
+	"6":                        "Alacritty",
+	"62;":                      "kitty",
+	"62;4;22":                  "foot",
+	"65;1;9":                   "VTE",
+	"65;4;6;18;22":             "WezTerm",
+	"1;0":                      "WindowsTerminal",
+	"64;1;2;6;9;15;18;21;22":   "xterm",
+	"64;1;2;4;6;9;15;18;21;22": "xterm",
+}
+
+// identityFromDA1 maps a DA1 response to a terminal name. The response may
+// arrive with or without its `ESC [ ?` prefix and `c` final; an unknown or
+// malformed response is "".
+func identityFromDA1(response string) string {
+	s := strings.TrimSpace(response)
+	s = strings.TrimPrefix(s, "\x1b")
+	s = strings.TrimPrefix(s, "[")
+	s = strings.TrimPrefix(s, "?")
+	s = strings.TrimSuffix(s, "c")
+	if s == "" {
+		return ""
+	}
+	return da1Names[s]
+}
+
+// DetectTerminal names the terminal from its DA1 response. query sends
+// `ESC [ c` and returns what came back. The name goes in the tester's report
+// and the profile's terminal field; it keys nothing. Only the tester calls
+// it, so a render never writes to the terminal.
+func DetectTerminal(query func(string) (string, error)) string {
+	if query == nil {
+		return ""
+	}
+	response, err := query("\x1b[c")
+	if err != nil {
+		return ""
+	}
+	return identityFromDA1(response)
+}
 
 // resolver walks the layers for one setting and records where the answer came
 // from.

@@ -1255,15 +1255,9 @@ func drawSelfMessage(
 // ── Main render function ────────────────────────────────────────────
 
 // RenderSequence parses a Mermaid sequence diagram source and renders it to a Canvas.
-func RenderSequence(source string, useASCII bool) *renderer.Canvas {
+func RenderSequence(source string, cs renderer.CharSet) *renderer.Canvas {
+	useASCII := cs.ASCII
 	diagram := parseSequenceDiagram(source)
-
-	var cs renderer.CharSet
-	if useASCII {
-		cs = renderer.ASCII
-	} else {
-		cs = renderer.UNICODE
-	}
 
 	// Flatten events for linear layout
 	flatEvents := flattenEvents(diagram.events, 0)
@@ -1274,9 +1268,7 @@ func RenderSequence(source string, useASCII bool) *renderer.Canvas {
 	}
 
 	canvas := renderer.NewCanvas(layout.canvasWidth, layout.canvasHeight)
-	if useASCII {
-		canvas.SetCharSet(renderer.ASCII)
-	}
+	canvas.SetCharSet(cs)
 
 	// Compute activation ranges
 	activationRanges := computeActivationRanges(flatEvents, layout.rowOffsets)

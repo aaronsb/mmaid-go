@@ -104,7 +104,7 @@ func computeTimelineColWidth(td *timelineData) int {
 
 // RenderTimeline parses and renders a Mermaid timeline diagram.
 // Automatically switches to vertical layout when horizontal won't fit in the terminal.
-func RenderTimeline(source string, useASCII bool, theme *renderer.Theme) *renderer.Canvas {
+func RenderTimeline(source string, cs renderer.CharSet, theme *renderer.Theme) *renderer.Canvas {
 	td := parseTimeline(source)
 	if len(td.events) == 0 {
 		c := renderer.NewCanvas(30, 1)
@@ -117,13 +117,14 @@ func RenderTimeline(source string, useASCII bool, theme *renderer.Theme) *render
 	termW := usableWidth()
 
 	if horizontalWidth > termW {
-		return renderTimelineVertical(td, useASCII, theme)
+		return renderTimelineVertical(td, cs, theme)
 	}
-	return renderTimelineHorizontal(td, useASCII, theme, colWidth)
+	return renderTimelineHorizontal(td, cs, theme, colWidth)
 }
 
 // renderTimelineHorizontal renders the timeline with a horizontal axis.
-func renderTimelineHorizontal(td *timelineData, useASCII bool, theme *renderer.Theme, colWidth int) *renderer.Canvas {
+func renderTimelineHorizontal(td *timelineData, cs renderer.CharSet, theme *renderer.Theme, colWidth int) *renderer.Canvas {
+	useASCII := cs.ASCII
 	ch := getTimelineChars(useASCII)
 
 	maxItems := 0
@@ -145,9 +146,7 @@ func renderTimelineHorizontal(td *timelineData, useASCII bool, theme *renderer.T
 	canvasHeight := periodRow + 2
 
 	c := renderer.NewCanvas(canvasWidth, canvasHeight)
-	if useASCII {
-		c.SetCharSet(renderer.ASCII)
-	}
+	c.SetCharSet(cs)
 	useRegion := theme != nil && theme.HasDepthColors()
 
 	if useRegion {
@@ -239,7 +238,8 @@ func renderTimelineHorizontal(td *timelineData, useASCII bool, theme *renderer.T
 
 // renderTimelineVertical renders the timeline with a vertical axis.
 // Used when horizontal layout would exceed terminal width.
-func renderTimelineVertical(td *timelineData, useASCII bool, theme *renderer.Theme) *renderer.Canvas {
+func renderTimelineVertical(td *timelineData, cs renderer.CharSet, theme *renderer.Theme) *renderer.Canvas {
+	useASCII := cs.ASCII
 	ch := getTimelineChars(useASCII)
 	useRegion := theme != nil && theme.HasDepthColors()
 
@@ -282,9 +282,7 @@ func renderTimelineVertical(td *timelineData, useASCII bool, theme *renderer.The
 	totalRows++ // trailing space
 
 	c := renderer.NewCanvas(canvasWidth, totalRows)
-	if useASCII {
-		c.SetCharSet(renderer.ASCII)
-	}
+	c.SetCharSet(cs)
 
 	if useRegion {
 		for r := 0; r < totalRows; r++ {

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -329,5 +330,58 @@ func TestResolvedValueFormatting(t *testing.T) {
 	}
 	if got := r.Value(KeyFailed); got != "(none)" {
 		t.Errorf("failed value = %q", got)
+	}
+}
+
+func TestIdentityFromDA1(t *testing.T) {
+	cases := map[string]string{
+		"\x1b[?6c":                      "Alacritty",
+		"\x1b[?62;c":                    "kitty",
+		"\x1b[?65;4;6;18;22c":           "WezTerm",
+		"\x1b[?65;1;9c":                 "VTE",
+		"\x1b[?64;1;2;6;9;15;18;21;22c": "xterm",
+		"?1;0c":                         "WindowsTerminal",
+		"\x1b[?1;2c":                    "",
+		"":                              "",
+		"garbage":                       "",
+	}
+	for response, want := range cases {
+		if got := identityFromDA1(response); got != want {
+			t.Errorf("identityFromDA1(%q) = %q, want %q", response, got, want)
+		}
+	}
+}
+
+func TestDetectTerminal(t *testing.T) {
+	var sent string
+	answer := func(req string) (string, error) { sent = req; return "\x1b[?62;c", nil }
+	if got := DetectTerminal(answer); got != "kitty" || sent != "\x1b[c" {
+		t.Errorf("got %q after sending %q", got, sent)
+	}
+	unknown := func(string) (string, error) { return "\x1b[?1;2c", nil }
+	if got := DetectTerminal(unknown); got != "" {
+		t.Errorf("an unlisted DA1 names nothing, got %q", got)
+	}
+	mute := func(string) (string, error) { return "", errors.New("no answer") }
+	if got := DetectTerminal(mute); got != "" {
+		t.Errorf("no answer names nothing, got %q", got)
+	}
+	if got := DetectTerminal(nil); got != "" {
+		t.Errorf("nil query names nothing, got %q", got)
+	}
+}
+
+func TestTerminalFieldIsInformational(t *testing.T) {
+	kitty := "kitty"
+	tc := true
+	f := File{Profiles: map[string]Settings{"xterm-kitty": {Terminal: &kitty, Truecolor: &tc}}}
+	res := Resolve(Settings{}, nil, f, "xterm-kitty")
+	if !res.Truecolor || res.Source[KeyTruecolor] != "profile xterm-kitty" {
+		t.Errorf("the profile did not resolve: %+v", res.Source)
+	}
+	for _, k := range Keys {
+		if k == "terminal" {
+			t.Error("terminal is not a setting")
+		}
 	}
 }

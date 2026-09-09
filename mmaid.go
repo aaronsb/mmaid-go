@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/aaronsb/mmaid-go/internal/diagram"
+	"github.com/aaronsb/mmaid-go/internal/glyph"
 	"github.com/aaronsb/mmaid-go/internal/graph"
 	"github.com/aaronsb/mmaid-go/internal/parser"
 	"github.com/aaronsb/mmaid-go/internal/renderer"
@@ -14,7 +15,8 @@ import (
 
 // config holds rendering options.
 type config struct {
-	useASCII     bool
+	glyphs       string   // a glyph set name; "" is unicode
+	failed       []string // families the profile marked failed
 	paddingX     int
 	paddingY     int
 	roundedEdges bool
@@ -34,8 +36,42 @@ func defaultConfig() config {
 type Option func(*config)
 
 // WithASCII forces ASCII-only output instead of Unicode box-drawing characters.
+// It is WithGlyphs("ascii", nil).
 func WithASCII() Option {
-	return func(c *config) { c.useASCII = true }
+	return WithGlyphs("ascii", nil)
+}
+
+// WithGlyphs selects a built-in glyph set by name (unicode, rounded, heavy,
+// double, legacy, ascii) and marks families failed, each of which is drawn
+// from its fallback (ADR-500). An unknown name selects unicode and an unknown
+// family is ignored; the command line warns about both before calling.
+func WithGlyphs(name string, failed []string) Option {
+	return func(c *config) {
+		c.glyphs = name
+		c.failed = failed
+	}
+}
+
+// charset resolves the configured set into the tables the canvas draws from.
+func (c config) charset() renderer.CharSet {
+	set, ok := glyph.LookupSet(c.glyphs)
+	if !ok {
+		set = glyph.DefaultSet()
+	}
+	families, _ := glyph.ParseFamilies(c.failed)
+	return renderer.CharSetFor(glyph.Resolve(set, families))
+}
+
+// GlyphSheet returns the sample sheet `mmaid --glyphs-sample` prints for a
+// set: one numbered line per family with its sample and reference figure.
+func GlyphSheet(name string, failed []string) string {
+	cfg := config{glyphs: name, failed: failed}
+	set, ok := glyph.LookupSet(cfg.glyphs)
+	if !ok {
+		set = glyph.DefaultSet()
+	}
+	families, _ := glyph.ParseFamilies(cfg.failed)
+	return renderer.FormatSamples(renderer.GlyphSamples(glyph.Resolve(set, families)))
 }
 
 // WithPadding sets horizontal and vertical padding inside node boxes.
@@ -149,55 +185,56 @@ func Render(source string, opts ...Option) (result string) {
 
 	source = stripFrontmatter(source)
 	dtype := detectDiagramType(source)
+	cs := cfg.charset()
 
 	// Get a canvas for any diagram type
 	var canvas *renderer.Canvas
 	switch dtype {
 	case "sequence":
-		canvas = diagram.RenderSequence(source, cfg.useASCII)
+		canvas = diagram.RenderSequence(source, cs)
 	case "class":
-		canvas = diagram.RenderClassDiagram(source, cfg.useASCII)
+		canvas = diagram.RenderClassDiagram(source, cs)
 	case "er":
-		canvas = diagram.RenderERDiagram(source, cfg.useASCII)
+		canvas = diagram.RenderERDiagram(source, cs)
 	case "pie":
-		canvas = diagram.RenderPieChart(source, cfg.useASCII, cfg.theme != "", getThemePtr(cfg.theme))
+		canvas = diagram.RenderPieChart(source, cs, cfg.theme != "", getThemePtr(cfg.theme))
 	case "state":
 		g := diagram.ParseStateDiagram(source)
-		canvas = renderer.RenderGraphCanvas(g, cfg.useASCII, cfg.paddingX, cfg.paddingY, cfg.roundedEdges, diagram.UsableWidth())
+		canvas = renderer.RenderGraphCanvas(g, cs, cfg.paddingX, cfg.paddingY, cfg.roundedEdges, diagram.UsableWidth())
 	case "block":
-		canvas = diagram.RenderBlockDiagram(source, cfg.useASCII)
+		canvas = diagram.RenderBlockDiagram(source, cs)
 	case "gitgraph":
-		canvas = diagram.RenderGitGraph(source, cfg.useASCII)
+		canvas = diagram.RenderGitGraph(source, cs)
 	case "treemap":
-		canvas = diagram.RenderTreemap(source, cfg.useASCII, getThemePtr(cfg.theme))
+		canvas = diagram.RenderTreemap(source, cs, getThemePtr(cfg.theme))
 	case "gantt":
-		canvas = diagram.RenderGantt(source, cfg.useASCII, getThemePtr(cfg.theme))
+		canvas = diagram.RenderGantt(source, cs, getThemePtr(cfg.theme))
 	case "timeline":
-		canvas = diagram.RenderTimeline(source, cfg.useASCII, getThemePtr(cfg.theme))
+		canvas = diagram.RenderTimeline(source, cs, getThemePtr(cfg.theme))
 	case "mindmap":
-		canvas = diagram.RenderMindmap(source, cfg.useASCII)
+		canvas = diagram.RenderMindmap(source, cs)
 	case "quadrant":
-		canvas = diagram.RenderQuadrantChart(source, cfg.useASCII, getThemePtr(cfg.theme))
+		canvas = diagram.RenderQuadrantChart(source, cs, getThemePtr(cfg.theme))
 	case "xychart":
-		canvas = diagram.RenderXYChart(source, cfg.useASCII, getThemePtr(cfg.theme))
+		canvas = diagram.RenderXYChart(source, cs, getThemePtr(cfg.theme))
 	case "kanban":
-		canvas = diagram.RenderKanban(source, cfg.useASCII, getThemePtr(cfg.theme))
+		canvas = diagram.RenderKanban(source, cs, getThemePtr(cfg.theme))
 	case "journey":
-		canvas = diagram.RenderJourney(source, cfg.useASCII, getThemePtr(cfg.theme))
+		canvas = diagram.RenderJourney(source, cs, getThemePtr(cfg.theme))
 	case "packet":
-		canvas = diagram.RenderPacket(source, cfg.useASCII, getThemePtr(cfg.theme))
+		canvas = diagram.RenderPacket(source, cs, getThemePtr(cfg.theme))
 	case "requirement":
 		g := diagram.ParseRequirementDiagram(source)
-		canvas = renderer.RenderGraphCanvas(g, cfg.useASCII, cfg.paddingX, cfg.paddingY, cfg.roundedEdges, diagram.UsableWidth())
+		canvas = renderer.RenderGraphCanvas(g, cs, cfg.paddingX, cfg.paddingY, cfg.roundedEdges, diagram.UsableWidth())
 	case "c4":
 		g := diagram.ParseC4Diagram(source)
-		canvas = renderer.RenderGraphCanvas(g, cfg.useASCII, cfg.paddingX, cfg.paddingY, cfg.roundedEdges, diagram.UsableWidth())
+		canvas = renderer.RenderGraphCanvas(g, cs, cfg.paddingX, cfg.paddingY, cfg.roundedEdges, diagram.UsableWidth())
 	case "usecase":
 		g := diagram.ParseUseCaseDiagram(source)
-		canvas = renderer.RenderGraphCanvas(g, cfg.useASCII, cfg.paddingX, cfg.paddingY, cfg.roundedEdges, diagram.UsableWidth())
+		canvas = renderer.RenderGraphCanvas(g, cs, cfg.paddingX, cfg.paddingY, cfg.roundedEdges, diagram.UsableWidth())
 	default:
 		g := parser.ParseFlowchart(source)
-		canvas = renderer.RenderGraphCanvas(g, cfg.useASCII, cfg.paddingX, cfg.paddingY, cfg.roundedEdges, diagram.UsableWidth())
+		canvas = renderer.RenderGraphCanvas(g, cs, cfg.paddingX, cfg.paddingY, cfg.roundedEdges, diagram.UsableWidth())
 	}
 
 	if canvas == nil {

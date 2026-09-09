@@ -89,7 +89,8 @@ type packetRowField struct {
 // RenderPacket parses and renders a Mermaid packet diagram: bit-aligned
 // field boxes that wrap every rowBits (32) bits, with boundary bit numbers
 // and a legend for labels too wide to fit their field.
-func RenderPacket(source string, useASCII bool, theme *renderer.Theme) *renderer.Canvas {
+func RenderPacket(source string, cs renderer.CharSet, theme *renderer.Theme) *renderer.Canvas {
+	useASCII := cs.ASCII
 	pd := parsePacket(source)
 	if len(pd.fields) == 0 {
 		c := renderer.NewCanvas(30, 1)
@@ -161,9 +162,7 @@ func RenderPacket(source string, useASCII bool, theme *renderer.Theme) *renderer
 	totalW := margin + colsPerRow + 1
 
 	c := renderer.NewCanvas(totalW+4, totalH+10) // extra height reserved for legend
-	if useASCII {
-		c.SetCharSet(renderer.ASCII)
-	}
+	c.SetCharSet(cs)
 	useRegion := theme != nil && theme.HasDepthColors()
 	if useRegion {
 		for r := 0; r < c.Height; r++ {
