@@ -1163,3 +1163,62 @@ func TestTreeViewTabIsOneColumn(t *testing.T) {
 		t.Errorf("children of child = %+v, want grand.txt nested", child[0].children)
 	}
 }
+
+// A frame with no `->>` takes the nearest earlier frame in a different lane,
+// which is what decidePositionRelation falls back to.
+func TestEventModelingImplicitRelations(t *testing.T) {
+	p := emLayout(parseEventModeling(`eventmodeling
+    tf 01 ui CartUI
+    tf 02 cmd AddItem
+    tf 03 evt ItemAdded`))
+
+	if len(p.boxes) != 3 {
+		t.Fatalf("boxes = %d", len(p.boxes))
+	}
+	if len(p.boxes[0].from) != 0 {
+		t.Errorf("the first frame has sources %v", p.boxes[0].from)
+	}
+	for i, want := range map[int]int{1: 0, 2: 1} {
+		got := p.boxes[i].from
+		if len(got) != 1 || got[0] != want {
+			t.Errorf("box %d from = %v, want [%d]", i, got, want)
+		}
+	}
+}
+
+// A reset frame never receives a relation, explicit or not.
+func TestEventModelingResetFrameTakesNoRelation(t *testing.T) {
+	p := emLayout(parseEventModeling(`eventmodeling
+    tf 01 ui CartUI
+    rf 02 pcr Rebuild ->> 01`))
+
+	if got := p.boxes[1].from; len(got) != 0 {
+		t.Errorf("reset frame from = %v, want none", got)
+	}
+}
+
+// extractNamespace splits on "." and takes the first part only when there are
+// exactly two, so a three-part name is a plain label in its band's own lane.
+func TestEventModelingThreePartNameIsNotNamespaced(t *testing.T) {
+	ed := parseEventModeling("eventmodeling\n    tf 01 ui CartUI\n    tf 02 cmd Shop.Inventory.AddItem ->> 01")
+	f := ed.frames[1]
+	if f.ns != "" || f.name != "Shop.Inventory.AddItem" {
+		t.Errorf("frame = ns %q name %q, want no namespace and the whole label", f.ns, f.name)
+	}
+	lanes, laneOf := emAssignLanes(ed.frames)
+	if got := lanes[laneOf["02"]].label; got != "Command/Read Model" {
+		t.Errorf("lane = %q, want the band's own lane", got)
+	}
+}
+
+// The entity type is a closed set: a typo is a parse error upstream, and the
+// line is dropped here.
+func TestEventModelingUnknownEntityTypeIsDropped(t *testing.T) {
+	ed := parseEventModeling("eventmodeling\n    tf 01 ui CartUI\n    tf 02 cdm AddItem\n    tf 03 evt ItemAdded")
+	if len(ed.frames) != 2 {
+		t.Fatalf("frames = %d, want the two well-formed ones", len(ed.frames))
+	}
+	if ed.frames[1].id != "03" {
+		t.Errorf("second frame = %q, want 03", ed.frames[1].id)
+	}
+}

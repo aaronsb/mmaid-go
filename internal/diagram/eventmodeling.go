@@ -1,12 +1,32 @@
 package diagram
 
 import (
+	"fmt"
+	"os"
 	"regexp"
 	"strings"
 
 	"github.com/aaronsb/mmaid-go/internal/glyph"
 	"github.com/aaronsb/mmaid-go/internal/renderer"
 )
+
+// Skipped, against the grammar and db at mermaid fe0e2375:
+//   - `entity`, `data`, `note` and `gwt` statements, and a frame's inline or
+//     `[[ref]]` payload. None of them carries a position in the model.
+//   - `accTitle` and `accDescr`.
+//   - A frame whose entity type is outside the grammar's closed set. Upstream
+//     fails the parse; this warns once on stderr and drops the line.
+//   - A `->>` reference to a later frame. Upstream drops it too: the source
+//     box is not positioned yet when the relation is decided.
+//
+// Divergences:
+//   - A reset frame draws a heavy border. `renderer.ts` has no reset-specific
+//     styling; a terminal has no fill to tell the two kinds of frame apart.
+//   - A namespace keeps one lane wherever it next appears. That is the lookup
+//     `db.ts` attempts, but `SwimlaneProps.namespace` is never set at this
+//     commit, so `findSwimlaneByNamespace` never matches and upstream in fact
+//     opens a fresh lane per namespaced frame. This port follows the declared
+//     intent rather than the behaviour.
 
 // emFrame is one time frame or reset frame: an entity of some kind at a point
 // in the model's time order, optionally fed by earlier frames.
@@ -27,25 +47,29 @@ type emData struct {
 
 var (
 	reEMHeader = regexp.MustCompile(`(?i)^eventmodeling$`)
-	reEMTitle  = regexp.MustCompile(`(?i)^title(?:\s+(.*))?$`)
-	reEMFrame  = regexp.MustCompile(`(?i)^(tf|timeframe|rf|resetframe)\s+(\d{1,3})\s+([a-z]+)\s+([A-Za-z_][\w.]*)(.*)$`)
+	// EM_TITLE is case-sensitive and takes the rest of the line after one
+	// space or tab, or nothing at all.
+	reEMTitle  = regexp.MustCompile(`^title(?:[ \t](.*))?$`)
+	reEMFrame  = regexp.MustCompile(`(?i)^(tf|timeframe|rf|resetframe)\s+(\d{1,3})\s+([A-Za-z]+)\s+([A-Za-z_][\w.]*)(.*)$`)
 	reEMSource = regexp.MustCompile(`->>\s*(\d{1,3})`)
 )
 
-// emKind normalises the grammar's entity-type aliases.
-func emKind(s string) string {
+// emKind normalises the grammar's entity-type aliases. The set is closed, so
+// anything else is a parse error rather than an event.
+func emKind(s string) (string, bool) {
 	switch strings.ToLower(s) {
 	case "ui":
-		return "ui"
+		return "ui", true
 	case "pcr", "processor":
-		return "pcr"
+		return "pcr", true
 	case "cmd", "command":
-		return "cmd"
+		return "cmd", true
 	case "rmo", "readmodel":
-		return "rmo"
-	default:
-		return "evt"
+		return "rmo", true
+	case "evt", "event":
+		return "evt", true
 	}
+	return "", false
 }
 
 // emBand returns the swimlane band an entity type belongs to: automation,
@@ -70,12 +94,12 @@ var emBandPrefix = [3]string{"UI/A: ", "C/RM: ", "Stream: "}
 //	    tf 01 ui CartUI
 //	    tf 02 cmd Inventory.AddItem ->> 01
 //	    tf 03 evt Inventory.ItemAdded ->> 02
-//
-// `entity`, `data`, `note` and `gwt` statements carry no position in the
-// model and are dropped; so is a frame's inline or referenced payload.
 func parseEventModeling(source string) *emData {
 	ed := &emData{}
+	warned := false
 	for _, line := range strings.Split(source, "\n") {
+		// EM_SINGLE_LINE_COMMENT is a hidden terminal, so a `%%` comment may
+		// follow a statement on the same line.
 		if i := strings.Index(line, "%%"); i >= 0 {
 			line = line[:i]
 		}
@@ -91,14 +115,25 @@ func parseEventModeling(source string) *emData {
 		if m == nil {
 			continue
 		}
+		kind, ok := emKind(m[3])
+		if !ok {
+			if !warned {
+				fmt.Fprintf(os.Stderr, "mmaid: eventmodeling: unknown entity type %q\n", m[3])
+				warned = true
+			}
+			continue
+		}
 		f := emFrame{
 			id:    m[2],
-			kind:  emKind(m[3]),
+			kind:  kind,
 			reset: strings.EqualFold(m[1][:1], "r"),
 			name:  m[4],
 		}
-		if i := strings.LastIndexByte(f.name, '.'); i >= 0 {
-			f.ns, f.name = f.name[:i], f.name[i+1:]
+		// A namespace is one dot: `extractNamespace` splits on "." and takes
+		// the first part only when there are exactly two, so
+		// `Shop.Inventory.AddItem` is a plain name in its band's own lane.
+		if parts := strings.Split(f.name, "."); len(parts) == 2 {
+			f.ns, f.name = parts[0], parts[1]
 		}
 		for _, s := range reEMSource.FindAllStringSubmatch(m[5], -1) {
 			f.sources = append(f.sources, s[1])
@@ -118,7 +153,8 @@ type emLane struct {
 // emBox is a frame placed on the canvas.
 type emBox struct {
 	frame emFrame
-	lane  int // index into the sorted lane slice
+	lane  int   // index into the sorted lane slice
+	from  []int // the boxes an arrow reaches this one from
 	x, w  int
 	row   int // the box's middle row
 }
@@ -192,76 +228,105 @@ const (
 	emSlotGap  = 3 // free columns between one frame's box and the next
 )
 
-// RenderEventModeling parses and renders a Mermaid eventmodeling diagram:
-// swimlanes as rows, frames as boxes left to right in time order, and one
-// arrow per `->>` reference. The canvas is as wide as the model needs, so a
-// long model scrolls rather than wrapping.
-func RenderEventModeling(source string, cs renderer.CharSet, theme *renderer.Theme) *renderer.Canvas {
-	ed := parseEventModeling(source)
-	if len(ed.frames) == 0 {
-		c := renderer.NewCanvas(30, 1)
-		c.PutText(0, 0, "[eventmodeling] no frames", "default")
-		return c
-	}
+// emPlan is the whole diagram laid out: where each lane and box sits, and
+// which boxes an arrow runs between.
+type emPlan struct {
+	title         string
+	lanes         []emLane
+	boxes         []emBox
+	contentX      int
+	width, height int
+}
 
+// emResolveSources fills in each box's incoming arrows. A reset frame never
+// receives one; a frame with no `->>` takes the nearest earlier frame in a
+// different lane, which is what `decidePositionRelation` falls back to.
+func emResolveSources(boxes []emBox) {
+	byID := make(map[string]int, len(boxes))
+	for i, b := range boxes {
+		byID[b.frame.id] = i
+	}
+	for i := range boxes {
+		if boxes[i].frame.reset {
+			continue
+		}
+		if ids := boxes[i].frame.sources; len(ids) > 0 {
+			for _, id := range ids {
+				if j, ok := byID[id]; ok {
+					boxes[i].from = append(boxes[i].from, j)
+				}
+			}
+			continue
+		}
+		for j := i - 1; j >= 0; j-- {
+			if boxes[j].lane != boxes[i].lane {
+				boxes[i].from = append(boxes[i].from, j)
+				break
+			}
+		}
+	}
+}
+
+// emLayout places the lanes down the canvas and the frames along it.
+func emLayout(ed *emData) emPlan {
 	lanes, laneOf := emAssignLanes(ed.frames)
-	useRegion := theme != nil && theme.HasDepthColors()
 
 	gutter := 0
 	for _, l := range lanes {
 		gutter = max(gutter, runeLen(l.label))
 	}
-	contentX := gutter + 2
+	plan := emPlan{title: ed.title, lanes: lanes, contentX: gutter + 2}
 
 	topRow := 0
 	if ed.title != "" {
 		topRow = 2
 	}
-	for i := range lanes {
-		lanes[i].top = topRow + i*emLaneRows
+	for i := range plan.lanes {
+		plan.lanes[i].top = topRow + i*emLaneRows
 	}
 
-	boxes := make([]emBox, 0, len(ed.frames))
-	byID := map[string]int{}
-	x := contentX
+	plan.boxes = make([]emBox, 0, len(ed.frames))
+	x := plan.contentX
 	for _, f := range ed.frames {
 		lane := laneOf[f.id]
-		w := max(runeLen(f.name)+4, runeLen(f.id)+len(f.kind)+6)
-		byID[f.id] = len(boxes)
-		boxes = append(boxes, emBox{frame: f, lane: lane, x: x, w: w, row: lanes[lane].top + 1})
+		w := max(runeLen(f.name)+4, runeLen(f.id)+runeLen(f.kind)+6)
+		plan.boxes = append(plan.boxes, emBox{
+			frame: f, lane: lane, x: x, w: w, row: plan.lanes[lane].top + 1,
+		})
 		x += w + emSlotGap
 	}
+	emResolveSources(plan.boxes)
 
-	width := x + 1
-	height := topRow + len(lanes)*emLaneRows
-	c := renderer.NewCanvas(width, height)
-	c.SetCharSet(cs)
+	plan.width = x + 1
+	plan.height = topRow + len(plan.lanes)*emLaneRows
+	return plan
+}
 
-	if ed.title != "" {
-		c.PutText(0, 0, ed.title, "bold_label")
-	}
-
-	// Lane labels and the rule under each lane but the last.
-	for i, l := range lanes {
+// emDrawLanes writes each lane's label and the rule that closes it.
+func emDrawLanes(c *renderer.Canvas, p emPlan, theme *renderer.Theme, useRegion bool) {
+	for i, l := range p.lanes {
 		style := "subgraph_label"
 		ruleStyle := "subgraph"
 		if useRegion {
 			style = "_ansi:" + theme.RegionLabelStyle(i, 0)
 			ruleStyle = "_ansi:" + theme.RegionBorderStyle(i, 0)
 			for r := l.top; r < l.top+3; r++ {
-				for col := range width {
+				for col := range p.width {
 					c.SetFill(r, col, "_ansi:"+theme.RegionStyle(i, 0))
 				}
 			}
 		}
 		c.PutText(l.top+1, 0, l.label, style)
-		if i < len(lanes)-1 {
-			c.Segment(l.top+3, contentX, l.top+3, width-2, glyph.Light, false, ruleStyle)
+		if i < len(p.lanes)-1 {
+			c.Segment(l.top+3, p.contentX, l.top+3, p.width-2, glyph.Light, false, ruleStyle)
 		}
 	}
+}
 
-	// Frame boxes. A reset frame draws heavy.
-	for _, b := range boxes {
+// emDrawBoxes draws one box per frame, its id and entity type riding on the
+// top border where they do not steal the content row.
+func emDrawBoxes(c *renderer.Canvas, p emPlan, theme *renderer.Theme, useRegion bool) {
+	for _, b := range p.boxes {
 		weight := glyph.Light
 		if b.frame.reset {
 			weight = glyph.Heavy
@@ -288,28 +353,25 @@ func RenderEventModeling(source string, cs renderer.CharSet, theme *renderer.The
 			}
 		}
 		c.PutText(b.row, left+(b.w-runeLen(b.frame.name))/2, b.frame.name, labelStyle)
-		// The id and the entity type ride on the top border, where they
-		// label the box without stealing its content row.
 		c.PutText(top, left+1, b.frame.id, "edge_label")
-		c.PutText(top, right-len(b.frame.kind), b.frame.kind, "edge_label")
+		c.PutText(top, right-runeLen(b.frame.kind), b.frame.kind, "edge_label")
 	}
+}
 
-	// Arrows from each referenced frame to the frame that references it.
+// emRouteArrows draws one arrow per resolved relation, through the free gap
+// beside a box so no arm reaches a border.
+func emRouteArrows(c *renderer.Canvas, p emPlan, cs renderer.CharSet) {
 	occupied := func(row, c1, c2 int) bool {
-		for _, b := range boxes {
+		for _, b := range p.boxes {
 			if b.row == row && b.x <= c2 && c1 <= b.x+b.w-1 {
 				return true
 			}
 		}
 		return false
 	}
-	for _, target := range boxes {
-		for _, id := range target.frame.sources {
-			si, ok := byID[id]
-			if !ok {
-				continue
-			}
-			src := boxes[si]
+	for _, target := range p.boxes {
+		for _, si := range target.from {
+			src := p.boxes[si]
 			srcRight := src.x + src.w - 1
 			head := target.x - 1
 			if head-2 < srcRight+1 {
@@ -334,6 +396,30 @@ func RenderEventModeling(source string, cs renderer.CharSet, theme *renderer.The
 			c.Put(target.row, head, cs.ArrowRight, "arrow")
 		}
 	}
+}
 
+// RenderEventModeling parses and renders a Mermaid eventmodeling diagram:
+// swimlanes as rows, frames as boxes left to right in time order, and an
+// arrow into every frame that has a source. The canvas is as wide as the
+// model needs, so a long model scrolls rather than wrapping.
+func RenderEventModeling(source string, cs renderer.CharSet, theme *renderer.Theme) *renderer.Canvas {
+	ed := parseEventModeling(source)
+	if len(ed.frames) == 0 {
+		c := renderer.NewCanvas(30, 1)
+		c.PutText(0, 0, "[eventmodeling] no frames", "default")
+		return c
+	}
+
+	p := emLayout(ed)
+	c := renderer.NewCanvas(p.width, p.height)
+	c.SetCharSet(cs)
+	useRegion := theme != nil && theme.HasDepthColors()
+
+	if p.title != "" {
+		c.PutText(0, 0, p.title, "bold_label")
+	}
+	emDrawLanes(c, p, theme, useRegion)
+	emDrawBoxes(c, p, theme, useRegion)
+	emRouteArrows(c, p, cs)
 	return c
 }
