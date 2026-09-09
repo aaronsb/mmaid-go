@@ -12,7 +12,14 @@ const (
 	oscClose = "\033]8;;\033\\"
 )
 
-func oscOpen(url string) string { return "\033]8;;" + url + "\033\\" }
+// oscOpen returns the opening half of a hyperlink, or "" for a URL that would
+// end the sequence early and let the rest of it reach the terminal as commands.
+func oscOpen(url string) string {
+	if url == "" || strings.ContainsAny(url, "\033\a") {
+		return ""
+	}
+	return "\033]8;;" + url + "\033\\"
+}
 
 var links struct {
 	mu sync.RWMutex
@@ -36,7 +43,7 @@ func SetLinks(labelToURL map[string]string) {
 	}
 	m := make(map[string]string, len(labelToURL))
 	for label, url := range labelToURL {
-		if url == "" {
+		if oscOpen(url) == "" {
 			continue
 		}
 		for _, line := range labelLines(label) {

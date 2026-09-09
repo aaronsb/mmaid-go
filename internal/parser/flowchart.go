@@ -372,12 +372,34 @@ func (p *flowchartParser) parseClassAssignment(line string) {
 // the node. A click that names a callback rather than a URL carries no link.
 func (p *flowchartParser) parseClick(line string) {
 	m := reClick.FindStringSubmatch(strings.TrimSpace(line))
-	if m == nil {
+	if m == nil || !safeLinkURL(m[2]) {
 		return
 	}
 	if node, ok := p.g.Nodes[m[1]]; ok {
 		node.Link = m[2]
 	}
+}
+
+// linkSchemes are the schemes a click may name. A URL is put into an OSC 8
+// sequence, so a diagram from anywhere may not carry one that steers the
+// terminal.
+var linkSchemes = []string{"http://", "https://", "mailto:", "file://"}
+
+// safeLinkURL reports whether a click's URL may be emitted: no control bytes,
+// and one of the allowed schemes.
+func safeLinkURL(url string) bool {
+	for _, r := range url {
+		if r < 0x20 || r == 0x7f {
+			return false
+		}
+	}
+	lower := strings.ToLower(url)
+	for _, scheme := range linkSchemes {
+		if strings.HasPrefix(lower, scheme) {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *flowchartParser) parseStyle(line string) {
