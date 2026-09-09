@@ -164,6 +164,14 @@ func detectDiagramType(source string) string {
 			return "c4"
 		case strings.HasPrefix(lower, "usecase"):
 			return "usecase"
+		case strings.HasPrefix(lower, "radar"):
+			return "radar"
+		case strings.HasPrefix(lower, "venn"):
+			return "venn"
+		case strings.HasPrefix(lower, "wardley"):
+			return "wardley"
+		case strings.HasPrefix(lower, "cynefin"):
+			return "cynefin"
 		default:
 			return "flowchart"
 		}
@@ -244,6 +252,14 @@ func Render(source string, opts ...Option) (result string) {
 	case "usecase":
 		g := diagram.ParseUseCaseDiagram(source)
 		canvas = renderer.RenderGraphCanvas(g, cs, cfg.paddingX, cfg.paddingY, cfg.roundedEdges, diagram.UsableWidth())
+	case "radar":
+		canvas = diagram.RenderRadar(source, cs, cfg.theme != "", getThemePtr(cfg.theme))
+	case "venn":
+		canvas = diagram.RenderVenn(source, cs, cfg.theme != "", getThemePtr(cfg.theme))
+	case "wardley":
+		canvas = diagram.RenderWardley(source, cs, getThemePtr(cfg.theme))
+	case "cynefin":
+		canvas = diagram.RenderCynefin(source, cs, getThemePtr(cfg.theme))
 	default:
 		g := parser.ParseFlowchart(source)
 		canvas = renderer.RenderGraphCanvas(g, cs, cfg.paddingX, cfg.paddingY, cfg.roundedEdges, diagram.UsableWidth())

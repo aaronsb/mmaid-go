@@ -279,26 +279,7 @@ func renderPieCircle(pc *pieChart, colors [][3]int, fills renderer.Fills) *rende
 	legendBoxTop := legendStartRow
 	legendBoxLeft := legendCol
 
-	// Draw legend border
-	c.Put(legendBoxTop, legendBoxLeft, '┌', "node")
-	c.DrawHorizontal(legendBoxTop, legendBoxLeft, legendBoxLeft+legendBoxW-1, glyph.Light, "node")
-	c.Put(legendBoxTop, legendBoxLeft+legendBoxW-1, '┐', "node")
-
-	for row := legendBoxTop + 1; row < legendBoxTop+legendBoxH-1; row++ {
-		c.Put(row, legendBoxLeft, '│', "node")
-		c.Put(row, legendBoxLeft+legendBoxW-1, '│', "node")
-	}
-
-	c.Put(legendBoxTop+legendBoxH-1, legendBoxLeft, '└', "node")
-	c.DrawHorizontal(legendBoxTop+legendBoxH-1, legendBoxLeft, legendBoxLeft+legendBoxW-1, glyph.Light, "node")
-	c.Put(legendBoxTop+legendBoxH-1, legendBoxLeft+legendBoxW-1, '┘', "node")
-
-	// Fill legend interior — use fill layer only so all cells share the same bg
-	for row := legendBoxTop; row < legendBoxTop+legendBoxH; row++ {
-		for col := legendBoxLeft; col < legendBoxLeft+legendBoxW; col++ {
-			c.SetFill(row, col, "subgraph_fill")
-		}
-	}
+	drawLegendBox(c, legendBoxTop, legendBoxLeft, legendBoxH, legendBoxW, "node")
 
 	// Draw legend entries
 	for i, s := range pc.slices {
@@ -555,17 +536,7 @@ func renderPieBraille(pc *pieChart) *renderer.Canvas {
 	legendBoxH := len(pc.slices) + 2
 	legendBoxLeft := legendCol
 
-	// Border
-	c.Put(legendStartRow, legendBoxLeft, '┌', "node")
-	c.DrawHorizontal(legendStartRow, legendBoxLeft, legendBoxLeft+legendBoxW-1, glyph.Light, "node")
-	c.Put(legendStartRow, legendBoxLeft+legendBoxW-1, '┐', "node")
-	for row := legendStartRow + 1; row < legendStartRow+legendBoxH-1; row++ {
-		c.Put(row, legendBoxLeft, '│', "node")
-		c.Put(row, legendBoxLeft+legendBoxW-1, '│', "node")
-	}
-	c.Put(legendStartRow+legendBoxH-1, legendBoxLeft, '└', "node")
-	c.DrawHorizontal(legendStartRow+legendBoxH-1, legendBoxLeft, legendBoxLeft+legendBoxW-1, glyph.Light, "node")
-	c.Put(legendStartRow+legendBoxH-1, legendBoxLeft+legendBoxW-1, '┘', "node")
+	drawLegendBox(c, legendStartRow, legendBoxLeft, legendBoxH, legendBoxW, "node")
 
 	// Entries
 	for i, s := range pc.slices {

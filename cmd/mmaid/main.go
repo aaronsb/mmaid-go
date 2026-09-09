@@ -448,6 +448,10 @@ func printUsage() {
 		{"requirementDiagram", "SysML requirements and elements"},
 		{"C4Context", "C4 context, container, component, deployment"},
 		{"usecase-beta", "UML actors, use cases and boundaries"},
+		{"radar-beta", "Multi-axis radar charts"},
+		{"venn-beta", "Set overlaps as filled circles"},
+		{"wardley-beta", "Value chain over evolution"},
+		{"cynefin-beta", "Sense-making across five domains"},
 	}
 	maxKW := 0
 	for _, t := range types {
@@ -668,6 +672,54 @@ var demoSamples = map[string]string{
             No cache
         Environment
             Remote timezones`,
+	"radar": `radar-beta
+    title Service Comparison
+    axis speed["Speed"], cost["Cost"], reliability["Reliability"]
+    axis support["Support"], features["Features"]
+    curve a["Vendor A"]{85, 60, 90, 70, 75}
+    curve b["Vendor B"]{60, 90, 70, 85, 65}
+    max 100`,
+	"venn": `venn-beta
+    title What makes a good feature
+    set Desirable
+    set Feasible
+    set Viable
+    union Desirable,Feasible["Buildable"]
+    union Feasible,Viable["Sustainable"]
+    union Desirable,Viable["Marketable"]
+    union Desirable,Feasible,Viable["Ship it"]`,
+	"wardley": `wardley-beta
+    title Tea Shop Value Chain
+    anchor Business [0.95, 0.63]
+    component Cup of Tea [0.79, 0.61]
+    component Tea [0.63, 0.81]
+    component Hot Water [0.52, 0.80]
+    component Kettle [0.43, 0.35] (buy)
+    component Power [0.10, 0.70] (market)
+    Business -> Cup of Tea
+    Cup of Tea -> Tea
+    Cup of Tea -> Hot Water
+    Hot Water -> Kettle
+    Kettle -> Power
+    evolve Kettle 0.62
+    note "Standard power lets kettles evolve" [0.30, 0.20]`,
+	"cynefin": `cynefin-beta
+    title Incident Response
+    complex
+      "Investigate root cause"
+      "Run a chaos experiment"
+    complicated
+      "Analyse performance data"
+      "Expert review needed"
+    clear
+      "Restart the service"
+      "Apply the known fix"
+    chaotic
+      "Page on-call immediately"
+    confusion
+      "Unknown failure mode"
+    complex --> complicated : "Pattern identified"
+    clear --> chaotic : "Complacency"`,
 }
 
 var demoTypes = []struct{ name, key string }{
@@ -694,6 +746,10 @@ var demoTypes = []struct{ name, key string }{
 	{"Requirement Diagram", "requirement"},
 	{"C4 Diagram", "c4"},
 	{"Use Case Diagram", "usecase"},
+	{"Radar Chart", "radar"},
+	{"Venn Diagram", "venn"},
+	{"Wardley Map", "wardley"},
+	{"Cynefin Framework", "cynefin"},
 }
 
 func runDemo(w io.Writer, themeName, diagramType string, opts ...mmaid.Option) {
@@ -727,6 +783,10 @@ func runDemo(w io.Writer, themeName, diagramType string, opts ...mmaid.Option) {
 			"treeview-beta": "treeview", "tree": "treeview",
 			"eventmodel": "eventmodeling", "em": "eventmodeling",
 			"ishikawa-beta": "ishikawa", "fishbone": "ishikawa",
+			"radar-beta":   "radar",
+			"venn-beta":    "venn",
+			"wardley-beta": "wardley",
+			"cynefin-beta": "cynefin",
 		}
 		if mapped, ok2 := aliases[strings.ToLower(diagramType)]; ok2 {
 			source = demoSamples[mapped]

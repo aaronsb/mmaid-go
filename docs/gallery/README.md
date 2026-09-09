@@ -63,6 +63,32 @@ classDiagram
 
 ![class](class.png)
 
+## cynefin
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+cynefin-beta
+    title Incident Response
+    complex
+      "Investigate root cause"
+      "Run a chaos experiment"
+    complicated
+      "Analyse performance data"
+      "Expert review needed"
+    clear
+      "Restart the service"
+      "Apply the known fix"
+    chaotic
+      "Page on-call immediately"
+    confusion
+      "Unknown failure mode"
+    complex --> complicated : "Pattern identified"
+    clear --> chaotic : "Complacency"
+```
+
+![cynefin](cynefin.png)
+
 ## edge-styles
 
 Rendered with `-t default -w 120`.
@@ -367,6 +393,38 @@ quadrantChart
 
 ![quadrant](quadrant.png)
 
+## radar
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+radar-beta
+    title Service Comparison
+    axis speed["Speed"], cost["Cost"], reliability["Reliability"]
+    axis support["Support"], features["Features"]
+    curve a["Vendor A"]{85, 60, 90, 70, 75}
+    curve b["Vendor B"]{60, 90, 70, 85, 65}
+    max 100
+```
+
+![radar](radar.png)
+
+## radar-ascii
+
+Rendered with `-a`.
+
+```mermaid
+radar-beta
+    title Service Comparison
+    axis speed["Speed"], cost["Cost"], reliability["Reliability"]
+    axis support["Support"], features["Features"]
+    curve a["Vendor A"]{85, 60, 90, 70, 75}
+    curve b["Vendor B"]{60, 90, 70, 85, 65}
+    max 100
+```
+
+![radar-ascii](radar-ascii.png)
+
 ## requirement
 
 Rendered with `-t default -w 120`.
@@ -532,6 +590,66 @@ usecase-beta
 ```
 
 ![usecase](usecase.png)
+
+## venn
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+venn-beta
+    title What makes a good feature
+    set Desirable
+    set Feasible
+    set Viable
+    union Desirable,Feasible["Buildable"]
+    union Feasible,Viable["Sustainable"]
+    union Desirable,Viable["Marketable"]
+    union Desirable,Feasible,Viable["Ship it"]
+```
+
+![venn](venn.png)
+
+## venn-ascii
+
+Rendered with `-a`.
+
+```mermaid
+venn-beta
+    title What makes a good feature
+    set Desirable
+    set Feasible
+    set Viable
+    union Desirable,Feasible["Buildable"]
+    union Feasible,Viable["Sustainable"]
+    union Desirable,Viable["Marketable"]
+    union Desirable,Feasible,Viable["Ship it"]
+```
+
+![venn-ascii](venn-ascii.png)
+
+## wardley
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+wardley-beta
+    title Tea Shop Value Chain
+    anchor Business [0.95, 0.63]
+    component Cup of Tea [0.79, 0.61]
+    component Tea [0.63, 0.81]
+    component Hot Water [0.52, 0.80]
+    component Kettle [0.43, 0.35] (buy)
+    component Power [0.10, 0.70] (market)
+    Business -> Cup of Tea
+    Cup of Tea -> Tea
+    Cup of Tea -> Hot Water
+    Hot Water -> Kettle
+    Kettle -> Power
+    evolve Kettle 0.62
+    note "Standard power lets kettles evolve" [0.30, 0.20]
+```
+
+![wardley](wardley.png)
 
 ## wide-label
 

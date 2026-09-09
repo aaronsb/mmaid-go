@@ -1,6 +1,7 @@
 package diagram
 
 import (
+	"math"
 	"slices"
 	"strings"
 	"testing"
@@ -1244,5 +1245,380 @@ func TestIshikawaCommentIsWholeLineOnly(t *testing.T) {
 	}
 	if causes[0].text != "Discount 20%% off" {
 		t.Errorf("cause = %q, want the %%%% kept", causes[0].text)
+	}
+}
+
+// ── Radar ───────────────────────────────────────────────────────────────────
+
+func TestRadarAxesAndCurves(t *testing.T) {
+	c := RenderRadar("radar-beta\n  title Grades\n  axis m[\"Math\"], s[\"Science\"]\n  axis e[\"English\"]\n  curve a[\"Alice\"]{85, 90, 80}\n  max 100", renderer.UNICODE, false, nil)
+	assertCanvasContains(t, c, "Grades")
+	assertCanvasContains(t, c, "Math")
+	assertCanvasContains(t, c, "Science")
+	assertCanvasContains(t, c, "English")
+	assertCanvasContains(t, c, "Alice")
+	assertCanvasContains(t, c, "●")
+}
+
+func TestRadarSeveralDeclarationsOneLine(t *testing.T) {
+	rc := parseRadar("radar-beta\n  axis a, b, c\n  curve one{1, 2, 3}, two{3, 2, 1}")
+	if len(rc.axes) != 3 {
+		t.Fatalf("axes = %d, want 3", len(rc.axes))
+	}
+	if len(rc.curves) != 2 {
+		t.Fatalf("curves = %d, want 2", len(rc.curves))
+	}
+	if got := rc.curves[1].values; len(got) != 3 || got[0] != 3 {
+		t.Errorf("second curve values = %v, want [3 2 1]", got)
+	}
+}
+
+func TestRadarKeyedValuesFollowAxisOrder(t *testing.T) {
+	rc := parseRadar("radar-beta\n  axis a, b, c\n  curve x{ c: 30, a: 10, b: 20 }")
+	want := []float64{10, 20, 30}
+	if got := rc.curves[0].values; len(got) != 3 || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] {
+		t.Errorf("values = %v, want %v", got, want)
+	}
+}
+
+func TestRadarOptions(t *testing.T) {
+	rc := parseRadar("radar-beta\n  axis a, b, c\n  curve x{1,2,3}\n  showLegend false\n  graticule polygon\n  ticks 3\n  min 1\n  max 9")
+	if rc.showLegend {
+		t.Error("showLegend false was not read")
+	}
+	if !rc.polygon {
+		t.Error("graticule polygon was not read")
+	}
+	if rc.ticks != 3 {
+		t.Errorf("ticks = %d, want 3", rc.ticks)
+	}
+	lo, hi := rc.bounds()
+	if lo != 1 || hi != 9 {
+		t.Errorf("bounds = %v..%v, want 1..9", lo, hi)
+	}
+}
+
+func TestRadarTooFewAxes(t *testing.T) {
+	c := RenderRadar("radar-beta\n  axis a, b\n  curve x{1,2}", renderer.UNICODE, false, nil)
+	assertCanvasContains(t, c, "three or more axes")
+}
+
+// ── Venn ────────────────────────────────────────────────────────────────────
+
+func TestVennSetsAndUnions(t *testing.T) {
+	c := RenderVenn("venn-beta\n  title Overlap\n  set Frontend\n  set Backend\n  union Frontend,Backend[\"APIs\"]", renderer.UNICODE, false, nil)
+	assertCanvasContains(t, c, "Overlap")
+	assertCanvasContains(t, c, "Frontend")
+	assertCanvasContains(t, c, "Backend")
+	assertCanvasContains(t, c, "APIs")
+}
+
+func TestVennLabelsAndSizes(t *testing.T) {
+	vd := parseVenn("venn-beta\n  set A[\"Alpha\"]:20\n  set B[\"Beta\"]:12\n  union A,B[\"AB\"]:3")
+	if len(vd.sets) != 2 || vd.sets[0].label != "Alpha" || vd.sets[0].size != 20 {
+		t.Fatalf("sets = %+v", vd.sets)
+	}
+	if len(vd.unions) != 1 || vd.unions[0].mask != 0b11 || vd.unions[0].size != 3 {
+		t.Fatalf("unions = %+v", vd.unions)
+	}
+}
+
+func TestVennUnionOfUndeclaredSetIsDropped(t *testing.T) {
+	vd := parseVenn("venn-beta\n  set A\n  union A,Ghost[\"AB\"]")
+	if len(vd.unions) != 0 {
+		t.Errorf("unions = %+v, want none", vd.unions)
+	}
+}
+
+func TestVennTextAndStyleAreSkipped(t *testing.T) {
+	vd := parseVenn("venn-beta\n  set A[\"Alpha\"]\n    text A1[\"React\"]\n  style A fill:#ff6b6b")
+	if len(vd.sets) != 1 {
+		t.Errorf("sets = %+v, want the one set", vd.sets)
+	}
+}
+
+func TestVennNoSets(t *testing.T) {
+	c := RenderVenn("venn-beta", renderer.UNICODE, false, nil)
+	assertCanvasContains(t, c, "no sets")
+}
+
+// ── Wardley ─────────────────────────────────────────────────────────────────
+
+func TestWardleyComponentsAndStages(t *testing.T) {
+	c := RenderWardley("wardley-beta\n  title Tea\n  anchor Business [0.95, 0.63]\n  component Kettle [0.43, 0.35]\n  Business -> Kettle", renderer.UNICODE, nil)
+	assertCanvasContains(t, c, "Tea")
+	assertCanvasContains(t, c, "Business")
+	assertCanvasContains(t, c, "Kettle")
+	assertCanvasContains(t, c, "Genesis")
+	assertCanvasContains(t, c, "Commodity")
+	assertCanvasContains(t, c, "◎") // the anchor's double ring
+}
+
+func TestWardleyDecoratorsAndHyphenatedNames(t *testing.T) {
+	wm := parseWardley("wardley-beta\n  component real-time processing [0.55, 0.40] (buy) (inertia)\n  component end-user [0.90, 0.95]\n  end-user -> real-time processing")
+	if len(wm.nodes) != 2 {
+		t.Fatalf("nodes = %+v", wm.nodes)
+	}
+	if wm.nodes[0].name != "real-time processing" || wm.nodes[0].sourced != "buy" || !wm.nodes[0].inertia {
+		t.Errorf("node = %+v", wm.nodes[0])
+	}
+	if len(wm.links) != 1 || wm.links[0].from != "end-user" {
+		t.Errorf("links = %+v", wm.links)
+	}
+}
+
+func TestWardleyLinkFormsAndLabels(t *testing.T) {
+	wm := parseWardley("wardley-beta\n  component A [0.1, 0.1]\n  component B [0.2, 0.2]\n  A --> B\n  A -.-> B\n  A +'backup'> B\n  A -> B; reads")
+	if len(wm.links) != 4 {
+		t.Fatalf("links = %+v", wm.links)
+	}
+	if wm.links[2].label != "backup" {
+		t.Errorf("flow label = %q, want backup", wm.links[2].label)
+	}
+	if wm.links[3].label != "reads" {
+		t.Errorf("annotation = %q, want reads", wm.links[3].label)
+	}
+}
+
+func TestWardleyLinkToUndeclaredComponentIsDropped(t *testing.T) {
+	wm := parseWardley("wardley-beta\n  component A [0.1, 0.1]\n  A -> Ghost")
+	if len(wm.links) != 0 {
+		t.Errorf("links = %+v, want none", wm.links)
+	}
+}
+
+func TestWardleyCustomEvolutionStages(t *testing.T) {
+	wm := parseWardley("wardley-beta\n  evolution Unmodelled -> Divergent -> Convergent -> Modelled\n  component A [0.1, 0.1]")
+	if len(wm.stages) != 4 || wm.stages[0].name != "Unmodelled" || wm.stages[3].name != "Modelled" {
+		t.Fatalf("stages = %+v", wm.stages)
+	}
+	wm = parseWardley("wardley-beta\n  evolution Genesis@0.2 -> Custom@0.4 -> Product@0.75 -> Commodity@1.0\n  component A [0.1, 0.1]")
+	if wm.stages[0].end != 0.2 || wm.stages[2].end != 0.75 {
+		t.Errorf("stage boundaries = %+v", wm.stages)
+	}
+}
+
+func TestWardleyNoComponents(t *testing.T) {
+	c := RenderWardley("wardley-beta\n  title Empty", renderer.UNICODE, nil)
+	assertCanvasContains(t, c, "no components")
+}
+
+// ── Cynefin ─────────────────────────────────────────────────────────────────
+
+func TestCynefinDomainsAndItems(t *testing.T) {
+	c := RenderCynefin("cynefin-beta\n  title Response\n  complex\n    \"Probe it\"\n  clear\n    \"Known fix\"", renderer.UNICODE, nil)
+	assertCanvasContains(t, c, "Response")
+	assertCanvasContains(t, c, "Complex")
+	assertCanvasContains(t, c, "Complicated")
+	assertCanvasContains(t, c, "Chaotic")
+	assertCanvasContains(t, c, "Clear")
+	assertCanvasContains(t, c, "Confusion")
+	assertCanvasContains(t, c, "Probe it")
+	assertCanvasContains(t, c, "Known fix")
+}
+
+func TestCynefinEmptyFrameworkStillDrawsDomains(t *testing.T) {
+	c := RenderCynefin("cynefin-beta\n  complex\n  complicated\n  clear\n  chaotic", renderer.UNICODE, nil)
+	assertCanvasContains(t, c, "Complex")
+	assertCanvasContains(t, c, "Chaotic")
+}
+
+func TestCynefinTransitions(t *testing.T) {
+	cf := parseCynefin("cynefin-beta\n  complex --> complicated : \"Pattern identified\"\n  complex --> complex\n  chaotic --> complex")
+	if len(cf.moves) != 2 {
+		t.Fatalf("moves = %+v, want the two between different domains", cf.moves)
+	}
+	if cf.moves[0].label != "Pattern identified" {
+		t.Errorf("label = %q", cf.moves[0].label)
+	}
+	c := RenderCynefin("cynefin-beta\n  complex --> complicated : \"Pattern identified\"", renderer.UNICODE, nil)
+	assertCanvasContains(t, c, "Pattern identified")
+	assertCanvasContains(t, c, "►")
+}
+
+func TestCynefinConfusionOverflowIsCounted(t *testing.T) {
+	c := RenderCynefin("cynefin-beta\n  confusion\n    \"One\"\n    \"Two\"\n    \"Three\"\n    \"Four\"", renderer.UNICODE, nil)
+	assertCanvasContains(t, c, "+2 more")
+}
+
+func TestCynefinItemOutsideADomainIsDropped(t *testing.T) {
+	cf := parseCynefin("cynefin-beta\n  \"Homeless item\"\n  complex\n    \"Placed\"")
+	if len(cf.items["complex"]) != 1 || cf.items["complex"][0] != "Placed" {
+		t.Errorf("items = %+v", cf.items)
+	}
+}
+
+// ── Chart family: review regressions ────────────────────────────────────────
+
+// assertBounded fails when a canvas is larger than any terminal figure should
+// be. A coordinate derived from NaN is math.MinInt64, and the rasteriser that
+// receives one used to fill memory before anything could recover; a frame this
+// size is the symptom that reaches a test before the process dies.
+func assertBounded(t *testing.T, c *renderer.Canvas) {
+	t.Helper()
+	if c.Width <= 0 || c.Height <= 0 || c.Width > 1000 || c.Height > 1000 {
+		t.Fatalf("frame is %dx%d, which is not a figure", c.Width, c.Height)
+	}
+}
+
+func TestRadarDegenerateRangesStillRender(t *testing.T) {
+	for _, tc := range []struct{ name, src string }{
+		{"max below min", "radar-beta\n  axis a, b, c\n  curve x{0, 1, 2}\n  max 0"},
+		{"max equal to min", "radar-beta\n  axis a, b, c\n  curve x{0, 1, 2}\n  min 5\n  max 5"},
+		{"min not a number", "radar-beta\n  axis a, b, c\n  curve x{0, 1, 2}\n  min NaN"},
+		{"value not finite", "radar-beta\n  axis a, b, c\n  curve x{Inf, 2, 3}"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := RenderRadar(tc.src, renderer.UNICODE, false, nil)
+			assertBounded(t, c)
+			assertCanvasNotEmpty(t, c)
+			lo, hi := parseRadar(tc.src).bounds()
+			if !finite(lo) || !finite(hi) || hi <= lo {
+				t.Errorf("bounds = %v..%v, want a finite range wider than nothing", lo, hi)
+			}
+		})
+	}
+}
+
+func TestRadarKeyedCurveBeforeItsAxes(t *testing.T) {
+	rc := parseRadar("radar-beta\n  curve x{ c: 30, a: 10 }\n  axis a, b, c")
+	got := rc.curves[0].values
+	if len(got) != 3 || got[0] != 10 || got[2] != 30 {
+		t.Fatalf("values = %v, want 10 at a and 30 at c", got)
+	}
+	if !math.IsNaN(got[1]) {
+		t.Errorf("unnamed axis = %v, want NaN so the render reads it as the low bound", got[1])
+	}
+}
+
+func TestRadarLegendClearsTheAxisLabelMargin(t *testing.T) {
+	// The right-hand axis label and the legend both live beyond the rim; the
+	// legend has to start past the label, not on it.
+	c := RenderRadar("radar-beta\n  axis speed[\"Speed\"], cost[\"Cost\"], reliability[\"Reliability\"]\n  axis support[\"Support\"], features[\"Features\"]\n  curve a[\"Vendor A\"]{85, 60, 90, 70, 75}\n  max 100", renderer.UNICODE, false, nil)
+	assertCanvasContains(t, c, "Cost")
+	assertCanvasContains(t, c, "Reliability")
+}
+
+func TestChartLegendBoxesAreASCIIInASCII(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		draw func() *renderer.Canvas
+	}{
+		{"radar", func() *renderer.Canvas {
+			return RenderRadar("radar-beta\n  axis a, b, c\n  curve one{1, 2, 3}", renderer.ASCII, false, nil)
+		}},
+		{"venn", func() *renderer.Canvas {
+			return RenderVenn("venn-beta\n  set A\n  set B\n  union A,B[\"AB\"]", renderer.ASCII, false, nil)
+		}},
+		{"pie", func() *renderer.Canvas {
+			return RenderPieChart("pie\n  \"A\" : 60\n  \"B\" : 40", renderer.ASCII, false, nil)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out := tc.draw().ToString()
+			for _, r := range out {
+				if r > 127 {
+					t.Fatalf("ASCII render carries %q\n---\n%s\n---", r, out)
+				}
+			}
+		})
+	}
+}
+
+func TestVennUnionJoinerFollowsTheCharset(t *testing.T) {
+	vd := parseVenn("venn-beta\n  set A\n  set B\n  union A,B")
+	if got := vd.unionName(0b11, marksFor(renderer.UNICODE)); got != "A ∩ B" {
+		t.Errorf("unicode join = %q", got)
+	}
+	if got := vd.unionName(0b11, marksFor(renderer.ASCII)); got != "A n B" {
+		t.Errorf("ascii join = %q", got)
+	}
+}
+
+func TestVennFourthSetIsDropped(t *testing.T) {
+	vd := parseVenn("venn-beta\n  set A\n  set B\n  set C\n  set D\n  union C,D[\"CD\"]")
+	if len(vd.sets) != vennMaxSets {
+		t.Errorf("sets = %d, want the cap of %d", len(vd.sets), vennMaxSets)
+	}
+	if len(vd.unions) != 0 {
+		t.Errorf("unions = %+v, want none: D was never declared", vd.unions)
+	}
+}
+
+func TestVennRegionLabelKeepsItsSpaces(t *testing.T) {
+	// `Put` skips a space, so without clearing the cells first the fill under
+	// a two-word label shows between its words and it reads as one.
+	c := RenderVenn("venn-beta\n  set Desirable\n  set Feasible\n  set Viable\n  union Desirable,Feasible,Viable[\"Ship it\"]", renderer.UNICODE, false, nil)
+	assertCanvasContains(t, c, "Ship it")
+}
+
+func TestWardleyLabelKeepsItsSpacesOverALeg(t *testing.T) {
+	// Every dependency draws its horizontal leg on the target's row, which is
+	// the target's label row.
+	c := RenderWardley("wardley-beta\n  component Web App [0.75, 0.20]\n  component API Gateway [0.70, 0.90]\n  Web App -> API Gateway", renderer.UNICODE, nil)
+	assertCanvasContains(t, c, "Web App")
+	assertCanvasContains(t, c, "API Gateway")
+}
+
+func TestWardleyEvolveSurvivesABlockedRow(t *testing.T) {
+	// B's incoming leg runs along A's row + 1, where A's evolve arrow would
+	// go; the arrow moves rather than vanishing.
+	src := "wardley-beta\n  component A [0.60, 0.20]\n  component B [0.55, 0.90]\n  component C [0.90, 0.40]\n  C -> B\n  evolve A 0.70"
+	c := RenderWardley(src, renderer.UNICODE, nil)
+	if !strings.Contains(c.ToString(), string(renderer.UNICODE.ArrowRight)) {
+		t.Errorf("the evolve arrow is missing\n---\n%s\n---", c.ToString())
+	}
+}
+
+func TestWardleyStageNamesDoNotMerge(t *testing.T) {
+	src := "wardley-beta\n  evolution Genesis / Concept -> Custom / Emerging -> Product / Converging -> Commodity / Accepted\n  component Novel Idea [0.05, 0.20]"
+	out := RenderWardley(src, renderer.UNICODE, nil).ToString()
+	for _, merged := range []string{"ConceptCustom", "EmergingProduct", "ConvergingCommodity"} {
+		if strings.Contains(out, merged) {
+			t.Errorf("stage names merged as %q\n---\n%s\n---", merged, out)
+		}
+	}
+}
+
+func TestCynefinQuadrantCountsWhatDoesNotFit(t *testing.T) {
+	c := RenderCynefin("cynefin-beta\n  clear\n    \"One\"\n    \"Two\"\n    \"Three\"\n    \"Four\"\n    \"Five\"", renderer.UNICODE, nil)
+	assertCanvasContains(t, c, "+2 more")
+}
+
+func TestCynefinPracticeFollowsTheCharset(t *testing.T) {
+	unicode := cynefinDomains[0].practice(marksFor(renderer.UNICODE))
+	if unicode != "Probe · Sense · Respond — emergent practice" {
+		t.Errorf("unicode practice = %q", unicode)
+	}
+	ascii := cynefinDomains[0].practice(marksFor(renderer.ASCII))
+	if ascii != "Probe * Sense * Respond - emergent practice" {
+		t.Errorf("ascii practice = %q", ascii)
+	}
+}
+
+func TestTruncateMarkSaysWhereItCut(t *testing.T) {
+	m := marksFor(renderer.UNICODE)
+	if got := truncateMark("emergent practice", 30, m); got != "emergent practice" {
+		t.Errorf("text that fits = %q, want it whole", got)
+	}
+	if got := truncateMark("emergent practice", 10, m); got != "emergent…" {
+		t.Errorf("cut = %q, want the mark and no trailing space", got)
+	}
+	if got := truncateMark("emergent", 1, marksFor(renderer.ASCII)); got != "e" {
+		t.Errorf("cut too narrow for the mark = %q", got)
+	}
+}
+
+func TestCellPathClipsToItsRectangle(t *testing.T) {
+	// The vertex is what a NaN-derived coordinate looks like by the time it
+	// reaches the rasteriser.
+	path := cellPath([][2]int{{0, 0}, {math.MinInt64, math.MinInt64}}, false, false, cellRect{0, 0, 9, 9})
+	if len(path) > 100 {
+		t.Fatalf("path is %d cells, want it clipped to the rectangle", len(path))
+	}
+	for _, p := range path {
+		if p[0] < 0 || p[0] > 9 || p[1] < 0 || p[1] > 9 {
+			t.Fatalf("cell %v is outside the rectangle", p)
+		}
 	}
 }
