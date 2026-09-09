@@ -28,6 +28,10 @@ type Settings struct {
 	Hyperlinks    *bool    `json:"hyperlinks,omitempty"`
 	AmbiguousWide *bool    `json:"ambiguous_wide,omitempty"`
 	Failed        []string `json:"failed,omitempty"`
+
+	// Terminal is the name the tester's DA1 probe detected. It is for the
+	// reader; resolution ignores it.
+	Terminal *string `json:"terminal,omitempty"`
 }
 
 // File is the on-disk shape: a default section and one section per terminal
@@ -196,7 +200,7 @@ func isAbsent(err error) bool {
 }
 
 // TerminalIdentity returns the key a profile is looked up by: TERM_PROGRAM when
-// the terminal sets it, else TERM.
+// the terminal sets it, else TERM. The tester and a render use the same key.
 func TerminalIdentity() string {
 	if p := os.Getenv("TERM_PROGRAM"); p != "" {
 		return p
@@ -233,22 +237,19 @@ func identityFromDA1(response string) string {
 	return da1Names[s]
 }
 
-// ProbedIdentity is the tester's identity: TERM_PROGRAM when set, else the
-// DA1 response mapped to a name, else TERM. query sends `ESC [ c` to the
-// terminal and returns what came back; a nil query skips the probe. Ordinary
-// renders use TerminalIdentity and never write to the terminal.
-func ProbedIdentity(query func(string) (string, error)) string {
-	if p := os.Getenv("TERM_PROGRAM"); p != "" {
-		return p
+// DetectTerminal names the terminal from its DA1 response. query sends
+// `ESC [ c` and returns what came back. The name goes in the tester's report
+// and the profile's terminal field; it keys nothing. Only the tester calls
+// it, so a render never writes to the terminal.
+func DetectTerminal(query func(string) (string, error)) string {
+	if query == nil {
+		return ""
 	}
-	if query != nil {
-		if response, err := query("\x1b[c"); err == nil {
-			if name := identityFromDA1(response); name != "" {
-				return name
-			}
-		}
+	response, err := query("\x1b[c")
+	if err != nil {
+		return ""
 	}
-	return os.Getenv("TERM")
+	return identityFromDA1(response)
 }
 
 // resolver walks the layers for one setting and records where the answer came

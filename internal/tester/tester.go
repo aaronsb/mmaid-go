@@ -60,7 +60,10 @@ const Timeout = 200 * time.Millisecond
 
 // Result is what the probes found.
 type Result struct {
-	Identity  string
+	// Identity is the profile key: TERM_PROGRAM, else TERM.
+	Identity string
+	// Terminal is the name the DA1 probe detected, or "".
+	Terminal  string
 	Truecolor bool
 	Failed    []Failure
 	// Probed says the terminal answered the queries; when false, every
@@ -79,7 +82,7 @@ func TruecolorFromEnv() bool {
 
 // FromEnv answers what the environment can without touching the terminal.
 func FromEnv() Result {
-	return Result{Identity: config.ProbedIdentity(nil), Truecolor: TruecolorFromEnv()}
+	return Result{Identity: config.TerminalIdentity(), Truecolor: TruecolorFromEnv()}
 }
 
 // Probe runs the terminal probes over in and out, which must both be
@@ -97,8 +100,8 @@ func Probe(in, out *os.File, samples []renderer.Sample) Result {
 	defer term.Restore(int(in.Fd()), state)
 
 	q := &Querier{In: in, Out: out}
-	res := Result{Truecolor: TruecolorFromEnv()}
-	res.Identity = config.ProbedIdentity(func(request string) (string, error) {
+	res := FromEnv()
+	res.Terminal = config.DetectTerminal(func(request string) (string, error) {
 		return q.Query(request, 'c')
 	})
 
@@ -283,13 +286,17 @@ func Report(out io.Writer, failures []Failure) {
 	}
 }
 
-// Merge sets truecolor and failed on the identity's profile and leaves its
-// other keys alone. It reports whether the profile existed.
-func Merge(file *config.File, identity string, truecolor bool, failures []Failure) (existed bool) {
+// Merge sets truecolor and failed on the identity's profile, records the
+// detected terminal when there is one, and leaves the other keys alone. It
+// reports whether the profile existed.
+func Merge(file *config.File, identity, terminal string, truecolor bool, failures []Failure) (existed bool) {
 	if file.Profiles == nil {
 		file.Profiles = map[string]config.Settings{}
 	}
 	prof, existed := file.Profiles[identity]
+	if terminal != "" {
+		prof.Terminal = &terminal
+	}
 	prof.Truecolor = &truecolor
 	prof.Failed = nil
 	for _, f := range failures {

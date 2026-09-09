@@ -145,7 +145,15 @@ func runConfigInit(args []string) {
 	if probe.Identity == "" {
 		fail(fmt.Errorf("no terminal identity: neither TERM_PROGRAM nor TERM is set"))
 	}
-	fmt.Printf("terminal   %s\n", probe.Identity)
+	fmt.Printf("identity   %s\n", probe.Identity)
+	switch {
+	case probe.Terminal != "":
+		fmt.Printf("terminal   %s (DA1)\n", probe.Terminal)
+	case *noProbe:
+		fmt.Println("terminal   not probed (--no-probe)")
+	default:
+		fmt.Println("terminal   unknown (no DA1 answer)")
+	}
 	fmt.Printf("truecolor  %t (COLORTERM)\n", probe.Truecolor)
 	switch {
 	case *noProbe:
@@ -176,15 +184,11 @@ func runConfigInit(args []string) {
 			return
 		}
 	}
-	tester.Merge(&file, probe.Identity, probe.Truecolor, failures)
+	tester.Merge(&file, probe.Identity, probe.Terminal, probe.Truecolor, failures)
 	if err := config.Save(path, file); err != nil {
 		fail(err)
 	}
-	fmt.Printf("wrote %s\n", path)
-	if rendered := config.TerminalIdentity(); rendered != probe.Identity {
-		fmt.Printf("note: a render looks its profile up by TERM_PROGRAM or TERM, which is %q here\n", rendered)
-	}
-	fmt.Println()
+	fmt.Printf("wrote %s\n\n", path)
 	printConfigShow()
 }
 

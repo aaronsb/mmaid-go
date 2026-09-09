@@ -156,7 +156,7 @@ func TestMergeTouchesOnlyTruecolorAndFailed(t *testing.T) {
 	f := config.File{Profiles: map[string]config.Settings{
 		"WezTerm": {Theme: &theme, Hyperlinks: &links, Failed: []string{"octants"}},
 	}}
-	existed := Merge(&f, "WezTerm", false, []Failure{{glyph.BoxHeavy, Shape}})
+	existed := Merge(&f, "WezTerm", "WezTerm", false, []Failure{{glyph.BoxHeavy, Shape}})
 	if !existed {
 		t.Error("the profile existed")
 	}
@@ -167,10 +167,13 @@ func TestMergeTouchesOnlyTruecolorAndFailed(t *testing.T) {
 	if p.Truecolor == nil || *p.Truecolor || len(p.Failed) != 1 || p.Failed[0] != "box-heavy" {
 		t.Errorf("profile = %+v", p)
 	}
-	if Merge(&f, "kitty", true, nil) {
-		t.Error("kitty did not exist")
+	if p.Terminal == nil || *p.Terminal != "WezTerm" {
+		t.Errorf("terminal = %v", p.Terminal)
 	}
-	if k := f.Profiles["kitty"]; k.Failed != nil || k.Truecolor == nil || !*k.Truecolor {
+	if Merge(&f, "xterm-kitty", "", true, nil) {
+		t.Error("xterm-kitty did not exist")
+	}
+	if k := f.Profiles["xterm-kitty"]; k.Failed != nil || k.Truecolor == nil || !*k.Truecolor || k.Terminal != nil {
 		t.Errorf("new profile = %+v", k)
 	}
 }

@@ -68,8 +68,8 @@ answer is asked.
 
 Probed, with a 200 ms timeout on each query:
 
-- terminal identity: `TERM_PROGRAM` when set, else DA1 (`ESC [ c`)
-  mapped to a known name, else `TERM`;
+- terminal identity: `TERM_PROGRAM` when set, else `TERM`; DA1 (`ESC [ c`)
+  names the terminal in the report and in the profile's `terminal` field;
 - truecolor: `COLORTERM` equal to `truecolor` or `24bit`;
 - advance width per family: print the family's sample with the cursor
   at a known column, request a cursor position report (`ESC [ 6 n`),
@@ -105,8 +105,8 @@ Config is JSON at `$XDG_CONFIG_HOME/mmaid/config.json`, defaulting to
 }
 ```
 
-Profile keys are terminal identities as the probe reports them. Every
-key accepted in a profile is accepted in `default`: `theme`, `glyphs`,
+Profile keys are `TERM_PROGRAM`, else `TERM`. Every key accepted in a
+profile is accepted in `default`: `theme`, `glyphs`,
 `width`, `orientation`, `padding_x`, `padding_y`, `sharp_edges`,
 `truecolor`, `hyperlinks`, `ambiguous_wide`, `failed`.
 
@@ -157,10 +157,8 @@ clearing the screen between renders, polling at 250 ms.
   keys the profile to the wrong terminal. `mmaid config show` makes
   that visible.
 - Five resolution sources for each setting is a debugging surface.
-- A render keys its profile by `TERM_PROGRAM` or `TERM` and never queries
-  the terminal, so a profile the tester keyed by a DA1 name (a terminal
-  that sets no `TERM_PROGRAM`) is not found by a render. The tester prints
-  the key a render will use when the two differ.
+- Terminals that set neither `TERM_PROGRAM` nor a distinctive `TERM` share
+  a profile.
 
 ### Neutral
 
@@ -191,7 +189,8 @@ clearing the screen between renders, polling at 250 ms.
   are answered by the terminal in under a second and a human answers
   them worse.
 - **TOML or YAML config.** Rejected: JSON needs no dependency.
-- **Key profiles by `TERM`.** Rejected: `xterm-256color` is every
-  terminal.
+- **Key profiles by `TERM` alone.** Rejected as the only key:
+  `xterm-256color` is every terminal. It is the fallback when
+  `TERM_PROGRAM` is absent.
 - **Detect the terminal on every run and skip the file.** Rejected: the
   visual answers cannot be re-derived on every run.

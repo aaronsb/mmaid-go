@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -351,22 +352,36 @@ func TestIdentityFromDA1(t *testing.T) {
 	}
 }
 
-func TestProbedIdentityOrder(t *testing.T) {
-	answer := func(string) (string, error) { return "\x1b[?62;c", nil }
-	t.Setenv("TERM_PROGRAM", "WezTerm")
-	t.Setenv("TERM", "xterm-256color")
-	if got := ProbedIdentity(answer); got != "WezTerm" {
-		t.Errorf("TERM_PROGRAM should win, got %q", got)
-	}
-	t.Setenv("TERM_PROGRAM", "")
-	if got := ProbedIdentity(answer); got != "kitty" {
-		t.Errorf("DA1 should answer next, got %q", got)
-	}
-	if got := ProbedIdentity(nil); got != "xterm-256color" {
-		t.Errorf("without a query TERM answers, got %q", got)
+func TestDetectTerminal(t *testing.T) {
+	var sent string
+	answer := func(req string) (string, error) { sent = req; return "\x1b[?62;c", nil }
+	if got := DetectTerminal(answer); got != "kitty" || sent != "\x1b[c" {
+		t.Errorf("got %q after sending %q", got, sent)
 	}
 	unknown := func(string) (string, error) { return "\x1b[?1;2c", nil }
-	if got := ProbedIdentity(unknown); got != "xterm-256color" {
-		t.Errorf("an unlisted DA1 falls to TERM, got %q", got)
+	if got := DetectTerminal(unknown); got != "" {
+		t.Errorf("an unlisted DA1 names nothing, got %q", got)
+	}
+	mute := func(string) (string, error) { return "", errors.New("no answer") }
+	if got := DetectTerminal(mute); got != "" {
+		t.Errorf("no answer names nothing, got %q", got)
+	}
+	if got := DetectTerminal(nil); got != "" {
+		t.Errorf("nil query names nothing, got %q", got)
+	}
+}
+
+func TestTerminalFieldIsInformational(t *testing.T) {
+	kitty := "kitty"
+	tc := true
+	f := File{Profiles: map[string]Settings{"xterm-kitty": {Terminal: &kitty, Truecolor: &tc}}}
+	res := Resolve(Settings{}, nil, f, "xterm-kitty")
+	if !res.Truecolor || res.Source[KeyTruecolor] != "profile xterm-kitty" {
+		t.Errorf("the profile did not resolve: %+v", res.Source)
+	}
+	for _, k := range Keys {
+		if k == "terminal" {
+			t.Error("terminal is not a setting")
+		}
 	}
 }

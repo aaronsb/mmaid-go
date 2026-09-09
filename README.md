@@ -208,10 +208,11 @@ grouped into families, `box-light`, `box-rounded`, `box-heavy`, `box-double`,
 terminal's font lacks. A failed family is drawn from its fallback (heavy and
 double to light, light and the fills to ASCII) and nothing else changes.
 
-`mmaid config init` fills that list in. It reads the terminal's identity from
-`TERM_PROGRAM`, the DA1 response, or `TERM`, truecolor from `COLORTERM`, and
-measures how far each family's sample advances the cursor, marking a family
-whose advance is wrong as failed. It then prints one numbered line per family
+`mmaid config init` fills that list in. It keys the profile by `TERM_PROGRAM`,
+else `TERM`, names the terminal from its DA1 response in the report and the
+profile's `terminal` field, reads truecolor from `COLORTERM`, and measures how
+far each family's sample advances the cursor, marking a family whose advance
+is wrong as failed. It then prints one numbered line per family
 beside the same figure in the fallback set and asks which lines look wrong.
 The answers merge into the terminal's profile as `truecolor` and `failed`;
 `--no-probe` skips the terminal queries and `--force` replaces an existing
