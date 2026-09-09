@@ -11,6 +11,7 @@ journey
 kanban
 mindmap
 quadrant
-sequence
+sequence  # dashed lifelines meeting message arms; arms off the bottom edge
 timeline
 xychart
+zenuml    # as sequence: it renders through that renderer
