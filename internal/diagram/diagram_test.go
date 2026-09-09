@@ -1222,3 +1222,27 @@ func TestEventModelingUnknownEntityTypeIsDropped(t *testing.T) {
 		t.Errorf("second frame = %q, want 03", ed.frames[1].id)
 	}
 }
+
+// The start rule allows `ISHIKAWA document` with no newline between them, so
+// the rest of the header line is the effect.
+func TestIshikawaEffectOnTheHeaderLine(t *testing.T) {
+	root := parseIshikawa("ishikawa-beta Late Delivery\n    Process\n        Slow handoffs")
+	if root.text != "Late Delivery" {
+		t.Fatalf("effect = %q", root.text)
+	}
+	if len(root.children) != 1 || root.children[0].text != "Process" {
+		t.Errorf("categories = %+v", root.children)
+	}
+}
+
+// TEXT is `[^\n]+`, so only a line that starts with %% is a comment.
+func TestIshikawaCommentIsWholeLineOnly(t *testing.T) {
+	root := parseIshikawa("ishikawa\nEffect\n  Pricing\n    Discount 20%% off\n%% a note")
+	causes := root.children[0].children
+	if len(causes) != 1 {
+		t.Fatalf("causes = %+v", causes)
+	}
+	if causes[0].text != "Discount 20%% off" {
+		t.Errorf("cause = %q, want the %%%% kept", causes[0].text)
+	}
+}

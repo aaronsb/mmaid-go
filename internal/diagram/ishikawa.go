@@ -8,6 +8,20 @@ import (
 	"github.com/aaronsb/mmaid-go/internal/renderer"
 )
 
+// Skipped, against ishikawa.jison and ishikawaDb.ts at mermaid fe0e2375:
+//   - `accTitle` and `accDescr`: the jison lexer has no rule for either, so
+//     both are cause text upstream and here.
+//
+// Divergences:
+//   - A cause nested below the first level becomes another rib carrying one
+//     marker per level under its category. `ishikawaRenderer.ts`'s flattenTree
+//     draws those recursively as sub-branches off their own bone, which needs
+//     a second diagonal per level; a character grid runs out of cells long
+//     before the tree does.
+//
+// Only a line whose first non-blank characters are `%%` is a comment: the
+// lexer's TEXT rule is `[^\n]+`, so `Discount 20%% off` keeps its text.
+
 // ishikawaNode is one line of a fishbone: the effect at the root, its
 // categories below it, and their causes below those.
 type ishikawaNode struct {
@@ -15,7 +29,9 @@ type ishikawaNode struct {
 	children []*ishikawaNode
 }
 
-var reIshikawaHeader = regexp.MustCompile(`(?i)^ishikawa(-beta)?$`)
+// The header may carry the effect on the same line: the jison start rule
+// allows `ISHIKAWA document` with no newline between them.
+var reIshikawaHeader = regexp.MustCompile(`(?i)^ishikawa(?:-beta)?(?:\s+(.*))?$`)
 
 // parseIshikawa parses a Mermaid ishikawa definition. The first line after the
 // header is the effect; the rest are causes, nested by indentation. The
@@ -35,32 +51,11 @@ func parseIshikawa(source string) *ishikawaNode {
 	var stack []stackEntry
 	base := -1
 
-	for _, line := range strings.Split(source, "\n") {
-		if i := strings.Index(line, "%%"); i >= 0 {
-			line = line[:i]
-		}
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || reIshikawaHeader.MatchString(trimmed) {
-			continue
-		}
-
-		raw := 0
-	measure:
-		for _, ch := range line {
-			switch ch {
-			case ' ':
-				raw++
-			case '\t':
-				raw += 4
-			default:
-				break measure
-			}
-		}
-
+	add := func(raw int, text string) {
 		if root == nil {
-			root = &ishikawaNode{text: trimmed}
+			root = &ishikawaNode{text: text}
 			stack = []stackEntry{{0, root}}
-			continue
+			return
 		}
 		if base < 0 {
 			base = raw
@@ -69,10 +64,28 @@ func parseIshikawa(source string) *ishikawaNode {
 		for len(stack) > 1 && stack[len(stack)-1].level >= level {
 			stack = stack[:len(stack)-1]
 		}
-		node := &ishikawaNode{text: trimmed}
+		node := &ishikawaNode{text: text}
 		parent := stack[len(stack)-1].node
 		parent.children = append(parent.children, node)
 		stack = append(stack, stackEntry{level, node})
+	}
+
+	seenHeader := false
+	for _, line := range strings.Split(source, "\n") {
+		trimmed := strings.TrimSpace(strings.TrimRight(line, "\r"))
+		if trimmed == "" || strings.HasPrefix(trimmed, "%%") {
+			continue
+		}
+		if !seenHeader {
+			if m := reIshikawaHeader.FindStringSubmatch(trimmed); m != nil {
+				seenHeader = true
+				if rest := strings.TrimSpace(m[1]); rest != "" {
+					add(0, rest)
+				}
+				continue
+			}
+		}
+		add(indentWidth(line), trimmed)
 	}
 
 	return root
@@ -98,23 +111,12 @@ type ishikawaBone struct {
 
 const ishikawaRib = 2 // rib cells between a cause and its bone
 
-// RenderIshikawa parses and renders a Mermaid ishikawa (fishbone) diagram:
-// a heavy spine running into the effect box on the right, with the categories
-// as diagonal bones alternating above and below it.
-func RenderIshikawa(source string, cs renderer.CharSet, theme *renderer.Theme) *renderer.Canvas {
-	root := parseIshikawa(source)
-	if root == nil {
-		c := renderer.NewCanvas(30, 1)
-		c.PutText(0, 0, "[ishikawa] no effect", "default")
-		return c
-	}
-
-	marker := "· "
-	if cs.ASCII {
-		marker = "- "
-	}
-
-	bones := make([]ishikawaBone, 0, len(root.children))
+// ishikawaLayout turns the categories into bones and places each one in a
+// column slot wide enough for its longest cause line and its own label.
+// It returns the bones, the column the effect box starts at, and how far the
+// bones reach above and below the spine.
+func ishikawaLayout(root *ishikawaNode, marker string) (bones []ishikawaBone, boxLeft, above, below int) {
+	bones = make([]ishikawaBone, 0, len(root.children))
 	for i, cat := range root.children {
 		var causes []string
 		ishikawaCauses(cat, 0, marker, &causes)
@@ -126,8 +128,6 @@ func RenderIshikawa(source string, cs renderer.CharSet, theme *renderer.Theme) *
 		})
 	}
 
-	// Lay the bones out left to right, each in a column slot wide enough for
-	// its longest cause line and its own label.
 	col := 1
 	for i := range bones {
 		b := &bones[i]
@@ -139,66 +139,54 @@ func RenderIshikawa(source string, cs renderer.CharSet, theme *renderer.Theme) *
 		col = b.attach + 1
 	}
 
-	effect := root.text
-	boxW := runeLen(effect) + 4
-	boxLeft := col + 2
+	boxLeft = col + 2
 	if len(bones) == 0 {
 		boxLeft = 6
 	}
-
-	aboveExt, belowExt := 1, 1
+	above, below = 1, 1
 	for _, b := range bones {
 		if b.above {
-			aboveExt = max(aboveExt, b.length+1)
+			above = max(above, b.length+1)
 		} else {
-			belowExt = max(belowExt, b.length+1)
+			below = max(below, b.length+1)
 		}
 	}
+	return bones, boxLeft, above, below
+}
 
-	spineRow := aboveExt
-	c := renderer.NewCanvas(boxLeft+boxW+1, spineRow+belowExt+1)
-	c.SetCharSet(cs)
-
-	useRegion := theme != nil && theme.HasDepthColors()
-
-	// The spine, heavy, running into the effect box's left border.
-	c.Segment(spineRow, 0, spineRow, boxLeft, glyph.Heavy, false, "edge")
-
-	for i, b := range bones {
-		labelStyle := "bold_label"
-		boneStyle := "edge"
-		if useRegion {
-			labelStyle = "_ansi:" + theme.RegionLabelStyle(i, 0)
-			boneStyle = "_ansi:" + theme.RegionBorderStyle(i, 0)
-		}
-		step, bone := -1, cs.Backslash
-		if !b.above {
-			step, bone = 1, cs.Slash
-		}
-		for t := 1; t <= b.length; t++ {
-			c.Put(spineRow+step*t, b.attach-t, bone, boneStyle)
-		}
-		tip := b.length
-		c.PutText(spineRow+step*(tip+1), b.attach-tip-runeLen(b.label)+1, b.label, labelStyle)
-
-		// Each cause hangs off its own bone cell on a light rib that runs
-		// from the last letter of the text into the diagonal.
-		for j, cause := range b.causes {
-			row := spineRow + step*(j+1)
-			ribEnd := b.attach - j - 2
-			ribStart := ribEnd - ishikawaRib + 1
-			for x := ribStart; x <= ribEnd; x++ {
-				c.Arm(row, x, glyph.Horizontal, glyph.Light, false, "edge")
-			}
-			style := "label"
-			if useRegion {
-				style = "_ansi:" + theme.RegionTextStyle(i, 1)
-			}
-			c.PutText(row, ribStart-runeLen(cause), cause, style)
-		}
+// ishikawaDrawBone draws one diagonal, its category label at the far end, and
+// a light rib from each cause's text into the bone cell it hangs from.
+func ishikawaDrawBone(c *renderer.Canvas, b ishikawaBone, spineRow, index int, cs renderer.CharSet, theme *renderer.Theme, useRegion bool) {
+	labelStyle := "bold_label"
+	boneStyle := "edge"
+	causeStyle := "label"
+	if useRegion {
+		labelStyle = "_ansi:" + theme.RegionLabelStyle(index, 0)
+		boneStyle = "_ansi:" + theme.RegionBorderStyle(index, 0)
+		causeStyle = "_ansi:" + theme.RegionTextStyle(index, 1)
 	}
+	step, bone := -1, cs.Backslash
+	if !b.above {
+		step, bone = 1, cs.Slash
+	}
+	for t := 1; t <= b.length; t++ {
+		c.Put(spineRow+step*t, b.attach-t, bone, boneStyle)
+	}
+	c.PutText(spineRow+step*(b.length+1), b.attach-b.length-runeLen(b.label)+1, b.label, labelStyle)
 
-	// The effect box, centred on the spine.
+	for j, cause := range b.causes {
+		row := spineRow + step*(j+1)
+		ribEnd := b.attach - j - 2
+		ribStart := ribEnd - ishikawaRib + 1
+		for x := ribStart; x <= ribEnd; x++ {
+			c.Arm(row, x, glyph.Horizontal, glyph.Light, false, "edge")
+		}
+		c.PutText(row, ribStart-runeLen(cause), cause, causeStyle)
+	}
+}
+
+// ishikawaDrawEffect draws the box the spine runs into.
+func ishikawaDrawEffect(c *renderer.Canvas, text string, spineRow, boxLeft, boxW int, theme *renderer.Theme, useRegion bool) {
 	borderStyle := "node"
 	labelStyle := "bold_label"
 	if useRegion {
@@ -211,7 +199,7 @@ func RenderIshikawa(source string, cs renderer.CharSet, theme *renderer.Theme) *
 	c.Segment(bot, boxLeft, bot, right, glyph.Light, false, borderStyle)
 	c.Segment(top, boxLeft, bot, boxLeft, glyph.Light, false, borderStyle)
 	c.Segment(top, right, bot, right, glyph.Light, false, borderStyle)
-	c.PutText(spineRow, boxLeft+(boxW-runeLen(effect))/2, effect, labelStyle)
+	c.PutText(spineRow, boxLeft+(boxW-runeLen(text))/2, text, labelStyle)
 	if useRegion {
 		fill := "_ansi:" + theme.RegionStyle(0, 1)
 		for r := top; r <= bot; r++ {
@@ -220,6 +208,38 @@ func RenderIshikawa(source string, cs renderer.CharSet, theme *renderer.Theme) *
 			}
 		}
 	}
+}
 
+// RenderIshikawa parses and renders a Mermaid ishikawa (fishbone) diagram:
+// a heavy spine running into the effect box on the right, with the categories
+// as diagonal bones alternating above and below it.
+func RenderIshikawa(source string, cs renderer.CharSet, theme *renderer.Theme) *renderer.Canvas {
+	root := parseIshikawa(source)
+	if root == nil {
+		c := renderer.NewCanvas(30, 1)
+		c.PutText(0, 0, "[ishikawa] no effect", "default")
+		return c
+	}
+
+	marker := string(cs.Dot) + " "
+	bones, boxLeft, above, below := ishikawaLayout(root, marker)
+	boxW := runeLen(root.text) + 4
+	spineRow := above
+
+	c := renderer.NewCanvas(boxLeft+boxW+1, spineRow+below+1)
+	c.SetCharSet(cs)
+	useRegion := theme != nil && theme.HasDepthColors()
+
+	// The box goes down first so the cell the spine meets it in keeps the
+	// border's weight and colour: the heavy run stops one column short and
+	// reaches in with a light arm, and the border resolves to a light tee.
+	ishikawaDrawEffect(c, root.text, spineRow, boxLeft, boxW, theme, useRegion)
+	c.Segment(spineRow, 0, spineRow, boxLeft-1, glyph.Heavy, false, "edge")
+	c.Arm(spineRow, boxLeft-1, glyph.E, glyph.Light, false, "edge")
+	c.Arm(spineRow, boxLeft, glyph.W, glyph.Light, false, "edge")
+
+	for i, b := range bones {
+		ishikawaDrawBone(c, b, spineRow, i, cs, theme, useRegion)
+	}
 	return c
 }
