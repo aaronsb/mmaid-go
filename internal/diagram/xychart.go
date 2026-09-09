@@ -128,7 +128,6 @@ func parseFloatList(s string) []float64 {
 
 // RenderXYChart parses and renders a Mermaid xychart-beta diagram.
 func RenderXYChart(source string, cs renderer.CharSet, theme *renderer.Theme) *renderer.Canvas {
-	useASCII := cs.ASCII
 	xd := parseXYChart(source)
 
 	plotH := 15
@@ -180,24 +179,12 @@ func RenderXYChart(source string, cs renderer.CharSet, theme *renderer.Theme) *r
 	plotY := titleRows
 	plotBottom := plotY + plotH
 
-	vLine := '│'
-	hLine := '─'
 	barCh := cs.Fills.Dark
 	lineDot := cs.Dot
-	if useASCII {
-		vLine = '|'
-		hLine = '-'
-	}
 
-	// Y axis
-	for r := plotY; r <= plotBottom; r++ {
-		c.Put(r, plotX-1, vLine, "edge")
-	}
-
-	// X axis
-	for col := plotX; col < plotX+plotW; col++ {
-		c.Put(plotBottom, col, hLine, "edge")
-	}
+	// Axes: two segments meeting at the origin.
+	c.Segment(plotY, plotX-1, plotBottom, plotX-1, glyph.Light, false, "edge")
+	c.Segment(plotBottom, plotX-1, plotBottom, plotX+plotW-1, glyph.Light, false, "edge")
 
 	// Fill plot area background
 	useRegion := theme != nil && theme.HasDepthColors()

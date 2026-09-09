@@ -557,7 +557,7 @@ func gitComputeLayoutLR(gg *gitGraph, useASCII bool) (map[string]int, map[string
 	return commitCol, branchRow, sortedBranches, canvasWidth, canvasHeight, leftOffset
 }
 
-func gitComputeBranchExtentsLR(gg *gitGraph, branchCommits map[string][]*gitCommit, commitCol map[string]int, commitMap map[string]*gitCommit, mainBranch string, lineStartCol int) map[string][2]int {
+func gitComputeBranchExtentsLR(gg *gitGraph, branchCommits map[string][]*gitCommit, commitCol map[string]int, commitMap map[string]*gitCommit) map[string][2]int {
 	extents := make(map[string][2]int)
 
 	for name, commits := range branchCommits {
@@ -566,13 +566,7 @@ func gitComputeBranchExtentsLR(gg *gitGraph, branchCommits map[string][]*gitComm
 		}
 		firstCol := commitCol[commits[0].id]
 		lastCol := commitCol[commits[len(commits)-1].id]
-
-		startCol := firstCol
-		if name == mainBranch {
-			startCol = lineStartCol
-		}
-		endCol := lastCol + 1
-		extents[name] = [2]int{startCol, endCol}
+		extents[name] = [2]int{firstCol, lastCol}
 	}
 
 	// Extend branches to cover merge/fork points
@@ -615,15 +609,7 @@ func gitDrawLR(gg *gitGraph, c *renderer.Canvas, commitCol, branchRow map[string
 		commitMap[gg.commits[i].id] = &gg.commits[i]
 	}
 
-	branchLabelWidth := 0
-	for _, b := range sortedBranches {
-		if textwidth.String(b) > branchLabelWidth {
-			branchLabelWidth = textwidth.String(b)
-		}
-	}
-	lineStartCol := gitMargin + branchLabelWidth + 1
-
-	extents := gitComputeBranchExtentsLR(gg, branchCommits, commitCol, commitMap, gg.mainBranchName, lineStartCol)
+	extents := gitComputeBranchExtentsLR(gg, branchCommits, commitCol, commitMap)
 
 	// 1. Draw branch name labels
 	for _, name := range sortedBranches {
@@ -659,19 +645,9 @@ func gitDrawLR(gg *gitGraph, c *renderer.Canvas, commitCol, branchRow map[string
 			if sourceRow == targetRow {
 				continue
 			}
-			rMin, rMax := min(sourceRow, targetRow), max(sourceRow, targetRow)
-			// Draw vertical line between branch rows (excluding endpoints)
-			for r := rMin + 1; r < rMax; r++ {
-				c.Arm(r, col, glyph.Vertical, glyph.Light, false, "edge")
-			}
-			// Place T-junction characters where vertical meets horizontal branch lines
-			if !useASCII {
-				c.Put(rMin, col, '┬', "edge")
-				c.Put(rMax, col, '┴', "edge")
-			} else {
-				c.Put(rMin, col, '+', "edge")
-				c.Put(rMax, col, '+', "edge")
-			}
+			// The branch lines already run through the end cells; the
+			// segment's inward arms make the tees.
+			c.Segment(sourceRow, col, targetRow, col, glyph.Light, false, "edge")
 		}
 	}
 
@@ -789,15 +765,15 @@ func gitDrawTB(gg *gitGraph, canvas *renderer.Canvas, useASCII bool, cs renderer
 		}
 		if name == gg.mainBranchName {
 			if bottomToTop {
-				branchStart[name] = minRow - 1
+				branchStart[name] = minRow
 				branchEnd[name] = bottomLabelRowOffset - 1
 			} else {
 				branchStart[name] = gitMargin + 1
-				branchEnd[name] = maxRow + 1
+				branchEnd[name] = maxRow
 			}
 		} else {
 			branchStart[name] = minRow
-			branchEnd[name] = maxRow + 1
+			branchEnd[name] = maxRow
 		}
 	}
 
@@ -863,19 +839,7 @@ func gitDrawTB(gg *gitGraph, canvas *renderer.Canvas, useASCII bool, cs renderer
 			if sourceCol == targetCol {
 				continue
 			}
-			cMin, cMax := min(sourceCol, targetCol), max(sourceCol, targetCol)
-			// Draw horizontal line between branch columns (excluding endpoints)
-			for cc := cMin + 1; cc < cMax; cc++ {
-				canvas.Arm(row, cc, glyph.Horizontal, glyph.Light, false, "edge")
-			}
-			// Place T-junction characters where horizontal meets vertical branch lines
-			if !useASCII {
-				canvas.Put(row, cMin, '├', "edge")
-				canvas.Put(row, cMax, '┤', "edge")
-			} else {
-				canvas.Put(row, cMin, '+', "edge")
-				canvas.Put(row, cMax, '+', "edge")
-			}
+			canvas.Segment(row, sourceCol, row, targetCol, glyph.Light, false, "edge")
 		}
 	}
 

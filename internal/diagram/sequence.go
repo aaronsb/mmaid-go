@@ -964,12 +964,12 @@ func drawBlockStart(
 	style := "node"
 
 	// Top border
-	canvas.Put(row, left, cs.Rune(glyph.TopLeft, glyph.Light), style)
+	canvas.PutBox(row, left, cs.Rune(glyph.TopLeft, glyph.Light), style)
 	for c := left + 1; c < minInt(right, canvas.Width); c++ {
-		canvas.Put(row, c, hChar, style)
+		canvas.PutBox(row, c, hChar, style)
 	}
 	if right < canvas.Width {
-		canvas.Put(row, right, cs.Rune(glyph.TopRight, glyph.Light), style)
+		canvas.PutBox(row, right, cs.Rune(glyph.TopRight, glyph.Light), style)
 	}
 
 	// Label row: [kind] label — clear interior first to hide lifeline chars
@@ -979,12 +979,12 @@ func drawBlockStart(
 	}
 	labelCol := left + 1
 	if row+1 < canvas.Height {
-		canvas.Put(row+1, left, cs.Rune(glyph.Vertical, glyph.Light), style)
+		canvas.PutBox(row+1, left, cs.Rune(glyph.Vertical, glyph.Light), style)
 		for c := left + 1; c < minInt(right, canvas.Width); c++ {
 			canvas.ClearCell(row+1, c)
 		}
 		if right < canvas.Width {
-			canvas.Put(row+1, right, cs.Rune(glyph.Vertical, glyph.Light), style)
+			canvas.PutBox(row+1, right, cs.Rune(glyph.Vertical, glyph.Light), style)
 		}
 		canvas.PutText(row+1, labelCol, label, "edge_label")
 	}
@@ -995,20 +995,13 @@ func drawBlockSection(
 	colCenters []int, cs renderer.CharSet, useASCII bool,
 ) {
 	left, right := blockFrameBounds(colCenters, ev.depth)
-	var dash rune
-	if useASCII {
-		dash = '.'
-	} else {
-		dash = '\u2504' // ┄
-	}
 	style := "node"
 
-	canvas.Put(row, left, cs.Rune(glyph.Vertical, glyph.Light), style)
-	for c := left + 1; c < minInt(right, canvas.Width); c++ {
-		canvas.Put(row, c, dash, style)
-	}
+	// The dashed rule runs from side to side, so each side becomes a tee.
+	canvas.PutBox(row, left, cs.Rune(glyph.Vertical, glyph.Light), style)
+	canvas.Segment(row, left, row, minInt(right, canvas.Width-1), glyph.Dashed, false, style)
 	if right < canvas.Width {
-		canvas.Put(row, right, cs.Rune(glyph.Vertical, glyph.Light), style)
+		canvas.PutBox(row, right, cs.Rune(glyph.Vertical, glyph.Light), style)
 	}
 
 	// Section label after left border
@@ -1025,12 +1018,12 @@ func drawBlockEnd(
 	hChar := cs.Rune(glyph.Horizontal, glyph.Light)
 	style := "node"
 
-	canvas.Put(row, left, cs.Rune(glyph.BottomLeft, glyph.Light), style)
+	canvas.PutBox(row, left, cs.Rune(glyph.BottomLeft, glyph.Light), style)
 	for c := left + 1; c < minInt(right, canvas.Width); c++ {
-		canvas.Put(row, c, hChar, style)
+		canvas.PutBox(row, c, hChar, style)
 	}
 	if right < canvas.Width {
-		canvas.Put(row, right, cs.Rune(glyph.BottomRight, glyph.Light), style)
+		canvas.PutBox(row, right, cs.Rune(glyph.BottomRight, glyph.Light), style)
 	}
 }
 
@@ -1330,9 +1323,9 @@ func renderSequenceModel(diagram *sequenceDiagram, cs renderer.CharSet) *rendere
 		}
 		for r := lifelineStart; r < minInt(endRow, lifelineEnd+1); r++ {
 			if isActivated(activationRanges, p.id, r) {
-				canvas.Put(r, cx, activeChar, "edge")
+				canvas.PutBox(r, cx, activeChar, "edge")
 			} else {
-				canvas.Put(r, cx, lifelineChar, "edge")
+				canvas.PutBox(r, cx, lifelineChar, "edge")
 			}
 		}
 	}
@@ -1368,9 +1361,9 @@ func renderSequenceModel(diagram *sequenceDiagram, cs renderer.CharSet) *rendere
 				}
 				// Draw side borders on top of fill
 				for r := entry.startRow + 1; r < row; r++ {
-					canvas.Put(r, entry.left, cs.Rune(glyph.Vertical, glyph.Light), "node")
+					canvas.PutBox(r, entry.left, cs.Rune(glyph.Vertical, glyph.Light), "node")
 					if entry.right < canvas.Width {
-						canvas.Put(r, entry.right, cs.Rune(glyph.Vertical, glyph.Light), "node")
+						canvas.PutBox(r, entry.right, cs.Rune(glyph.Vertical, glyph.Light), "node")
 					}
 				}
 			}

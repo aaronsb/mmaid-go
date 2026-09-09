@@ -320,9 +320,9 @@ func TestGitGraphMerge(t *testing.T) {
     checkout main
     merge dev id: "C"`)
 	assertContains(t, out, "C")
-	// Should have T-junctions, not crosses
+	// The fork is a tee on main; the merge is a corner where dev's line ends.
 	assertContains(t, out, "┬")
-	assertContains(t, out, "┴")
+	assertContains(t, out, "┘")
 }
 
 func TestGitGraphTags(t *testing.T) {

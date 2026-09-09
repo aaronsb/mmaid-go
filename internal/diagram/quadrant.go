@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/aaronsb/mmaid-go/internal/glyph"
 	"github.com/aaronsb/mmaid-go/internal/renderer"
 	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
@@ -143,51 +144,24 @@ func RenderQuadrantChart(source string, cs renderer.CharSet, theme *renderer.The
 	plotStartY := titleRows
 	plotEndY := plotStartY + plotH - 1
 
-	vLine := '│'
-	hLine := '─'
-	cross := '┼'
 	dot := '●'
 	if useASCII {
-		vLine = '|'
-		hLine = '-'
-		cross = '+'
 		dot = '*'
 	}
 
-	// Y axis
-	for r := plotStartY; r <= plotEndY; r++ {
-		c.Put(r, plotStartX-1, vLine, "edge")
-	}
-
-	// X axis (at middle)
-	midY := plotStartY + plotH/2
-	for col := plotStartX; col < plotStartX+plotW; col++ {
-		c.Put(midY, col, hLine, "edge")
-	}
-
-	// Center cross
-	midX := plotStartX + plotW/2
-	c.Put(midY, midX, cross, "edge")
-
-	// Vertical center line
-	for r := plotStartY; r <= plotEndY; r++ {
-		if r != midY {
-			c.Put(r, midX, '┆', "edge")
-		}
-	}
-
-	// Horizontal center line (dashed)
-	for col := plotStartX; col < plotStartX+plotW; col++ {
-		if col != midX && c.Get(midY, col) == hLine {
-			c.Put(midY, col, '┄', "edge")
-		}
-	}
-
-	// Bottom x-axis
+	// Axes: the y axis runs down to the x axis row and the x axis starts
+	// under it, so the origin is a corner.
 	axisRow := plotEndY + 1
-	for col := plotStartX; col < plotStartX+plotW; col++ {
-		c.Put(axisRow, col, hLine, "edge")
-	}
+	plotEndX := plotStartX + plotW - 1
+	c.Segment(plotStartY, plotStartX-1, axisRow, plotStartX-1, glyph.Light, false, "edge")
+	c.Segment(axisRow, plotStartX-1, axisRow, plotEndX, glyph.Light, false, "edge")
+
+	// Dashed centre lines from the axes, crossing at the centre.
+	midY := plotStartY + plotH/2
+	midX := plotStartX + plotW/2
+	c.Segment(midY, plotStartX-1, midY, plotEndX, glyph.Dashed, false, "edge")
+	c.Segment(plotStartY, midX, axisRow, midX, glyph.Dashed, false, "edge")
+	c.Arm(midY, midX, glyph.Cross, glyph.Light, false, "edge")
 
 	// Quadrant labels and fills
 	useRegion := theme != nil && theme.HasDepthColors()

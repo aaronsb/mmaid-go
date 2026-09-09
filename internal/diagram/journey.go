@@ -233,9 +233,9 @@ func renderJourneyHorizontal(jd *journeyData, cs renderer.CharSet, theme *render
 			borderStyle = "_ansi:" + theme.RegionBorderStyle(si, 0)
 			labelStyle = "_ansi:" + theme.RegionLabelStyle(si, 0)
 		}
-		c.Put(sectionRow, sp.start, tl, borderStyle)
+		c.PutBox(sectionRow, sp.start, tl, borderStyle)
 		c.DrawHorizontal(sectionRow, sp.start, sp.end, glyph.Light, borderStyle)
-		c.Put(sectionRow, sp.end, tr, borderStyle)
+		c.PutBox(sectionRow, sp.end, tr, borderStyle)
 
 		titleX := max(sp.start+(sp.end-sp.start-runeLen(sp.title))/2, sp.start+1)
 		for col := titleX - 1; col < titleX+runeLen(sp.title)+1; col++ {
@@ -245,10 +245,6 @@ func renderJourneyHorizontal(jd *journeyData, cs renderer.CharSet, theme *render
 		}
 		c.PutText(sectionRow, titleX, sp.title, labelStyle)
 	}
-
-	// Timeline arrow (drawn first; task boxes straddle it).
-	c.DrawHorizontal(timelineRow+1, 1, totalW-1, glyph.Light, "edge")
-	c.Put(timelineRow+1, totalW-1, arrow, "edge")
 
 	// Task boxes.
 	for _, pt := range tasks {
@@ -260,20 +256,18 @@ func renderJourneyHorizontal(jd *journeyData, cs renderer.CharSet, theme *render
 			labelStyle = "_ansi:" + theme.RegionLabelStyle(si, 1)
 		}
 
-		c.Put(taskRow, x, tl, borderStyle)
+		c.PutBox(taskRow, x, tl, borderStyle)
 		c.DrawHorizontal(taskRow, x, x+w-1, glyph.Light, borderStyle)
-		c.Put(taskRow, x+w-1, tr, borderStyle)
+		c.PutBox(taskRow, x+w-1, tr, borderStyle)
 
-		c.Put(taskRow+1, x, vt, borderStyle)
-		c.Put(taskRow+1, x+w-1, vt, borderStyle)
+		c.PutBox(taskRow+1, x, vt, borderStyle)
+		c.PutBox(taskRow+1, x+w-1, vt, borderStyle)
 
-		c.Put(taskRow+2, x, bl, borderStyle)
+		c.PutBox(taskRow+2, x, bl, borderStyle)
 		c.DrawHorizontal(taskRow+2, x, x+w-1, glyph.Light, borderStyle)
-		c.Put(taskRow+2, x+w-1, br, borderStyle)
+		c.PutBox(taskRow+2, x+w-1, br, borderStyle)
 
-		// Clear the box interior (removes the timeline running through it),
-		// then center the task title. ClearCell is required here: Canvas.Put
-		// ignores spaces, so it cannot erase the timeline underneath.
+		// Clear the box interior, then center the task title.
 		for col := x + 1; col < x+w-1; col++ {
 			c.ClearCell(taskRow+1, col)
 		}
@@ -310,6 +304,19 @@ func renderJourneyHorizontal(jd *journeyData, cs renderer.CharSet, theme *render
 		c.PutText(faceRow, fx, face, "label")
 	}
 
+	// Timeline arrow, as runs between the task boxes, drawn after them so
+	// each box side becomes a tee in the box's style.
+	for i, pt := range tasks {
+		if i > 0 {
+			prev := tasks[i-1]
+			c.Segment(timelineRow+1, prev.x+prev.w-1, timelineRow+1, pt.x, glyph.Light, false, "edge")
+		}
+	}
+	if n := len(tasks); n > 0 {
+		c.Segment(timelineRow+1, tasks[n-1].x+tasks[n-1].w-1, timelineRow+1, totalW-1, glyph.Light, false, "edge")
+	}
+	c.Put(timelineRow+1, totalW-1, arrow, "edge")
+
 	return c
 }
 
@@ -319,11 +326,11 @@ func renderJourneyHorizontal(jd *journeyData, cs renderer.CharSet, theme *render
 // --orientation tb is in effect; stays narrow regardless of task count.
 func renderJourneyVertical(jd *journeyData, cs renderer.CharSet, theme *renderer.Theme) *renderer.Canvas {
 	useASCII := cs.ASCII
-	var hz, vt, tl, tr, bl, br, tee rune
+	var vt, tl, tr, bl, br, tee rune
 	if useASCII {
-		hz, vt, tl, tr, bl, br, tee = '-', '|', '+', '+', '+', '+', '+'
+		vt, tl, tr, bl, br, tee = '|', '+', '+', '+', '+', '+'
 	} else {
-		hz, vt, tl, tr, bl, br, tee = '─', '│', '╭', '╮', '╰', '╯', '├'
+		vt, tl, tr, bl, br, tee = '│', '╭', '╮', '╰', '╯', '├'
 	}
 	symbols := journeyActorSymbols(useASCII)
 	useRegion := theme != nil && theme.HasDepthColors()
@@ -425,7 +432,7 @@ func renderJourneyVertical(jd *journeyData, cs renderer.CharSet, theme *renderer
 		spineTop := headerRows[0].row
 		spineBot := boxes[len(boxes)-1].top + 2
 		for r := spineTop; r <= spineBot; r++ {
-			c.Put(r, spineCol, vt, "edge")
+			c.PutBox(r, spineCol, vt, "edge")
 		}
 	}
 
@@ -436,7 +443,7 @@ func renderJourneyVertical(jd *journeyData, cs renderer.CharSet, theme *renderer
 			style = "_ansi:" + theme.RegionLabelStyle(h.si, 0)
 		}
 		c.ClearCell(h.row, spineCol)
-		c.Put(h.row, spineCol, tee, style)
+		c.PutBox(h.row, spineCol, tee, style)
 		c.PutText(h.row, spineCol+2, h.title, style)
 	}
 
@@ -452,22 +459,19 @@ func renderJourneyVertical(jd *journeyData, cs renderer.CharSet, theme *renderer
 			labelStyle = "_ansi:" + theme.RegionLabelStyle(b.si, 1)
 		}
 
-		// Connector from spine to box.
-		c.Put(mid, spineCol, tee, "edge")
-		for col := spineCol + 1; col < boxStartCol; col++ {
-			c.Put(mid, col, hz, "edge")
-		}
+		// Connector from spine to box; both ends become tees.
+		c.Segment(mid, spineCol, mid, boxStartCol, glyph.Light, false, "edge")
 
-		c.Put(top, boxStartCol, tl, borderStyle)
+		c.PutBox(top, boxStartCol, tl, borderStyle)
 		c.DrawHorizontal(top, boxStartCol, boxStartCol+boxW-1, glyph.Light, borderStyle)
-		c.Put(top, boxStartCol+boxW-1, tr, borderStyle)
+		c.PutBox(top, boxStartCol+boxW-1, tr, borderStyle)
 
-		c.Put(mid, boxStartCol, vt, borderStyle)
-		c.Put(mid, boxStartCol+boxW-1, vt, borderStyle)
+		c.PutBox(mid, boxStartCol, vt, borderStyle)
+		c.PutBox(mid, boxStartCol+boxW-1, vt, borderStyle)
 
-		c.Put(bot, boxStartCol, bl, borderStyle)
+		c.PutBox(bot, boxStartCol, bl, borderStyle)
 		c.DrawHorizontal(bot, boxStartCol, boxStartCol+boxW-1, glyph.Light, borderStyle)
-		c.Put(bot, boxStartCol+boxW-1, br, borderStyle)
+		c.PutBox(bot, boxStartCol+boxW-1, br, borderStyle)
 
 		if useRegion {
 			fill := "_ansi:" + theme.RegionStyle(b.si, 1)

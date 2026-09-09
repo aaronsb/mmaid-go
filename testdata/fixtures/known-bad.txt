@@ -8,12 +8,8 @@
 class
 eventmodeling
 gantt
-gitgraph
-journey
-kanban
-mindmap
+journey   # section brackets: corners whose stems point at the row below (rule 1)
 quadrant
 sequence
-timeline
 xychart
 zenuml    # dashed lifelines meeting message arms; arms off the bottom edge

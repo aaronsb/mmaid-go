@@ -319,7 +319,7 @@ func RenderGantt(source string, cs renderer.CharSet, theme *renderer.Theme) *ren
 
 	// Header line
 	for col := barStartCol; col < barStartCol+barW; col++ {
-		c.Put(row, col, hLine, "edge")
+		c.PutBox(row, col, hLine, "edge")
 	}
 	row++
 
@@ -337,7 +337,7 @@ func RenderGantt(source string, cs renderer.CharSet, theme *renderer.Theme) *ren
 				sectionStyle = "_ansi:" + theme.RegionTextStyle(sectionIdx, 0)
 			}
 			c.PutText(row, 1, t.section, sectionStyle)
-			c.Put(row, labelW+1, vLine, "edge")
+			c.PutBox(row, labelW+1, vLine, "edge")
 
 			// Color strip only on bar area (right of divider)
 			if useRegion {
@@ -356,7 +356,7 @@ func RenderGantt(source string, cs renderer.CharSet, theme *renderer.Theme) *ren
 		}
 		padding := labelW - textwidth.String(t.label) - 1
 		c.PutText(row, padding, t.label, labelStyle)
-		c.Put(row, labelW+1, vLine, "edge")
+		c.PutBox(row, labelW+1, vLine, "edge")
 
 		// Row background
 		if useRegion && sectionIdx >= 0 {
@@ -383,9 +383,9 @@ func RenderGantt(source string, cs renderer.CharSet, theme *renderer.Theme) *ren
 				// Colored bar: line delimiters, light fill interior
 				barStyle := "_ansi:" + theme.RegionBarStyle(sectionIdx, 0)
 				borderStyle := "_ansi:" + theme.RegionBorderStyle(sectionIdx, 0)
-				c.Put(row, barStart, vLine, borderStyle)
+				c.PutBox(row, barStart, vLine, borderStyle)
 				if barEnd-1 > barStart {
-					c.Put(row, barEnd-1, vLine, borderStyle)
+					c.PutBox(row, barEnd-1, vLine, borderStyle)
 				}
 				for col := barStart + 1; col < barEnd-1; col++ {
 					c.Put(row, col, cs.Fills.Light, barStyle)
@@ -419,7 +419,7 @@ func RenderGantt(source string, cs renderer.CharSet, theme *renderer.Theme) *ren
 				for r := titleRows + 2; r < row; r++ {
 					existing := c.Get(r, todayCol)
 					if existing == ' ' || existing == cs.Fills.Light {
-						c.Put(r, todayCol, '┆', todayStyle)
+						c.PutBox(r, todayCol, '┆', todayStyle)
 					}
 				}
 				// Label above

@@ -232,23 +232,23 @@ func RenderPacket(source string, cs renderer.CharSet, theme *renderer.Theme) *re
 		}
 
 		// Top border with field separators.
-		c.Put(yTop, margin, tl, "node")
+		c.PutBox(yTop, margin, tl, "node")
 		c.DrawHorizontal(yTop, margin, margin+colsPerRow, glyph.Light, "node")
-		c.Put(yTop, margin+colsPerRow, tr, "node")
+		c.PutBox(yTop, margin+colsPerRow, tr, "node")
 		for _, rf := range rowFields {
 			if rf.colStart > 0 {
-				c.Put(yTop, margin+rf.colStart*packetBitsPerCol, tj, "node")
+				c.PutBox(yTop, margin+rf.colStart*packetBitsPerCol, tj, "node")
 			}
 		}
 
 		// Content rows: side and separator verticals.
 		for py := range paddingY {
 			yr := yTop + 1 + py
-			c.Put(yr, margin, vt, "node")
-			c.Put(yr, margin+colsPerRow, vt, "node")
+			c.PutBox(yr, margin, vt, "node")
+			c.PutBox(yr, margin+colsPerRow, vt, "node")
 			for _, rf := range rowFields {
 				if rf.colStart > 0 {
-					c.Put(yr, margin+rf.colStart*packetBitsPerCol, vt, "node")
+					c.PutBox(yr, margin+rf.colStart*packetBitsPerCol, vt, "node")
 				}
 			}
 		}
@@ -271,12 +271,12 @@ func RenderPacket(source string, cs renderer.CharSet, theme *renderer.Theme) *re
 		}
 
 		// Bottom border with field separators.
-		c.Put(yBottom, margin, bl, "node")
+		c.PutBox(yBottom, margin, bl, "node")
 		c.DrawHorizontal(yBottom, margin, margin+colsPerRow, glyph.Light, "node")
-		c.Put(yBottom, margin+colsPerRow, br, "node")
+		c.PutBox(yBottom, margin+colsPerRow, br, "node")
 		for _, rf := range rowFields {
 			if rf.colStart > 0 {
-				c.Put(yBottom, margin+rf.colStart*packetBitsPerCol, bj, "node")
+				c.PutBox(yBottom, margin+rf.colStart*packetBitsPerCol, bj, "node")
 			}
 		}
 	}

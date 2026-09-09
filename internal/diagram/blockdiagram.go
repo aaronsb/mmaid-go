@@ -418,7 +418,6 @@ type blockGridEntry struct {
 }
 
 func renderBlockDiagram(bd *blockDiagram, cs renderer.CharSet) *renderer.Canvas {
-	useASCII := cs.ASCII
 	if len(bd.blocks) == 0 {
 		return renderer.NewCanvas(1, 1)
 	}
@@ -466,7 +465,7 @@ func renderBlockDiagram(bd *blockDiagram, cs renderer.CharSet) *renderer.Canvas 
 
 	// Draw links (middle layer)
 	for _, link := range bd.links {
-		blockDrawLink(c, link, positions, blockSizes, cs, useASCII)
+		blockDrawLink(c, link, positions, blockSizes, cs)
 	}
 
 	// Draw block shapes (foreground)
@@ -791,7 +790,7 @@ func blockDrawGroups(c *renderer.Canvas, blocks []blockNode, positions map[strin
 	}
 }
 
-func blockDrawLink(c *renderer.Canvas, link blockLink, positions map[string][2]int, sizes map[string][2]int, cs renderer.CharSet, useASCII bool) {
+func blockDrawLink(c *renderer.Canvas, link blockLink, positions map[string][2]int, sizes map[string][2]int, cs renderer.CharSet) {
 	srcPos, srcOK := positions[link.source]
 	tgtPos, tgtOK := positions[link.target]
 	if !srcOK || !tgtOK {
@@ -822,23 +821,36 @@ func blockDrawLink(c *renderer.Canvas, link blockLink, positions map[string][2]i
 	var r1, c1, r2, c2 int
 
 	if !useVertical {
-		// Horizontal: exit/enter from sides
+		// Horizontal: exit/enter from sides. The run leaves through the
+		// border cell, which becomes a tee, and turns one cell before the
+		// arrowhead so the arrow is fed from its tail.
 		dx := tCX - sCX
+		jog := 1
 		var arrow rune
 		if dx > 0 {
 			r1, c1 = sy+sh/2, sx+sw
 			r2, c2 = ty+th/2, tx-1
 			arrow = cs.ArrowRight
 		} else {
+			jog = -1
 			r1, c1 = sy+sh/2, sx-1
 			r2, c2 = ty+th/2, tx+tw
 			arrow = cs.ArrowLeft
 		}
 
-		blockDrawRoutedLine(c, r1, c1, r2, c2, useASCII, style)
+		c.Segment(r1, c1-jog, r1, c1, glyph.Light, false, style)
+		if r1 == r2 {
+			c.Segment(r1, c1, r1, c2, glyph.Light, false, style)
+		} else {
+			midRow := (r1 + r2) / 2
+			c.Segment(r1, c1, midRow, c1, glyph.Light, false, style)
+			c.Segment(midRow, c1, midRow, c2-jog, glyph.Light, false, style)
+			c.Segment(midRow, c2-jog, r2, c2-jog, glyph.Light, false, style)
+			c.Segment(r2, c2-jog, r2, c2, glyph.Light, false, style)
+		}
 		c.Put(r2, c2, arrow, style)
 	} else {
-		// Vertical: exit/enter from top/bottom
+		// Vertical: exit/enter from top/bottom, the same way.
 		dy := (ty + th/2) - (sy + sh/2)
 		exitCol := sCX
 		enterCol := max(tx, min(tCX, sRight-1))
@@ -846,55 +858,25 @@ func blockDrawLink(c *renderer.Canvas, link blockLink, positions map[string][2]i
 			enterCol = exitCol
 		}
 
+		jog := 1
 		var arrow rune
 		if dy > 0 {
 			r1, c1 = sy+sh, exitCol
 			r2, c2 = ty-1, enterCol
+			arrow = cs.ArrowDown
 		} else {
+			jog = -1
 			r1, c1 = sy-1, exitCol
 			r2, c2 = ty+th, enterCol
+			arrow = cs.ArrowUp
 		}
 
 		if c1 == c2 {
-			// Straight vertical
-			rMin, rMax := min(r1, r2), max(r1, r2)
-			for r := rMin; r <= rMax; r++ {
-				c.Arm(r, c1, glyph.Vertical, glyph.Light, false, style)
-			}
+			c.Segment(r1-jog, c1, r2, c1, glyph.Light, false, style)
 		} else {
-			// L-route: vertical to bend row, then horizontal to target x
-			bendRow := r2
-			rMin, rMax := min(r1, bendRow), max(r1, bendRow)
-			for r := rMin; r <= rMax; r++ {
-				c.Arm(r, c1, glyph.Vertical, glyph.Light, false, style)
-			}
-			cMin, cMax := min(c1, c2), max(c1, c2)
-			for col := cMin; col <= cMax; col++ {
-				c.Arm(bendRow, col, glyph.Horizontal, glyph.Light, false, style)
-			}
-			if !useASCII {
-				var corner rune
-				if r1 < bendRow {
-					if c2 < c1 {
-						corner = '┘'
-					} else {
-						corner = '└'
-					}
-				} else {
-					if c2 < c1 {
-						corner = '┐'
-					} else {
-						corner = '┌'
-					}
-				}
-				c.Put(bendRow, c1, corner, style)
-			}
-		}
-
-		if dy > 0 {
-			arrow = cs.ArrowDown
-		} else {
-			arrow = cs.ArrowUp
+			c.Segment(r1-jog, c1, r2-jog, c1, glyph.Light, false, style)
+			c.Segment(r2-jog, c1, r2-jog, c2, glyph.Light, false, style)
+			c.Segment(r2-jog, c2, r2, c2, glyph.Light, false, style)
 		}
 		c.Put(r2, c2, arrow, style)
 	}
@@ -905,68 +887,6 @@ func blockDrawLink(c *renderer.Canvas, link blockLink, positions map[string][2]i
 		midC := (c1 + c2) / 2
 		labelCol := midC - textwidth.String(link.label)/2
 		c.PutText(midR, labelCol, link.label, "edge_label")
-	}
-}
-
-// blockDrawRoutedLine draws a Z-shaped or straight line using block routing (different from classdiagram's drawRoutedLine).
-func blockDrawRoutedLine(c *renderer.Canvas, r1, c1, r2, c2 int, useASCII bool, style string) {
-	if c1 == c2 {
-		rMin, rMax := min(r1, r2), max(r1, r2)
-		for r := rMin; r <= rMax; r++ {
-			c.Arm(r, c1, glyph.Vertical, glyph.Light, false, style)
-		}
-	} else if r1 == r2 {
-		cMin, cMax := min(c1, c2), max(c1, c2)
-		for col := cMin; col <= cMax; col++ {
-			c.Arm(r1, col, glyph.Horizontal, glyph.Light, false, style)
-		}
-	} else {
-		midRow := (r1 + r2) / 2
-		rMin, rMax := min(r1, midRow), max(r1, midRow)
-		for r := rMin; r <= rMax; r++ {
-			c.Arm(r, c1, glyph.Vertical, glyph.Light, false, style)
-		}
-		cMin, cMax := min(c1, c2), max(c1, c2)
-		for col := cMin; col <= cMax; col++ {
-			c.Arm(midRow, col, glyph.Horizontal, glyph.Light, false, style)
-		}
-		rMin2, rMax2 := min(midRow, r2), max(midRow, r2)
-		for r := rMin2; r <= rMax2; r++ {
-			c.Arm(r, c2, glyph.Vertical, glyph.Light, false, style)
-		}
-		if !useASCII {
-			var corner1 rune
-			if r1 < midRow {
-				if c2 < c1 {
-					corner1 = '┘'
-				} else {
-					corner1 = '└'
-				}
-			} else {
-				if c2 < c1 {
-					corner1 = '┐'
-				} else {
-					corner1 = '┌'
-				}
-			}
-			c.Put(midRow, c1, corner1, style)
-
-			var corner2 rune
-			if r2 > midRow {
-				if c2 < c1 {
-					corner2 = '┌'
-				} else {
-					corner2 = '┐'
-				}
-			} else {
-				if c2 < c1 {
-					corner2 = '└'
-				} else {
-					corner2 = '┘'
-				}
-			}
-			c.Put(midRow, c2, corner2, style)
-		}
 	}
 }
 
