@@ -550,3 +550,122 @@ func TestC4StyleMacrosIgnored(t *testing.T) {
 		t.Errorf("styling macros leaked: %d nodes, %d edges", len(g.Nodes), len(g.Edges))
 	}
 }
+
+// ── Use Case ────────────────────────────────────────────────────────────────
+
+const useCaseSrc = `usecaseDiagram
+    actor Customer("Customer")
+    actor Agent("Support Agent")
+    systemBoundary Storefront
+        Browse("Browse catalogue")
+        Checkout("Place order")
+        Pay("Take payment")
+    end
+    Customer --> Browse
+    Customer --> Checkout
+    Agent --> Checkout
+    Checkout ..> : include Pay`
+
+func TestUseCaseNodesAndShapes(t *testing.T) {
+	g := ParseUseCaseDiagram(useCaseSrc)
+	if len(g.Nodes) != 5 {
+		t.Fatalf("expected 5 nodes, got %d", len(g.Nodes))
+	}
+	if got := g.Nodes["Customer"].Shape; got != graph.ShapeRectangle {
+		t.Errorf("actor shape = %v, want rectangle", got)
+	}
+	if !strings.Contains(g.Nodes["Customer"].Label, "[actor]") {
+		t.Errorf("actor label missing marker: %q", g.Nodes["Customer"].Label)
+	}
+	if got := g.Nodes["Browse"].Shape; got != graph.ShapeStadium {
+		t.Errorf("use case shape = %v, want stadium", got)
+	}
+	if g.Nodes["Browse"].Label != "Browse catalogue" {
+		t.Errorf("use case label = %q", g.Nodes["Browse"].Label)
+	}
+}
+
+func TestUseCaseBoundary(t *testing.T) {
+	g := ParseUseCaseDiagram(useCaseSrc)
+	if len(g.Subgraphs) != 1 || g.Subgraphs[0].Label != "Storefront" {
+		t.Fatalf("expected one Storefront boundary, got %+v", g.Subgraphs)
+	}
+	want := []string{"Browse", "Checkout", "Pay"}
+	if !slices.Equal(g.Subgraphs[0].NodeIDs, want) {
+		t.Errorf("boundary members = %v, want %v", g.Subgraphs[0].NodeIDs, want)
+	}
+}
+
+func TestUseCaseIncludeIsDashed(t *testing.T) {
+	g := ParseUseCaseDiagram(useCaseSrc)
+	last := g.Edges[len(g.Edges)-1]
+	if last.Source != "Checkout" || last.Target != "Pay" {
+		t.Fatalf("include edge = %s -> %s", last.Source, last.Target)
+	}
+	if last.Style != graph.EdgeDotted || last.Label != "<<include>>" {
+		t.Errorf("include edge = %+v, want a dotted <<include>>", last)
+	}
+}
+
+func TestUseCaseRelationshipForms(t *testing.T) {
+	src := `usecaseDiagram
+direction LR
+actor Admin
+actor Person
+usecase (Do thing) as Thing
+Report[Generate report]
+Admin --|> Person
+Admin -- "runs" --> Thing
+Thing ..> Report : <<extend>>
+Person --o Thing
+Person --x Report`
+	g := ParseUseCaseDiagram(src)
+	if g.Direction != graph.DirLR {
+		t.Errorf("direction = %v, want LR", g.Direction)
+	}
+	if g.Nodes["Thing"].Label != "Do thing" {
+		t.Errorf("inline use case label = %q, want Do thing", g.Nodes["Thing"].Label)
+	}
+	if g.Nodes["Report"].Label != "Generate report" {
+		t.Errorf("bracket use case label = %q", g.Nodes["Report"].Label)
+	}
+
+	byPair := map[string]graph.Edge{}
+	for _, e := range g.Edges {
+		byPair[e.Source+"->"+e.Target] = e
+	}
+	if e, ok := byPair["Admin->Person"]; !ok || !e.HasArrowEnd {
+		t.Errorf("generalization edge = %+v (found %v)", e, ok)
+	}
+	if e := byPair["Admin->Thing"]; e.Label != "runs" {
+		t.Errorf("labelled association = %q, want runs", e.Label)
+	}
+	if e := byPair["Thing->Report"]; e.Style != graph.EdgeDotted || e.Label != "<<extend>>" {
+		t.Errorf("extend edge = %+v", e)
+	}
+	if e := byPair["Person->Thing"]; e.ArrowTypeEnd != graph.ArrowTypeCircle {
+		t.Errorf("--o arrow = %v, want circle", e.ArrowTypeEnd)
+	}
+	if e := byPair["Person->Report"]; e.ArrowTypeEnd != graph.ArrowTypeCross {
+		t.Errorf("--x arrow = %v, want cross", e.ArrowTypeEnd)
+	}
+}
+
+func TestUseCaseInlineAndReversed(t *testing.T) {
+	g := ParseUseCaseDiagram("usecaseDiagram\nactor \"Main administrator\" as Admin\nAdmin --> (Reset password)\nAdmin -- (Reset password)\n(Reset password) <-- Admin")
+	if g.Nodes["Admin"].Label != joinLabel([]string{"[actor]", "Main administrator"}) {
+		t.Errorf("aliased actor label = %q", g.Nodes["Admin"].Label)
+	}
+	if _, ok := g.Nodes["Reset_password"]; !ok {
+		t.Fatalf("inline use case not created: %v", g.NodeOrder)
+	}
+	if len(g.Edges) != 3 {
+		t.Fatalf("expected 3 edges, got %d", len(g.Edges))
+	}
+	if g.Edges[1].HasArrowEnd {
+		t.Error("a bare -- association should carry no arrowhead")
+	}
+	if g.Edges[2].Source != "Admin" || g.Edges[2].Target != "Reset_password" || !g.Edges[2].HasArrowEnd {
+		t.Errorf("reversed association = %+v", g.Edges[2])
+	}
+}

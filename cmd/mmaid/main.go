@@ -418,6 +418,7 @@ func printUsage() {
 		{"packet-beta", "Network packet layouts"},
 		{"requirementDiagram", "SysML requirements and elements"},
 		{"C4Context", "C4 context, container, component, deployment"},
+		{"usecaseDiagram", "UML actors, use cases and boundaries"},
 	}
 	maxKW := 0
 	for _, t := range types {
@@ -542,6 +543,18 @@ var demoSamples = map[string]string{
     Rel(customer, banking, "Uses")
     Rel(staff, banking, "Administers")
     Rel(banking, email, "Sends mail", "SMTP")`,
+	"usecase": `usecaseDiagram
+    actor Customer("Customer")
+    actor Agent("Support Agent")
+    systemBoundary Storefront
+        Browse("Browse catalogue")
+        Checkout("Place order")
+        Pay("Take payment")
+    end
+    Customer --> Browse
+    Customer --> Checkout
+    Agent --> Checkout
+    Checkout ..> : include Pay`,
 	"quadrant": `quadrantChart
     title Priority Matrix
     x-axis Low Effort --> High Effort
@@ -621,6 +634,7 @@ var demoTypes = []struct{ name, key string }{
 	{"Packet Diagram", "packet"},
 	{"Requirement Diagram", "requirement"},
 	{"C4 Diagram", "c4"},
+	{"Use Case Diagram", "usecase"},
 }
 
 func runDemo(w io.Writer, themeName, diagramType string) {
