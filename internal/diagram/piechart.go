@@ -378,10 +378,11 @@ func pieBlendHalfPixel(px, py, cx, cy, radius float64, angles []pieSliceAngle, s
 		return [4]int{0, 0, 0, 0}
 	}
 
-	// Find dominant slice (most samples)
+	// Find dominant slice (most samples). Ties go to the lowest slice index,
+	// so the pixel does not depend on map iteration order.
 	bestIdx, bestCount := -1, 0
 	for idx, count := range counts {
-		if count > bestCount {
+		if count > bestCount || (count == bestCount && idx < bestIdx) {
 			bestIdx = idx
 			bestCount = count
 		}

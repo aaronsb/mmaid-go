@@ -245,6 +245,9 @@ func scaleNodeColumns(layout *GridLayout, targetWidth int) {
 	if len(scalable) == 0 {
 		return
 	}
+	// ColWidths is a map, so sort before handing out the remainder: without
+	// this the extra columns land somewhere different on every run.
+	slices.Sort(scalable)
 
 	// Distribute slack evenly across node columns
 	n := len(scalable)
