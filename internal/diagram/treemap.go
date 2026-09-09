@@ -144,24 +144,55 @@ func renderTreemap(tm *treemap, cs renderer.CharSet, theme *renderer.Theme) *ren
 		return renderer.NewCanvas(1, 1)
 	}
 
-	canvasH := tmComputeHeight(tm.roots)
-	minW := tmComputeMinWidth(tm.roots)
+	termW := usableWidth()
+	rows := tmWrapRoots(tm.roots, termW-2)
+	canvasH := 0
+	minW := 0
+	for _, row := range rows {
+		canvasH += tmComputeHeight(row)
+		minW = max(minW, tmComputeMinWidth(row))
+	}
+	canvasH += tmGap * (len(rows) - 1)
 
 	// Scale width: proportional for small diagrams, tight for large ones
-	// Use terminal width to decide layout, but never truncate labels
-	termW := usableWidth()
 	canvasW := max(minW, min(termW-2, max(60, int(float64(minW)*1.6))))
 
 	c := renderer.NewCanvas(canvasW, canvasH)
 	c.SetCharSet(cs)
 
-	// Render each root with its own section index for per-hue coloring
-	tmLayoutRoots(c, cs, tm.roots, 0, 0, canvasW, canvasH, theme)
+	// Render each row of roots; every root keeps its own section index.
+	y := 0
+	first := 0
+	for _, row := range rows {
+		h := tmComputeHeight(row)
+		tmLayoutRoots(c, cs, row, 0, y, canvasW, h, first, theme)
+		y += h + tmGap
+		first += len(row)
+	}
 	return c
 }
 
+// tmWrapRoots splits the roots into rows whose minimum widths fit maxW.
+// A root wider than maxW on its own takes a row alone. One row when
+// everything fits.
+func tmWrapRoots(roots []treemapNode, maxW int) [][]treemapNode {
+	var rows [][]treemapNode
+	var row []treemapNode
+	for _, r := range roots {
+		if len(row) > 0 && tmComputeMinWidth(append(row[:len(row):len(row)], r)) > maxW {
+			rows = append(rows, row)
+			row = nil
+		}
+		row = append(row, r)
+	}
+	if len(row) > 0 {
+		rows = append(rows, row)
+	}
+	return rows
+}
+
 // tmLayoutRoots distributes top-level nodes and assigns each a unique section index.
-func tmLayoutRoots(c *renderer.Canvas, cs renderer.CharSet, nodes []treemapNode, x, y, w, h int, theme *renderer.Theme) {
+func tmLayoutRoots(c *renderer.Canvas, cs renderer.CharSet, nodes []treemapNode, x, y, w, h, firstSection int, theme *renderer.Theme) {
 	if len(nodes) == 0 || w < tmMinBoxW || h < tmMinBoxH {
 		return
 	}
@@ -243,7 +274,7 @@ func tmLayoutRoots(c *renderer.Canvas, cs renderer.CharSet, nodes []treemapNode,
 		if bw < tmMinBoxW {
 			break
 		}
-		tmDrawNode(c, cs, &nodes[i], posX, y, bw, h, 0, i, theme)
+		tmDrawNode(c, cs, &nodes[i], posX, y, bw, h, 0, firstSection+i, theme)
 		posX += bw
 		if i < nGaps {
 			posX += tmGap

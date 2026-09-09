@@ -804,6 +804,26 @@ treemap-beta
 
 ![treemap](treemap.png)
 
+## treemap-wrap
+
+Rendered with `-t blueprint -w 60`.
+
+```mermaid
+treemap-beta
+"nvme0n1"
+    "nvme0n1p1": 512
+    "nvme0n1p2": 1999
+"nvme1n1"
+    "nvme1n1p1": 2000
+"nvme2n1"
+    "nvme2n1p1": 1000
+    "nvme2n1p2": 1000
+"sda"
+    "sda1": 4000
+```
+
+![treemap-wrap](treemap-wrap.png)
+
 ## treeview
 
 Rendered with `-t default -w 120`.
