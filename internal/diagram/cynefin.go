@@ -305,10 +305,13 @@ func (l cynefinLayout) drawMoves(cf *cynefinFramework) {
 		fromW = max(fromW, textwidth.String(name[m.from]))
 		toW = max(toW, textwidth.String(name[m.to]))
 	}
+	// The source names end against the arrow's tail so the tail's half
+	// glyph opens onto text (ADR-101 rule 4).
 	for i, m := range cf.moves {
 		r := l.bottom + 2 + i
-		l.c.PutText(r, 2, name[m.from], "label")
-		shaft := 2 + fromW + 1
+		from := name[m.from]
+		l.c.PutText(r, 2+fromW-textwidth.String(from), from, "label")
+		shaft := 2 + fromW
 		l.c.Segment(r, shaft, r, shaft+3, glyph.Light, false, "arrow")
 		l.c.Put(r, shaft+3, l.cs.ArrowRight, "arrow")
 		l.c.PutText(r, shaft+5, name[m.to], "label")

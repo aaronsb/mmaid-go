@@ -496,3 +496,18 @@ func TestWideRuneOverArmsZeroesContinuation(t *testing.T) {
 		t.Errorf("ToString = %q", got)
 	}
 }
+
+func TestFlipHorizontalKeepsTextReadable(t *testing.T) {
+	c := NewCanvas(12, 1)
+	c.PutText(0, 0, "Start", "")
+	c.Put(0, 6, '►', "")
+	c.PutText(0, 8, "日本", "")
+	c.FlipHorizontal()
+	got := c.ToString()
+	if !strings.Contains(got, "Start") || !strings.Contains(got, "日本") || !strings.Contains(got, "◄") {
+		t.Fatalf("flip mirrored text or lost the arrowhead: %q", got)
+	}
+	if strings.Contains(got, "tratS") {
+		t.Fatalf("text mirrored: %q", got)
+	}
+}

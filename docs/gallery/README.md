@@ -520,6 +520,24 @@ stateDiagram-v2
 
 ![state-label](state-label.png)
 
+## subgraph-bend
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+graph LR
+    A --> X
+    subgraph S1
+        X --> Y
+    end
+    A --> Z
+    Y --> Z
+    B --> Y
+    B --> W
+```
+
+![subgraph-bend](subgraph-bend.png)
+
 ## subgraph-cross
 
 Rendered with `-t default -w 120`.
@@ -537,6 +555,120 @@ graph LR
 ```
 
 ![subgraph-cross](subgraph-cross.png)
+
+## subgraph-labelrow
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+graph TB
+    P --> M
+    P --> R
+    subgraph S1
+        M
+    end
+```
+
+![subgraph-labelrow](subgraph-labelrow.png)
+
+## subgraph-nested
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+graph TB
+    Start --> A
+    subgraph Outer
+        A --> B
+        subgraph Inner
+            direction LR
+            C --> D
+        end
+        B --> C
+        D --> E
+    end
+    E --> Stop
+```
+
+![subgraph-nested](subgraph-nested.png)
+
+## subgraph-rl
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+graph RL
+    subgraph S1
+        A --> B
+    end
+    subgraph S2
+        C --> D
+    end
+    A --> C
+    B --> D
+```
+
+![subgraph-rl](subgraph-rl.png)
+
+## subgraph-siblings
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+graph LR
+    subgraph Input
+        A --> B
+    end
+    subgraph Process
+        C --> D
+    end
+    subgraph Output
+        E --> F
+    end
+    B --> C
+    D --> E
+    A --> D
+    C --> F
+```
+
+![subgraph-siblings](subgraph-siblings.png)
+
+## subgraph-target
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+graph TB
+    subgraph S0
+        A
+        E
+    end
+    C --> B
+    A ----> G
+    B --> S0
+    E ----> C
+    B --> A
+```
+
+![subgraph-target](subgraph-target.png)
+
+## subgraph-widelabel
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+graph TB
+    subgraph "A very very very long subgraph label that is wider than its block"
+        A
+    end
+    subgraph S2
+        B
+    end
+    A --> C
+    B --> C
+```
+
+![subgraph-widelabel](subgraph-widelabel.png)
 
 ## timeline
 

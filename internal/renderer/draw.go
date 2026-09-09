@@ -275,7 +275,9 @@ func sign(x int) int {
 // drawEdgeLines draws a routed edge's path as segments (Pass 1a). Bends are
 // cells where two segments meet. With arrowEnd, the last segment ends at the
 // arrowhead's cell, one short of the node border, so the edge never writes
-// an arm into the target node.
+// an arm into the target node. At a subgraph border crossing the line stops
+// one cell before the border and starts again at the border cell, whose
+// own arms make it a tee toward the target.
 func drawEdgeLines(canvas *Canvas, re routing.RoutedEdge, roundedEdges, arrowEnd bool) {
 	path := re.DrawPath
 	if len(path) < 2 {
@@ -301,8 +303,65 @@ func drawEdgeLines(canvas *Canvas, re routing.RoutedEdge, roundedEdges, arrowEnd
 			x2, y2 = x2-dx, y2-dy
 		}
 
-		canvas.Segment(y1, x1, y2, x2, w, roundedEdges, "edge")
+		start := routing.Point{Col: x1, Row: y1}
+		end := routing.Point{Col: x2, Row: y2}
+		for _, c := range crossingsOn(re.Crossings, start, end) {
+			before := routing.Point{Col: c.At.Col - dx, Row: c.At.Row - dy}
+			if before != start {
+				stubTo(canvas, start, before, w, roundedEdges)
+			}
+			start = c.At
+		}
+		canvas.Segment(start.Row, start.Col, end.Row, end.Col, w, roundedEdges, "edge")
 	}
+}
+
+// stubTo draws the piece of a line that stops one cell short of a border:
+// a segment whose last cell carries only the arm back along the line, so
+// it resolves to a half glyph. Dashed and double strokes have no half
+// glyph and their last cell is drawn light.
+func stubTo(canvas *Canvas, from, to routing.Point, w glyph.Weight, rounded bool) {
+	if w != glyph.Dashed && w != glyph.Double {
+		canvas.Segment(from.Row, from.Col, to.Row, to.Col, w, rounded, "edge")
+		return
+	}
+	dx, dy := sign(to.Col-from.Col), sign(to.Row-from.Row)
+	prev := routing.Point{Col: to.Col - dx, Row: to.Row - dy}
+	if prev != from {
+		canvas.Segment(from.Row, from.Col, prev.Row, prev.Col, w, rounded, "edge")
+	}
+	canvas.Arm(prev.Row, prev.Col, armOf(dx, dy), w, rounded, "edge")
+	canvas.Arm(to.Row, to.Col, armOf(-dx, -dy), glyph.Light, rounded, "edge")
+}
+
+// armOf returns the arm bit pointing along a unit step.
+func armOf(dx, dy int) glyph.Arms {
+	switch {
+	case dx > 0:
+		return glyph.E
+	case dx < 0:
+		return glyph.W
+	case dy > 0:
+		return glyph.S
+	default:
+		return glyph.N
+	}
+}
+
+// crossingsOn returns the crossings strictly inside the segment a-b, in
+// travel order.
+func crossingsOn(crossings []routing.Crossing, a, b routing.Point) []routing.Crossing {
+	var out []routing.Crossing
+	for _, c := range crossings {
+		p := c.At
+		switch {
+		case a.Col == b.Col && p.Col == a.Col && p.Row > min(a.Row, b.Row) && p.Row < max(a.Row, b.Row):
+			out = append(out, c)
+		case a.Row == b.Row && p.Row == a.Row && p.Col > min(a.Col, b.Col) && p.Col < max(a.Col, b.Col):
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // drawEdgeEndpoints draws arrow heads and the source tee for a routed edge (Pass 1b).

@@ -23,6 +23,7 @@ _Rendering engine, parser, diagram types_
 | [ADR-100](./core/ADR-100-diagram-orientation-is-explicit-intent-distinct-from-terminal-width.md) | Diagram orientation is explicit intent, distinct from terminal width | Accepted |
 | [ADR-101](./core/ADR-101-snapshot-and-golden-loop-cells-interchange-ansi-interpretation-structural-lint.md) | Snapshot and golden loop: cells interchange, ANSI interpretation, structural lint | Accepted |
 | [ADR-102](./core/ADR-102-edge-routing-port-spreading-labels-as-obstacles-crossing-cost.md) | Edge routing: port spreading, labels as obstacles, crossing cost | Accepted |
+| [ADR-103](./core/ADR-103-subgraph-aware-layering.md) | Subgraph-aware layering | Accepted |
 
 ## Ingest
 _Input formats, JSON templates, data pipelines_

@@ -2,9 +2,11 @@
 # The chart renderers leave as each is fixed.
 #
 # One source: arms running off the canvas edge or into text in chart-style
-# renderers.
+# renderers. eventmodeling's lane rules end in half glyphs open to the
+# margin (rule 4).
 
 class
+eventmodeling
 gantt
 gitgraph
 journey

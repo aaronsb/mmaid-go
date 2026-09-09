@@ -1,20 +1,19 @@
 // grid.go implements the grid-based layout algorithm for flowchart diagrams.
 //
 // Layout algorithm:
-//  1. assignLayers - BFS from roots, assign layers based on longest path using tree edges only
-//  2. orderLayers - Barycenter heuristic with crossing minimization (8 passes max)
-//  3. placeNodes - Place on grid using Stride spacing, collision check
-//  4. computeSizes - Column widths and row heights from node content, word wrapping
-//  5. normalizeSizes - Per-layer normalization, capped at MaxNormalized*
-//  6. expandGapsForSubgraphs - Extra space for subgraph borders/labels/nesting
-//  7. computeDrawCoords - Convert grid to draw coordinates
-//  8. computeSubgraphBounds - Recursive bounding boxes
-//  9. adjustForNegativeBounds - Shift everything if subgraph bounds go negative
-//  10. Compute canvas size from max extents
+//  1. layoutHierarchy - Layer and order each subgraph scope recursively, with
+//     child subgraphs as compound vertices, and place every node
+//  2. countPorts - Edge ends expected per node side
+//  3. computeSizes - Column widths and row heights from node content, word wrapping
+//  4. normalizeSizes - Per-layer normalization, capped at MaxNormalized*
+//  5. expandGapsForSubgraphs - Gap cells sized for the borders that run through them
+//  6. computeDrawCoords - Convert grid to draw coordinates
+//  7. computeSubgraphBounds - Boxes from each subgraph's block of positions
+//  8. adjustForNegativeBounds - Shift everything if subgraph bounds go negative
+//  9. Compute canvas size from max extents
 package layout
 
 import (
-	"math"
 	"slices"
 	"sort"
 	"strings"
@@ -47,6 +46,11 @@ const (
 	// can go below 3.
 	GapWidth  = 4
 	GapHeight = 3
+
+	// SGGapMin is the least size of any gap in a graph with subgraphs: a
+	// stub or arrowhead cell at each end, the corridor, and a free cell on
+	// each side of it for a crossing run to move to.
+	SGGapMin = 5
 )
 
 // GridCoord represents a position on the logical grid.
@@ -57,8 +61,13 @@ type GridCoord struct {
 
 // NodePlacement stores the grid and drawing coordinates of a placed node.
 type NodePlacement struct {
-	NodeID     string
-	Grid       GridCoord
+	NodeID string
+	Grid   GridCoord
+	// Min and Max are the first and last node cells the placement covers:
+	// Grid for a node, the block's corners for a subgraph an edge ends at,
+	// which Block marks.
+	Min, Max   GridCoord
+	Block      bool
 	DrawX      int
 	DrawY      int
 	DrawWidth  int
@@ -91,6 +100,8 @@ type GridLayout struct {
 	SubgraphBounds []SubgraphBounds
 	OffsetX        int
 	OffsetY        int
+	// blocks holds each subgraph's block of positions.
+	blocks map[*graph.Subgraph]posRect
 }
 
 // NewGridLayout returns a GridLayout initialized with empty maps.
@@ -176,50 +187,45 @@ func (l *GridLayout) GridToDrawCenter(col, row int) (int, int) {
 // scaled proportionally to fill or compress to this width.
 func ComputeLayout(g *graph.Graph, paddingX, paddingY, maxWidth int) *GridLayout {
 	layout := NewGridLayout()
-	direction := g.Direction.Normalized()
 
 	if len(g.NodeOrder) == 0 {
 		return layout
 	}
 
-	// Step 1: Assign layers via BFS from roots
-	layers := assignLayers(g)
+	// Step 1: Layer and order every scope, place the nodes
+	positions, blocks := layoutHierarchy(g)
+	placeNodes(layout, positions)
+	layout.blocks = blocks
 
-	// Step 2: Order nodes within layers (barycenter heuristic)
-	layerOrder := orderLayers(g, layers)
-
-	// Step 3: Place nodes on the grid
-	placeNodes(g, layout, layerOrder, direction)
-
-	// Step 3b: Count the edge ends each node side expects
+	// Step 1b: Count the edge ends each node side expects
 	countPorts(g, layout)
 
-	// Step 4: Compute column widths and row heights (with word wrapping)
+	// Step 2: Compute column widths and row heights (with word wrapping)
 	computeSizes(g, layout, paddingX, paddingY)
 
-	// Step 4b: Normalize sizes (per-layer, capped)
+	// Step 2b: Normalize sizes (per-layer, capped)
 	normalizeSizes(g, layout)
 
-	// Step 5: Expand gaps for subgraph borders and labels
-	expandGapsForSubgraphs(g, layout, direction)
+	// Step 3: Expand gaps for subgraph borders and labels
+	expandGapsForSubgraphs(g, layout)
 
-	// Step 6: Compute drawing coordinates
+	// Step 4: Compute drawing coordinates
 	computeDrawCoords(layout)
 
-	// Step 6b: Scale node columns to fill target width (before subgraph bounds)
+	// Step 4b: Scale node columns to fill target width (before subgraph bounds)
 	if maxWidth > 0 {
 		scaleNodeColumns(layout, maxWidth)
 		// Recompute draw coords after scaling
 		computeDrawCoords(layout)
 	}
 
-	// Step 7: Compute subgraph bounds
+	// Step 5: Compute subgraph bounds
 	computeSubgraphBounds(g, layout)
 
-	// Step 8: Adjust for negative subgraph bounds
+	// Step 6: Adjust for negative subgraph bounds
 	adjustForNegativeBounds(layout)
 
-	// Step 9: Compute canvas size
+	// Step 7: Compute canvas size
 	computeCanvasSize(layout)
 
 	return layout
@@ -296,420 +302,6 @@ func scaleNodeColumns(layout *GridLayout, targetWidth int) {
 
 // edgeKey is a source-target pair used as a map key.
 type edgeKey struct{ src, tgt string }
-
-// assignLayers assigns each node to a layer based on longest path from a root.
-// Back-edges (edges that would create cycles) are excluded from layer computation.
-func assignLayers(g *graph.Graph) map[string]int {
-	layers := make(map[string]int)
-	roots := g.GetRoots()
-
-	// BFS to assign initial layers
-	for _, root := range roots {
-		if _, ok := layers[root]; !ok {
-			layers[root] = 0
-		}
-	}
-
-	// Detect tree edges via BFS (shortest-path discovery).
-	// BFS ensures each node is discovered at the shallowest depth,
-	// so edges like F->D (where D is also reachable from B at a
-	// shallower level) are correctly treated as back/cross-edges.
-	treeEdges := make(map[edgeKey]bool)
-	visited := make(map[string]bool)
-
-	queue := make([]string, 0)
-	for _, root := range roots {
-		if !visited[root] {
-			visited[root] = true
-			queue = append(queue, root)
-		}
-	}
-
-	for len(queue) > 0 {
-		node := queue[0]
-		queue = queue[1:]
-		for _, child := range g.GetChildren(node) {
-			if !visited[child] {
-				visited[child] = true
-				treeEdges[edgeKey{node, child}] = true
-				queue = append(queue, child)
-			}
-		}
-	}
-
-	// Also BFS from any unvisited nodes (disconnected components)
-	for _, nid := range g.NodeOrder {
-		if !visited[nid] {
-			visited[nid] = true
-			queue = append(queue, nid)
-			for len(queue) > 0 {
-				node := queue[0]
-				queue = queue[1:]
-				for _, child := range g.GetChildren(node) {
-					if !visited[child] {
-						visited[child] = true
-						treeEdges[edgeKey{node, child}] = true
-						queue = append(queue, child)
-					}
-				}
-			}
-		}
-	}
-
-	// Build edge min_length lookup
-	edgeMinLengths := make(map[edgeKey]int)
-	for _, e := range g.Edges {
-		key := edgeKey{e.Source, e.Target}
-		if cur, ok := edgeMinLengths[key]; ok {
-			if e.MinLength > cur {
-				edgeMinLengths[key] = e.MinLength
-			}
-		} else {
-			edgeMinLengths[key] = e.MinLength
-		}
-	}
-
-	// Assign layers using only tree edges (no back-edges)
-	changed := true
-	maxIter := len(g.NodeOrder) * 2
-	iteration := 0
-	for changed && iteration < maxIter {
-		changed = false
-		iteration++
-		for ek := range treeEdges {
-			if srcLayer, ok := layers[ek.src]; ok {
-				ml := 1
-				if v, ok2 := edgeMinLengths[ek]; ok2 {
-					ml = v
-				}
-				newLayer := srcLayer + ml
-				if tgtLayer, ok2 := layers[ek.tgt]; !ok2 || tgtLayer < newLayer {
-					layers[ek.tgt] = newLayer
-					changed = true
-				}
-			}
-		}
-	}
-
-	// Assign unplaced nodes to layer 0
-	for _, nid := range g.NodeOrder {
-		if _, ok := layers[nid]; !ok {
-			layers[nid] = 0
-		}
-	}
-
-	// Collapse orthogonal subgraph nodes to the same layer
-	orthoSets := getOrthogonalSGNodes(g)
-	if len(orthoSets) > 0 {
-		for _, sgNodes := range orthoSets {
-			var present []string
-			for nid := range sgNodes {
-				if _, ok := layers[nid]; ok {
-					present = append(present, nid)
-				}
-			}
-			if len(present) == 0 {
-				continue
-			}
-			minLayer := math.MaxInt
-			for _, nid := range present {
-				if layers[nid] < minLayer {
-					minLayer = layers[nid]
-				}
-			}
-			for _, nid := range present {
-				layers[nid] = minLayer
-			}
-		}
-
-		// Recompute layers for non-ortho nodes from scratch so downstream
-		// nodes get pulled up to the correct layer after collapse.
-		allOrtho := make(map[string]bool)
-		for _, s := range orthoSets {
-			for nid := range s {
-				allOrtho[nid] = true
-			}
-		}
-
-		// Remove non-ortho nodes and recompute from roots
-		for _, nid := range g.NodeOrder {
-			if !allOrtho[nid] {
-				delete(layers, nid)
-			}
-		}
-		for _, root := range g.GetRoots() {
-			if _, ok := layers[root]; !ok {
-				layers[root] = 0
-			}
-		}
-
-		changed = true
-		maxIter = len(g.NodeOrder) * 2
-		iteration = 0
-		for changed && iteration < maxIter {
-			changed = false
-			iteration++
-			for ek := range treeEdges {
-				if srcLayer, ok := layers[ek.src]; ok {
-					ml := 1
-					if v, ok2 := edgeMinLengths[ek]; ok2 {
-						ml = v
-					}
-					newLayer := srcLayer + ml
-					if allOrtho[ek.tgt] {
-						continue
-					}
-					if tgtLayer, ok2 := layers[ek.tgt]; !ok2 || tgtLayer < newLayer {
-						layers[ek.tgt] = newLayer
-						changed = true
-					}
-				}
-			}
-		}
-
-		for _, nid := range g.NodeOrder {
-			if _, ok := layers[nid]; !ok {
-				layers[nid] = 0
-			}
-		}
-	}
-
-	return layers
-}
-
-// countCrossings counts the total number of edge crossings between adjacent layers.
-func countCrossings(g *graph.Graph, layerLists [][]string) int {
-	total := 0
-	for layerIdx := 1; layerIdx < len(layerLists); layerIdx++ {
-		prevPos := make(map[string]int)
-		for i, nid := range layerLists[layerIdx-1] {
-			prevPos[nid] = i
-		}
-		curPos := make(map[string]int)
-		for i, nid := range layerLists[layerIdx] {
-			curPos[nid] = i
-		}
-		// Collect edges between these two layers
-		type intPair struct{ u, v int }
-		var edgesBetween []intPair
-		for _, edge := range g.Edges {
-			srcP, srcOk := prevPos[edge.Source]
-			tgtP, tgtOk := curPos[edge.Target]
-			if srcOk && tgtOk {
-				edgesBetween = append(edgesBetween, intPair{srcP, tgtP})
-			}
-		}
-		// Count crossings: two edges (u1,v1) and (u2,v2) cross iff
-		// (u1 < u2 and v1 > v2) or (u1 > u2 and v1 < v2)
-		for i := 0; i < len(edgesBetween); i++ {
-			for j := i + 1; j < len(edgesBetween); j++ {
-				u1, v1 := edgesBetween[i].u, edgesBetween[i].v
-				u2, v2 := edgesBetween[j].u, edgesBetween[j].v
-				if (u1-u2)*(v1-v2) < 0 {
-					total++
-				}
-			}
-		}
-	}
-	return total
-}
-
-// orderLayers orders nodes within each layer using the barycenter heuristic.
-func orderLayers(g *graph.Graph, layers map[string]int) [][]string {
-	// Group nodes by layer
-	maxLayer := 0
-	for _, l := range layers {
-		if l > maxLayer {
-			maxLayer = l
-		}
-	}
-
-	layerLists := make([][]string, maxLayer+1)
-	for i := range layerLists {
-		layerLists[i] = []string{}
-	}
-	for _, nid := range g.NodeOrder {
-		l := layers[nid]
-		layerLists[l] = append(layerLists[l], nid)
-	}
-
-	// Barycenter ordering with improvement tracking
-	bestCrossings := countCrossings(g, layerLists)
-	bestOrdering := copyLayers(layerLists)
-	noImprovement := 0
-
-	for pass := 0; pass < 8; pass++ {
-		_ = pass
-		for layerIdx := 1; layerIdx < len(layerLists); layerIdx++ {
-			prevPositions := make(map[string]int)
-			for i, nid := range layerLists[layerIdx-1] {
-				prevPositions[nid] = i
-			}
-			barycenters := make(map[string]float64)
-			for _, nid := range layerLists[layerIdx] {
-				var predPositions []int
-				for _, edge := range g.Edges {
-					if edge.Target == nid {
-						if pos, ok := prevPositions[edge.Source]; ok {
-							predPositions = append(predPositions, pos)
-						}
-					}
-				}
-				if len(predPositions) > 0 {
-					sum := 0
-					for _, p := range predPositions {
-						sum += p
-					}
-					barycenters[nid] = float64(sum) / float64(len(predPositions))
-				} else {
-					barycenters[nid] = float64(slices.Index(layerLists[layerIdx], nid))
-				}
-			}
-
-			sort.SliceStable(layerLists[layerIdx], func(i, j int) bool {
-				return barycenters[layerLists[layerIdx][i]] < barycenters[layerLists[layerIdx][j]]
-			})
-		}
-
-		crossings := countCrossings(g, layerLists)
-		if crossings < bestCrossings {
-			bestCrossings = crossings
-			bestOrdering = copyLayers(layerLists)
-			noImprovement = 0
-		} else {
-			noImprovement++
-		}
-
-		if noImprovement >= 4 || bestCrossings == 0 {
-			break
-		}
-	}
-
-	layerLists = bestOrdering
-
-	// Enforce topological order for orthogonal subgraph nodes in the same layer
-	orthoSets := getOrthogonalSGNodes(g)
-	if len(orthoSets) > 0 {
-		for li := range layerLists {
-			layer := layerLists[li]
-			for _, sgNodes := range orthoSets {
-				var inLayer []string
-				for _, n := range layer {
-					if sgNodes[n] {
-						inLayer = append(inLayer, n)
-					}
-				}
-				if len(inLayer) <= 1 {
-					continue
-				}
-				// Build topological order from internal edges
-				internal := make(map[string]bool)
-				for _, n := range inLayer {
-					internal[n] = true
-				}
-				successors := make(map[string][]string)
-				inDegree := make(map[string]int)
-				for _, n := range inLayer {
-					successors[n] = nil
-					inDegree[n] = 0
-				}
-				for _, edge := range g.Edges {
-					if internal[edge.Source] && internal[edge.Target] {
-						successors[edge.Source] = append(successors[edge.Source], edge.Target)
-						inDegree[edge.Target]++
-					}
-				}
-				// Kahn's algorithm
-				var topoQueue []string
-				for _, n := range inLayer {
-					if inDegree[n] == 0 {
-						topoQueue = append(topoQueue, n)
-					}
-				}
-				var topo []string
-				for len(topoQueue) > 0 {
-					node := topoQueue[0]
-					topoQueue = topoQueue[1:]
-					topo = append(topo, node)
-					for _, succ := range successors[node] {
-						inDegree[succ]--
-						if inDegree[succ] == 0 {
-							topoQueue = append(topoQueue, succ)
-						}
-					}
-				}
-				// Replace in-layer positions: find positions of sg nodes, fill with topo order
-				var positions []int
-				for i, n := range layer {
-					if internal[n] {
-						positions = append(positions, i)
-					}
-				}
-				for idx, pos := range positions {
-					if idx < len(topo) {
-						layer[pos] = topo[idx]
-					}
-				}
-			}
-		}
-	}
-
-	return layerLists
-}
-
-// placeNodes places nodes on the grid based on layer assignments.
-func placeNodes(
-	g *graph.Graph,
-	layout *GridLayout,
-	layerOrder [][]string,
-	direction graph.Direction,
-) {
-	for layerIdx, nodes := range layerOrder {
-		for posIdx, nid := range nodes {
-			var col, row int
-			if direction.IsHorizontal() {
-				col = layerIdx*Stride + 1 // +1 for border cell
-				row = posIdx*Stride + 1
-			} else {
-				col = posIdx*Stride + 1
-				row = layerIdx*Stride + 1
-			}
-
-			gc := GridCoord{Col: col, Row: row}
-
-			// Collision check: shift perpendicular if occupied
-			for !canPlace(layout, gc) {
-				if direction.IsHorizontal() {
-					gc = GridCoord{Col: gc.Col, Row: gc.Row + Stride}
-				} else {
-					gc = GridCoord{Col: gc.Col + Stride, Row: gc.Row}
-				}
-			}
-
-			placement := &NodePlacement{NodeID: nid, Grid: gc}
-			layout.Placements[nid] = placement
-
-			// Reserve 3x3 block
-			for dc := -1; dc <= 1; dc++ {
-				for dr := -1; dr <= 1; dr++ {
-					layout.GridOccupied[GridCoord{gc.Col + dc, gc.Row + dr}] = nid
-				}
-			}
-		}
-	}
-}
-
-// canPlace checks if a 3x3 block centered at gc is free.
-func canPlace(layout *GridLayout, gc GridCoord) bool {
-	for dc := -1; dc <= 1; dc++ {
-		for dr := -1; dr <= 1; dr++ {
-			if !layout.IsFree(gc.Col+dc, gc.Row+dr, nil) {
-				return false
-			}
-		}
-	}
-	return true
-}
 
 // WordWrap splits text at word boundaries, keeping lines under maxWidth.
 func WordWrap(text string, maxWidth int) []string {
@@ -1063,189 +655,6 @@ func normalizeSizes(g *graph.Graph, layout *GridLayout) {
 	}
 }
 
-// expandGapsForSubgraphs expands gap cells to accommodate subgraph borders, labels, and nesting.
-func expandGapsForSubgraphs(
-	g *graph.Graph, layout *GridLayout, direction graph.Direction,
-) {
-	if len(g.Subgraphs) == 0 {
-		return
-	}
-
-	// Compute nesting depth for each node
-	getDepth := func(nid string) int {
-		depth := 0
-		sg := g.FindSubgraphForNode(nid)
-		for sg != nil {
-			depth++
-			sg = sg.Parent
-		}
-		return depth
-	}
-
-	nodeDepths := make(map[string]int)
-	for _, nid := range g.NodeOrder {
-		nodeDepths[nid] = getDepth(nid)
-	}
-
-	isVertical := direction == graph.DirTB || direction == graph.DirTD
-
-	// Group nodes by flow-axis (layer) and cross-axis grid positions
-	flowGroups := make(map[int][]string)
-	crossGroups := make(map[int][]string)
-	for nid, p := range layout.Placements {
-		var flowPos, crossPos int
-		if isVertical {
-			flowPos = p.Grid.Row
-			crossPos = p.Grid.Col
-		} else {
-			flowPos = p.Grid.Col
-			crossPos = p.Grid.Row
-		}
-		flowGroups[flowPos] = append(flowGroups[flowPos], nid)
-		crossGroups[crossPos] = append(crossGroups[crossPos], nid)
-	}
-
-	sortedFlow := sortedKeys(flowGroups)
-	sortedCross := sortedKeys(crossGroups)
-
-	// --- Expand flow-direction gaps (between layers) ---
-	for i := 0; i < len(sortedFlow)-1; i++ {
-		pos1 := sortedFlow[i]
-		pos2 := sortedFlow[i+1]
-
-		minDepth1 := math.MaxInt
-		maxDepth1 := 0
-		for _, nid := range flowGroups[pos1] {
-			d := nodeDepths[nid]
-			if d < minDepth1 {
-				minDepth1 = d
-			}
-			if d > maxDepth1 {
-				maxDepth1 = d
-			}
-		}
-
-		minDepth2 := math.MaxInt
-		maxDepth2 := 0
-		for _, nid := range flowGroups[pos2] {
-			d := nodeDepths[nid]
-			if d < minDepth2 {
-				minDepth2 = d
-			}
-			if d > maxDepth2 {
-				maxDepth2 = d
-			}
-		}
-
-		entering := maxDepth2 - minDepth1
-		if entering < 0 {
-			entering = 0
-		}
-		exiting := maxDepth1 - minDepth2
-		if exiting < 0 {
-			exiting = 0
-		}
-
-		depthChange := entering
-		if exiting > depthChange {
-			depthChange = exiting
-		}
-
-		// Detect sibling subgraph transitions: when adjacent layers are in
-		// different subgraphs at the same depth, we need to exit one and
-		// enter the other (2 boundary crossings, not 0).
-		if depthChange == 0 {
-			sgIDs1 := make(map[string]bool)
-			for _, nid := range flowGroups[pos1] {
-				if sg := g.FindSubgraphForNode(nid); sg != nil {
-					sgIDs1[sg.ID] = true
-				}
-			}
-			sgIDs2 := make(map[string]bool)
-			for _, nid := range flowGroups[pos2] {
-				if sg := g.FindSubgraphForNode(nid); sg != nil {
-					sgIDs2[sg.ID] = true
-				}
-			}
-			if len(sgIDs1) > 0 && len(sgIDs2) > 0 && !mapsEqual(sgIDs1, sgIDs2) {
-				// Exiting one subgraph and entering another at same depth
-				depthChange = 2
-			}
-		}
-
-		if depthChange > 0 {
-			extra := depthChange * SGGapPerLevel
-			// Gap cells between the two node rows/columns
-			gapStart := pos1 + 2
-			gapEnd := pos2 - 2
-			for gap := gapStart; gap <= gapEnd; gap++ {
-				if isVertical {
-					cur := 1
-					if v, ok := layout.RowHeights[gap]; ok {
-						cur = v
-					}
-					if extra > cur {
-						layout.RowHeights[gap] = extra
-					}
-				} else {
-					cur := 2
-					if v, ok := layout.ColWidths[gap]; ok {
-						cur = v
-					}
-					if extra > cur {
-						layout.ColWidths[gap] = extra
-					}
-				}
-			}
-		}
-	}
-
-	// --- Expand cross-direction gaps (sibling subgraphs) ---
-	for i := 0; i < len(sortedCross)-1; i++ {
-		pos1 := sortedCross[i]
-		pos2 := sortedCross[i+1]
-
-		inner1 := make(map[string]bool)
-		for _, nid := range crossGroups[pos1] {
-			if sg := g.FindSubgraphForNode(nid); sg != nil {
-				inner1[sg.ID] = true
-			}
-		}
-
-		inner2 := make(map[string]bool)
-		for _, nid := range crossGroups[pos2] {
-			if sg := g.FindSubgraphForNode(nid); sg != nil {
-				inner2[sg.ID] = true
-			}
-		}
-
-		if (len(inner1) > 0 || len(inner2) > 0) && !mapsEqual(inner1, inner2) {
-			extra := 8 // Space for two subgraph borders + gap
-			gapStart := pos1 + 2
-			gapEnd := pos2 - 2
-			for gap := gapStart; gap <= gapEnd; gap++ {
-				if isVertical {
-					cur := 2
-					if v, ok := layout.ColWidths[gap]; ok {
-						cur = v
-					}
-					if extra > cur {
-						layout.ColWidths[gap] = extra
-					}
-				} else {
-					cur := 1
-					if v, ok := layout.RowHeights[gap]; ok {
-						cur = v
-					}
-					if extra > cur {
-						layout.RowHeights[gap] = extra
-					}
-				}
-			}
-		}
-	}
-}
-
 // computeDrawCoords converts grid positions to drawing coordinates.
 func computeDrawCoords(layout *GridLayout) {
 	for _, placement := range layout.Placements {
@@ -1272,102 +681,6 @@ func computeDrawCoords(layout *GridLayout) {
 		placement.DrawY = y
 		placement.DrawWidth = w
 		placement.DrawHeight = h
-	}
-}
-
-// computeSubgraphBounds computes bounding boxes for subgraphs.
-func computeSubgraphBounds(g *graph.Graph, layout *GridLayout) {
-	var compute func(sg *graph.Subgraph) *SubgraphBounds
-	compute = func(sg *graph.Subgraph) *SubgraphBounds {
-		// Recursively compute children first
-		var childBounds []SubgraphBounds
-		for _, child := range sg.Children {
-			cb := compute(child)
-			if cb != nil {
-				childBounds = append(childBounds, *cb)
-				layout.SubgraphBounds = append(layout.SubgraphBounds, *cb)
-			}
-		}
-
-		// Gather all node placements in this subgraph
-		allNodeIDs := make(map[string]bool)
-		for _, nid := range sg.NodeIDs {
-			allNodeIDs[nid] = true
-		}
-		for _, child := range sg.Children {
-			for _, nid := range child.NodeIDs {
-				allNodeIDs[nid] = true
-			}
-			gatherAllNodes(child, allNodeIDs)
-		}
-
-		if len(allNodeIDs) == 0 && len(childBounds) == 0 {
-			return nil
-		}
-
-		minX := math.MaxInt
-		minY := math.MaxInt
-		maxX := 0
-		maxY := 0
-
-		for nid := range allNodeIDs {
-			if p, ok := layout.Placements[nid]; ok {
-				if p.DrawX < minX {
-					minX = p.DrawX
-				}
-				if p.DrawY < minY {
-					minY = p.DrawY
-				}
-				if p.DrawX+p.DrawWidth > maxX {
-					maxX = p.DrawX + p.DrawWidth
-				}
-				if p.DrawY+p.DrawHeight > maxY {
-					maxY = p.DrawY + p.DrawHeight
-				}
-			}
-		}
-
-		for _, cb := range childBounds {
-			if cb.X < minX {
-				minX = cb.X
-			}
-			if cb.Y < minY {
-				minY = cb.Y
-			}
-			if cb.X+cb.Width > maxX {
-				maxX = cb.X + cb.Width
-			}
-			if cb.Y+cb.Height > maxY {
-				maxY = cb.Y + cb.Height
-			}
-		}
-
-		if minX == math.MaxInt {
-			return nil
-		}
-
-		contentWidth := (maxX - minX) + SGBorderPad*2
-		labelWidth := textwidth.String(sg.Label) + 4
-		finalWidth := contentWidth
-		if labelWidth > finalWidth {
-			finalWidth = labelWidth
-		}
-
-		bounds := &SubgraphBounds{
-			Subgraph: sg,
-			X:        minX - SGBorderPad,
-			Y:        minY - SGBorderPad - SGLabelHeight,
-			Width:    finalWidth,
-			Height:   (maxY - minY) + SGBorderPad*2 + SGLabelHeight,
-		}
-		return bounds
-	}
-
-	for _, sg := range g.Subgraphs {
-		bounds := compute(sg)
-		if bounds != nil {
-			layout.SubgraphBounds = append(layout.SubgraphBounds, *bounds)
-		}
 	}
 }
 
@@ -1425,33 +738,6 @@ func gatherAllNodes(sg *graph.Subgraph, result map[string]bool) {
 	}
 }
 
-// getOrthogonalSGNodes finds sets of node IDs in subgraphs whose direction
-// is orthogonal to the graph's direction.
-func getOrthogonalSGNodes(g *graph.Graph) []map[string]bool {
-	graphVertical := g.Direction.Normalized().IsVertical()
-	var result []map[string]bool
-
-	var walk func(subs []*graph.Subgraph)
-	walk = func(subs []*graph.Subgraph) {
-		for _, sg := range subs {
-			if sg.Direction != nil {
-				sgVertical := sg.Direction.Normalized().IsVertical()
-				if sgVertical != graphVertical {
-					nodeSet := make(map[string]bool)
-					for _, nid := range sg.NodeIDs {
-						nodeSet[nid] = true
-					}
-					result = append(result, nodeSet)
-				}
-			}
-			walk(sg.Children)
-		}
-	}
-
-	walk(g.Subgraphs)
-	return result
-}
-
 // --- Helper functions ---
 
 // copyLayers creates a deep copy of layer lists.
@@ -1472,17 +758,4 @@ func sortedKeys[V any](m map[int]V) []int {
 	}
 	sort.Ints(keys)
 	return keys
-}
-
-// mapsEqual checks if two map[string]bool sets are equal.
-func mapsEqual(a, b map[string]bool) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for k := range a {
-		if !b[k] {
-			return false
-		}
-	}
-	return true
 }

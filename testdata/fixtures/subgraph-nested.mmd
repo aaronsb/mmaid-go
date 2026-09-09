@@ -1,0 +1,12 @@
+graph TB
+    Start --> A
+    subgraph Outer
+        A --> B
+        subgraph Inner
+            direction LR
+            C --> D
+        end
+        B --> C
+        D --> E
+    end
+    E --> Stop

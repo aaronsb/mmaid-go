@@ -65,7 +65,7 @@ const (
 	CostStep     = 1.0
 	CostShared   = 6.0
 	CostCrossing = 3.0
-	CostBorder   = 4.0
+	CostBorder   = 10.0
 	CostCorner   = 0.5
 )
 

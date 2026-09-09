@@ -2,7 +2,6 @@ package routing
 
 import (
 	"io"
-	"math"
 	"os"
 
 	"github.com/aaronsb/mmaid-go/internal/graph"
@@ -43,6 +42,9 @@ type RoutedEdge struct {
 	LabelCol      int
 	Index         int
 	OccupiedCells map[Point]bool
+	// Crossings are the subgraph borders the draw path passes through, in
+	// path order.
+	Crossings []Crossing
 }
 
 // edgeEnds is what routing resolved for one edge of the graph.
@@ -65,7 +67,8 @@ func RouteEdges(g *graph.Graph, l *layout.GridLayout) []RoutedEdge {
 //
 // Routing takes two passes over the edges. The first chooses each edge's
 // sides on the bare grid; ports are then assigned per side. The second
-// routes each edge through its chosen sides, places its label, and reserves
+// routes each edge through its chosen sides, moves each subgraph border
+// crossing to a free cell of the border, places its label, and reserves
 // the label's cells against the edges after it. A line is never drawn under
 // a label: a label a later path runs under is placed again, or dropped.
 func RouteEdgesWith(g *graph.Graph, l *layout.GridLayout, ellipsis string, warn io.Writer) []RoutedEdge {
@@ -79,14 +82,39 @@ func RouteEdgesWith(g *graph.Graph, l *layout.GridLayout, ellipsis string, warn 
 	}
 	border := subgraphBorderCells(l)
 
+	// inside reports whether a node lies in a subgraph or one of its
+	// descendants.
+	inside := func(sgID, nodeID string) bool {
+		for sg := g.FindSubgraphForNode(nodeID); sg != nil; sg = sg.Parent {
+			if sg.ID == sgID {
+				return true
+			}
+		}
+		return false
+	}
+	virtual := make(map[string]*layout.NodePlacement)
 	ends := make([]*edgeEnds, len(g.Edges))
 	for i, edge := range g.Edges {
-		src := resolvePlacement(edge.Source, edge.SourceIsSubgraph, l, sgBounds)
-		tgt := resolvePlacement(edge.Target, edge.TargetIsSubgraph, l, sgBounds)
+		src := resolvePlacement(edge.Source, edge.SourceIsSubgraph, l, sgBounds, virtual)
+		tgt := resolvePlacement(edge.Target, edge.TargetIsSubgraph, l, sgBounds, virtual)
 		if src == nil || tgt == nil {
 			continue
 		}
-		ends[i] = &edgeEnds{src: src, tgt: tgt, self: edge.IsSelfReference() && !edge.SourceIsSubgraph}
+		// An edge between a node and the subgraph that holds it loops at
+		// the node.
+		if edge.SourceIsSubgraph && !edge.TargetIsSubgraph && inside(edge.Source, edge.Target) {
+			src = tgt
+		}
+		if edge.TargetIsSubgraph && !edge.SourceIsSubgraph && inside(edge.Target, edge.Source) {
+			tgt = src
+		}
+		ends[i] = &edgeEnds{src: src, tgt: tgt, self: src == tgt && !src.Block}
+	}
+	placement := func(node string) *layout.NodePlacement {
+		if p, ok := virtual[node]; ok {
+			return p
+		}
+		return l.Placements[node]
 	}
 
 	// Pass 1: sides.
@@ -110,27 +138,23 @@ func RouteEdgesWith(g *graph.Graph, l *layout.GridLayout, ellipsis string, warn 
 	var reqs []layout.PortRequest
 	var reqEnd []*edgeEnds
 	var reqWhich []int
-	for i, edge := range g.Edges {
-		e := ends[i]
+	for _, e := range ends {
 		if e == nil {
 			continue
 		}
-		if !edge.SourceIsSubgraph {
-			reqs = append(reqs, layout.PortRequest{Node: e.src.NodeID, Side: e.sides[0], Other: centreAlong(e.tgt, e.sides[0])})
-			reqEnd, reqWhich = append(reqEnd, e), append(reqWhich, 0)
-		}
-		if !edge.TargetIsSubgraph {
-			reqs = append(reqs, layout.PortRequest{Node: e.tgt.NodeID, Side: e.sides[1], Other: centreAlong(e.src, e.sides[1])})
-			reqEnd, reqWhich = append(reqEnd, e), append(reqWhich, 1)
-		}
+		reqs = append(reqs, layout.PortRequest{Node: e.src.NodeID, Side: e.sides[0], Other: centreAlong(e.tgt, e.sides[0])})
+		reqEnd, reqWhich = append(reqEnd, e), append(reqWhich, 0)
+		reqs = append(reqs, layout.PortRequest{Node: e.tgt.NodeID, Side: e.sides[1], Other: centreAlong(e.src, e.sides[1])})
+		reqEnd, reqWhich = append(reqEnd, e), append(reqWhich, 1)
 	}
-	for i, port := range l.AssignPorts(reqs) {
+	for i, port := range l.AssignPortsWith(reqs, placement) {
 		reqEnd[i].ports[reqWhich[i]] = port
 	}
 
 	// Pass 2: paths, draw paths, labels.
 	soft = make(map[Point]Axis)
 	space := newLabelSpace(g, l, aprons(g, ends, direction), warn)
+	borders := newBorderPorts(l)
 	var routed []RoutedEdge
 	for i, edge := range g.Edges {
 		e := ends[i]
@@ -145,10 +169,20 @@ func RouteEdgesWith(g *graph.Graph, l *layout.GridLayout, ellipsis string, warn 
 		}
 		Occupy(soft, path)
 
+		var srcSG, tgtSG *layout.SubgraphBounds
+		if e.src.Block {
+			srcSG = sgBounds[edge.Source]
+		}
+		if e.tgt.Block {
+			tgtSG = sgBounds[edge.Target]
+		}
+		dp, crossings := borders.route(e, ends, l, path, srcSG, tgtSG, space.lines, [2]bool{edge.HasArrowStart, edge.HasArrowEnd})
+
 		re := RoutedEdge{
 			Edge:          edge,
 			GridPath:      SimplifyPath(path),
-			DrawPath:      drawPath(l, path, e.sides, e.ports),
+			DrawPath:      dp,
+			Crossings:     crossings,
 			StartDir:      e.sides[0],
 			EndDir:        e.sides[1],
 			StartPort:     e.ports[0],
@@ -180,8 +214,7 @@ func RouteEdgesWith(g *graph.Graph, l *layout.GridLayout, ellipsis string, warn 
 func aprons(g *graph.Graph, ends []*edgeEnds, direction graph.Direction) map[layout.GridCoord]bool {
 	out := make(map[layout.GridCoord]bool)
 	add := func(p *layout.NodePlacement, side AttachDir) {
-		a := side.AttachCell(p.Grid)
-		out[side.AttachCell(a)] = true
+		out[side.AttachCell(p.Attach(side))] = true
 	}
 	for i, e := range ends {
 		if e == nil {
@@ -306,9 +339,10 @@ func findBetween(src, tgt *layout.NodePlacement, sides [2]AttachDir, free func(c
 	return FindPath(s.Col, s.Row, t.Col, t.Row, free, obs)
 }
 
-// attachPoint returns the grid cell on a node's border an edge attaches to.
+// attachPoint returns the grid cell an edge attaches to a placement
+// through on a side.
 func attachPoint(p *layout.NodePlacement, side AttachDir) Point {
-	gc := side.AttachCell(p.Grid)
+	gc := p.Attach(side)
 	return Point{gc.Col, gc.Row}
 }
 
@@ -432,53 +466,42 @@ func subgraphBorderCells(l *layout.GridLayout) map[Point]bool {
 	return cells
 }
 
-// resolvePlacement resolves a node or subgraph ID to a NodePlacement.
-// For subgraphs, it synthesizes a virtual placement at the subgraph center.
+// resolvePlacement resolves a node or subgraph ID to a placement. A
+// subgraph gets one placement covering its block, with its box as the draw
+// rectangle, shared by every edge that ends at it so that their ports are
+// assigned together.
 func resolvePlacement(
 	nodeID string,
 	isSubgraph bool,
 	l *layout.GridLayout,
 	sgBounds map[string]*layout.SubgraphBounds,
+	virtual map[string]*layout.NodePlacement,
 ) *layout.NodePlacement {
 	if !isSubgraph {
-		p, ok := l.Placements[nodeID]
-		if !ok {
-			return nil
-		}
+		return l.Placements[nodeID]
+	}
+	if p, ok := virtual[nodeID]; ok {
 		return p
 	}
-
 	sb, ok := sgBounds[nodeID]
 	if !ok {
 		return nil
 	}
-
-	// Synthesize a virtual placement at the subgraph center
-	cx := sb.X + sb.Width/2
-	cy := sb.Y + sb.Height/2
-
-	// Find the closest grid cell to the subgraph center
-	bestCol := 0
-	bestRow := 0
-	bestDist := math.MaxFloat64
-
-	for _, p := range l.Placements {
-		dx := p.DrawX + p.DrawWidth/2 - cx
-		dy := p.DrawY + p.DrawHeight/2 - cy
-		dist := float64(abs(dx) + abs(dy))
-		if dist < bestDist {
-			bestDist = dist
-			bestCol = p.Grid.Col
-			bestRow = p.Grid.Row
-		}
+	lo, hi, ok := l.Block(sb.Subgraph)
+	if !ok {
+		return nil
 	}
-
-	return &layout.NodePlacement{
+	p := &layout.NodePlacement{
 		NodeID:     nodeID,
-		Grid:       layout.GridCoord{Col: bestCol, Row: bestRow},
+		Grid:       layout.GridCoord{Col: (lo.Col + hi.Col) / 2, Row: (lo.Row + hi.Row) / 2},
+		Min:        lo,
+		Max:        hi,
+		Block:      true,
 		DrawX:      sb.X,
 		DrawY:      sb.Y,
 		DrawWidth:  sb.Width,
 		DrawHeight: sb.Height,
 	}
+	virtual[nodeID] = p
+	return p
 }
