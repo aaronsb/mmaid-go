@@ -670,6 +670,64 @@ graph TB
 
 ![subgraph-widelabel](subgraph-widelabel.png)
 
+## swimlane
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+swimlane-beta TB
+  subgraph Intake
+    collect[Collect request]
+    validate[Validate details]
+  end
+
+  subgraph Review
+    review[Review request]
+    decide{Ready?}
+  end
+
+  subgraph Delivery
+    schedule[Schedule work]
+    complete[Complete work]
+  end
+
+  collect --> validate --> review --> decide
+  decide -->|Yes| schedule --> complete
+  decide -->|No| collect
+```
+
+![swimlane](swimlane.png)
+
+## swimlane-lr
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+swimlane-beta LR
+  subgraph Customer
+    request[Request service]
+    receive[Receive update]
+  end
+
+  subgraph Support
+    triage[Triage request]
+    answer[Send answer]
+  end
+
+  subgraph Engineering
+    investigate[Investigate issue]
+    fix[Prepare fix]
+  end
+
+  request --> triage
+  triage -->|Known issue| answer
+  triage -->|Needs code change| investigate
+  investigate --> fix --> answer
+  answer --> receive
+```
+
+![swimlane-lr](swimlane-lr.png)
+
 ## timeline
 
 Rendered with `-t default -w 120`.

@@ -276,3 +276,20 @@ func TestStripControlChars(t *testing.T) {
 		t.Errorf("stripControlChars(%q) = %q, want %q", input, got, want)
 	}
 }
+
+// A subgraph id needs no space before its bracketed label; that is how
+// the swimlane docs declare a lane.
+func TestParseSubgraphBracketWithoutSpace(t *testing.T) {
+	for _, src := range []string{`graph TB
+    subgraph cust["Customer"]
+        A
+    end`, `graph TB
+    subgraph cust ["Customer"]
+        A
+    end`} {
+		sg := ParseFlowchart(src).Subgraphs[0]
+		if sg.ID != "cust" || sg.Label != "Customer" {
+			t.Errorf("%q: got %q/%q, want cust/Customer", src, sg.ID, sg.Label)
+		}
+	}
+}

@@ -167,6 +167,10 @@ type Graph struct {
 	LinkStyles        map[int]map[string]string
 	Warnings          []string
 	Notes             []GraphNote
+	// Lanes marks a graph whose top-level subgraphs are swimlanes: the
+	// layering runs over the whole graph and each node's cross-axis
+	// position is constrained to its lane's band.
+	Lanes bool
 }
 
 // NewGraph returns a Graph initialized with default values.

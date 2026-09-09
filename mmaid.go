@@ -176,6 +176,8 @@ func detectDiagramType(source string) string {
 			return "wardley"
 		case strings.HasPrefix(lower, "cynefin"):
 			return "cynefin"
+		case strings.HasPrefix(lower, "swimlane"):
+			return "swimlane"
 		default:
 			return "flowchart"
 		}
@@ -268,6 +270,9 @@ func Render(source string, opts ...Option) (result string) {
 		canvas = diagram.RenderWardley(source, cs, getThemePtr(cfg.theme))
 	case "cynefin":
 		canvas = diagram.RenderCynefin(source, cs, getThemePtr(cfg.theme))
+	case "swimlane":
+		g := parser.ParseSwimlane(source)
+		canvas = renderer.RenderGraphCanvas(g, cs, cfg.paddingX, cfg.paddingY, cfg.roundedEdges, diagram.UsableWidth())
 	default:
 		g := parser.ParseFlowchart(source)
 		canvas = renderer.RenderGraphCanvas(g, cs, cfg.paddingX, cfg.paddingY, cfg.roundedEdges, diagram.UsableWidth())
@@ -308,6 +313,8 @@ func Parse(source string) *graph.Graph {
 	switch dtype {
 	case "flowchart":
 		return parser.ParseFlowchart(source)
+	case "swimlane":
+		return parser.ParseSwimlane(source)
 	default:
 		return graph.NewGraph()
 	}
