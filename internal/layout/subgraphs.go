@@ -217,5 +217,5 @@ func (l *GridLayout) Block(sg *graph.Subgraph) (min, max GridCoord, ok bool) {
 	if !ok {
 		return GridCoord{}, GridCoord{}, false
 	}
-	return GridCoord{r.c0*Stride + 1, r.r0*Stride + 1}, GridCoord{r.c1*Stride + 1, r.r1*Stride + 1}, true
+	return GridCoord{Col: r.c0*Stride + 1, Row: r.r0*Stride + 1}, GridCoord{Col: r.c1*Stride + 1, Row: r.r1*Stride + 1}, true
 }

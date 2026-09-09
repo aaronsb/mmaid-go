@@ -13,11 +13,11 @@ func TestPreferredSides(t *testing.T) {
 		dir       graph.Direction
 		pref, alt [2]Side
 	}{
-		{"LR forward", GridCoord{1, 1}, GridCoord{5, 1}, graph.DirLR, [2]Side{Right, Left}, [2]Side{Right, Left}},
-		{"LR forward and down", GridCoord{1, 1}, GridCoord{5, 5}, graph.DirLR, [2]Side{Right, Left}, [2]Side{Bottom, Top}},
-		{"LR back", GridCoord{5, 1}, GridCoord{1, 1}, graph.DirLR, [2]Side{Bottom, Bottom}, [2]Side{Bottom, Top}},
-		{"TD forward", GridCoord{1, 1}, GridCoord{1, 5}, graph.DirTD, [2]Side{Bottom, Top}, [2]Side{Bottom, Top}},
-		{"TD back", GridCoord{1, 5}, GridCoord{1, 1}, graph.DirTD, [2]Side{Right, Right}, [2]Side{Right, Left}},
+		{"LR forward", GridCoord{Col: 1, Row: 1}, GridCoord{Col: 5, Row: 1}, graph.DirLR, [2]Side{Right, Left}, [2]Side{Right, Left}},
+		{"LR forward and down", GridCoord{Col: 1, Row: 1}, GridCoord{Col: 5, Row: 5}, graph.DirLR, [2]Side{Right, Left}, [2]Side{Bottom, Top}},
+		{"LR back", GridCoord{Col: 5, Row: 1}, GridCoord{Col: 1, Row: 1}, graph.DirLR, [2]Side{Bottom, Bottom}, [2]Side{Bottom, Top}},
+		{"TD forward", GridCoord{Col: 1, Row: 1}, GridCoord{Col: 1, Row: 5}, graph.DirTD, [2]Side{Bottom, Top}, [2]Side{Bottom, Top}},
+		{"TD back", GridCoord{Col: 1, Row: 5}, GridCoord{Col: 1, Row: 1}, graph.DirTD, [2]Side{Right, Right}, [2]Side{Right, Left}},
 	}
 	for _, c := range cases {
 		pref, alt := PreferredSides(c.src, c.tgt, c.dir)

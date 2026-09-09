@@ -2,7 +2,8 @@
 //
 // Layout algorithm:
 //  1. layoutHierarchy - Layer and order each subgraph scope recursively, with
-//     child subgraphs as compound vertices, and place every node
+//     child subgraphs as compound vertices, and place every node; a graph
+//     that carries its own positions takes layoutPositions instead (ADR-104)
 //  2. countPorts - Edge ends expected per node side
 //  3. computeSizes - Column widths and row heights from node content, word wrapping
 //  4. normalizeSizes - Per-layer normalization, capped at MaxNormalized*
@@ -14,6 +15,7 @@
 package layout
 
 import (
+	"os"
 	"slices"
 	"sort"
 	"strings"
@@ -53,11 +55,9 @@ const (
 	SGGapMin = 5
 )
 
-// GridCoord represents a position on the logical grid.
-type GridCoord struct {
-	Col int
-	Row int
-}
+// GridCoord represents a position on the logical grid. It is defined in
+// internal/graph so a parser can hand ComputeLayout explicit positions.
+type GridCoord = graph.GridCoord
 
 // NodePlacement stores the grid and drawing coordinates of a placed node.
 type NodePlacement struct {
@@ -66,8 +66,11 @@ type NodePlacement struct {
 	// Min and Max are the first and last node cells the placement covers:
 	// Grid for a node, the block's corners for a subgraph an edge ends at,
 	// which Block marks.
-	Min, Max   GridCoord
-	Block      bool
+	Min, Max GridCoord
+	Block    bool
+	// Point marks a node that occupies one cell and draws nothing, which
+	// edges attach to at the cell itself.
+	Point      bool
 	DrawX      int
 	DrawY      int
 	DrawWidth  int
@@ -126,7 +129,7 @@ func (l *GridLayout) IsFree(col, row int, exclude map[string]bool) bool {
 	if col < 0 || row < 0 {
 		return false
 	}
-	key := GridCoord{col, row}
+	key := GridCoord{Col: col, Row: row}
 	if l.Reserved[key] {
 		return false
 	}
@@ -198,22 +201,28 @@ func ComputeLayout(g *graph.Graph, paddingX, paddingY, maxWidth int) *GridLayout
 		return layout
 	}
 
-	// Step 1: Layer and order every scope, place the nodes. A flagged
-	// graph takes the lane path, where the whole graph is one scope and a
-	// node's cross-axis position is constrained to its lane's band.
+	// Step 1: Layer and order every scope, place the nodes. A graph with
+	// explicit positions skips all three and takes them as the cells; a
+	// flagged graph takes the lane path, where the whole graph is one
+	// scope and a node's cross-axis position is constrained to its lane's
+	// band.
 	var positions map[string]GridCoord
 	var blocks map[*graph.Subgraph]posRect
-	if g.Lanes {
+	switch {
+	case len(g.Positions) > 0:
+		positions, blocks = layoutPositions(g, os.Stderr)
+	case g.Lanes:
 		var unlaned []string
 		positions, blocks, layout.laneRoots, unlaned = layoutLanes(g)
 		if len(unlaned) > 0 {
 			layout.Warnings = append(layout.Warnings, unlanedWarning(unlaned))
 		}
-	} else {
+	default:
 		positions, blocks = layoutHierarchy(g)
 	}
 	placeNodes(layout, positions)
 	layout.blocks = blocks
+	markPoints(g, layout)
 
 	// Step 1b: Count the edge ends each node side expects
 	countPorts(g, layout)
@@ -387,9 +396,11 @@ func computeSizes(
 		contentWidth := textWidth + paddingX   // padding on each side
 		contentHeight := textHeight + paddingY // padding top/bottom
 
-		// Start/end state markers are single-character — use minimal sizing
-		// so they sit tight against the connecting edges.
-		isMarker := node.Shape == graph.ShapeStartState || node.Shape == graph.ShapeEndState
+		// Start and end markers are single-character and a junction is
+		// nothing at all — one cell each, so they sit tight against the
+		// edges that reach them.
+		isMarker := node.Shape == graph.ShapeStartState || node.Shape == graph.ShapeEndState ||
+			node.Shape == graph.ShapeJunction
 		if isMarker {
 			contentWidth = 1
 			contentHeight = 1
