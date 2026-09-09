@@ -6,11 +6,13 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
 
-// advance returns the number of cells a rune occupies. ADR-401 will widen
-// East Asian and emoji runes to two; until then every rune takes one.
-func advance(r rune) int { return 1 }
+// advance returns the number of cells a rune occupies (ADR-401). A rune of
+// width 0 leaves no cell at all.
+func advance(r rune) int { return textwidth.Rune(r) }
 
 // palette16 is the xterm rendering of the eight named colours (SGR 30-37)
 // followed by their bright variants (SGR 90-97).
@@ -90,12 +92,16 @@ func Interpret(ansi string) (*Frame, error) {
 			i += n
 		default:
 			r, size := utf8.DecodeRuneInString(ansi[i:])
+			i += size
+			w := advance(r)
+			if w == 0 {
+				continue
+			}
 			c := Cell{Cp: r, Fg: st.cellFg(), Bg: st.bg}
 			cur = append(cur, c)
-			for k := advance(r); k > 1; k-- {
+			for k := w; k > 1; k-- {
 				cur = append(cur, Cell{Cp: 0, Fg: c.Fg, Bg: c.Bg})
 			}
-			i += size
 		}
 	}
 	lines = append(lines, cur)
