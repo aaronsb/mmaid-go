@@ -1,0 +1,23 @@
+# Fixtures whose frames trip the structural lint today. One stem per line.
+# ADR-400 removes the flowchart entries; the chart renderers leave as each is
+# fixed.
+#
+# Two sources:
+#   - real edge defects: an arrowhead with no arm feeding it, a corner in a
+#     horizontal run, an arm bleeding past an arrowhead
+#   - arms running off the canvas edge in chart-style renderers
+
+class
+flowchart
+flowchart-cross
+gantt
+gitgraph
+journey
+kanban
+mindmap
+quadrant
+sequence
+state
+subgraph-cross
+timeline
+xychart
