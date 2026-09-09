@@ -1499,6 +1499,59 @@ func TestRadarLegendClearsTheAxisLabelMargin(t *testing.T) {
 	assertCanvasContains(t, c, "Reliability")
 }
 
+func TestChartLegendBoxesAreASCIIInASCII(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		draw func() *renderer.Canvas
+	}{
+		{"radar", func() *renderer.Canvas {
+			return RenderRadar("radar-beta\n  axis a, b, c\n  curve one{1, 2, 3}", renderer.ASCII, false, nil)
+		}},
+		{"venn", func() *renderer.Canvas {
+			return RenderVenn("venn-beta\n  set A\n  set B\n  union A,B[\"AB\"]", renderer.ASCII, false, nil)
+		}},
+		{"pie", func() *renderer.Canvas {
+			return RenderPieChart("pie\n  \"A\" : 60\n  \"B\" : 40", renderer.ASCII, false, nil)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out := tc.draw().ToString()
+			for _, r := range out {
+				if r > 127 {
+					t.Fatalf("ASCII render carries %q\n---\n%s\n---", r, out)
+				}
+			}
+		})
+	}
+}
+
+func TestVennUnionJoinerFollowsTheCharset(t *testing.T) {
+	vd := parseVenn("venn-beta\n  set A\n  set B\n  union A,B")
+	if got := vd.unionName(0b11, marksFor(renderer.UNICODE)); got != "A ∩ B" {
+		t.Errorf("unicode join = %q", got)
+	}
+	if got := vd.unionName(0b11, marksFor(renderer.ASCII)); got != "A n B" {
+		t.Errorf("ascii join = %q", got)
+	}
+}
+
+func TestVennFourthSetIsDropped(t *testing.T) {
+	vd := parseVenn("venn-beta\n  set A\n  set B\n  set C\n  set D\n  union C,D[\"CD\"]")
+	if len(vd.sets) != vennMaxSets {
+		t.Errorf("sets = %d, want the cap of %d", len(vd.sets), vennMaxSets)
+	}
+	if len(vd.unions) != 0 {
+		t.Errorf("unions = %+v, want none: D was never declared", vd.unions)
+	}
+}
+
+func TestVennRegionLabelKeepsItsSpaces(t *testing.T) {
+	// `Put` skips a space, so without clearing the cells first the fill under
+	// a two-word label shows between its words and it reads as one.
+	c := RenderVenn("venn-beta\n  set Desirable\n  set Feasible\n  set Viable\n  union Desirable,Feasible,Viable[\"Ship it\"]", renderer.UNICODE, false, nil)
+	assertCanvasContains(t, c, "Ship it")
+}
+
 func TestTruncateMarkSaysWhereItCut(t *testing.T) {
 	m := marksFor(renderer.UNICODE)
 	if got := truncateMark("emergent practice", 30, m); got != "emergent practice" {

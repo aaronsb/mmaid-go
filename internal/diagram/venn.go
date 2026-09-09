@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/aaronsb/mmaid-go/internal/glyph"
 	"github.com/aaronsb/mmaid-go/internal/renderer"
 	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
@@ -21,7 +20,14 @@ import (
 //
 // Skipped: `text` nodes, which need room inside a region the cell grid does
 // not have beside the region's own label; `style`, whose fill, stroke and
-// opacity are the theme's here.
+// opacity are the theme's here; and the fourth and later `set`, three circles
+// being as many as this layout can place with every region visible — a fourth
+// is dropped with a notice on stderr, and so is a `union` naming it.
+
+// vennMaxSets is the cap the drawing imposes: three overlapping circles have
+// seven regions, and a fourth circle cannot be placed so that every region it
+// makes is visible.
+const vennMaxSets = 3
 
 type vennSet struct {
 	id    string
@@ -69,7 +75,11 @@ func parseVenn(source string) *vennDiagram {
 				continue
 			}
 			id := strings.Trim(strings.TrimSpace(d[1]), `"`)
-			if id == "" || len(vd.sets) >= 3 {
+			if id == "" {
+				continue
+			}
+			if len(vd.sets) >= vennMaxSets {
+				warnf("venn: %q is a fourth set; %d is the most three circles can show", id, vennMaxSets)
 				continue
 			}
 			label := d[2]
@@ -181,7 +191,8 @@ func RenderVenn(source string, cs renderer.CharSet, useColor bool, theme *render
 		colors = theme.PieColors(len(vd.sets))
 	}
 
-	legendW, legendGap := vd.legendWidth(), 3
+	marks := marksFor(cs)
+	legendW, legendGap := vd.legendWidth(marks), 3
 	base := float64(usableWidth()-legendGap-legendW-4) / 4.6
 	base = math.Min(math.Max(base, 7), 15)
 
@@ -196,7 +207,7 @@ func RenderVenn(source string, cs renderer.CharSet, useColor bool, theme *render
 		titleRows = 2
 	}
 	canvasWidth := plotCols + legendGap + legendW + 1
-	canvasHeight := titleRows + max(plotRows, vd.legendHeight()) + 1
+	canvasHeight := titleRows + max(plotRows, vd.legendHeight(marks)) + 1
 
 	c := renderer.NewCanvas(canvasWidth, canvasHeight)
 	c.SetCharSet(cs)
@@ -220,7 +231,7 @@ func RenderVenn(source string, cs renderer.CharSet, useColor bool, theme *render
 	}
 
 	vd.drawRegionLabels(c, circles, titleRows, plotCols, plotRows, colors, useColor)
-	vd.drawLegend(c, titleRows, plotCols+legendGap, legendW, colors, cs.Fills, regionOrder, useColor)
+	vd.drawLegend(c, titleRows, plotCols+legendGap, legendW, colors, cs.Fills, regionOrder, useColor, marks)
 	return c
 }
 
@@ -349,13 +360,14 @@ func (vd *vennDiagram) drawRegionLabels(c *renderer.Canvas, circles []vennCircle
 				c.SetFill(titleRows+bestRow, col+i, fmt.Sprintf("_ansi:\033[48;2;%d;%d;%dm", r, g, b))
 			}
 		}
+		clearSpan(c, titleRows+bestRow, col, w)
 		c.PutText(titleRows+bestRow, col, t.label, style)
 	}
 }
 
 // legendRows lists what the legend names: every set, then every union that
 // carries a label or a size.
-func (vd *vennDiagram) legendRows() []string {
+func (vd *vennDiagram) legendRows(m chartMarks) []string {
 	out := make([]string, 0, len(vd.sets)+len(vd.unions))
 	for _, s := range vd.sets {
 		out = append(out, vennLegendText(s.label, s.size))
@@ -363,7 +375,7 @@ func (vd *vennDiagram) legendRows() []string {
 	for _, u := range vd.unions {
 		label := u.label
 		if label == "" {
-			label = vd.unionName(u.mask)
+			label = vd.unionName(u.mask, m)
 		}
 		out = append(out, vennLegendText(label, u.size))
 	}
@@ -378,49 +390,35 @@ func vennLegendText(label string, size float64) string {
 }
 
 // unionName joins the ids of the sets a union covers.
-func (vd *vennDiagram) unionName(mask int) string {
+func (vd *vennDiagram) unionName(mask int, m chartMarks) string {
 	var parts []string
 	for i, s := range vd.sets {
 		if mask&(1<<i) != 0 {
 			parts = append(parts, s.id)
 		}
 	}
-	return strings.Join(parts, " ∩ ")
+	return strings.Join(parts, " "+m.join+" ")
 }
 
-func (vd *vennDiagram) legendWidth() int {
+func (vd *vennDiagram) legendWidth(m chartMarks) int {
 	w := 0
-	for _, row := range vd.legendRows() {
+	for _, row := range vd.legendRows(m) {
 		w = max(w, textwidth.String(row))
 	}
 	return w + 8
 }
 
-func (vd *vennDiagram) legendHeight() int {
-	return len(vd.legendRows()) + 2
+func (vd *vennDiagram) legendHeight(m chartMarks) int {
+	return len(vd.legendRows(m)) + 2
 }
 
 // drawLegend draws the pie's legend box, a swatch per region beside its name.
-func (vd *vennDiagram) drawLegend(c *renderer.Canvas, titleRows, left, width int, colors [][3]int, fills renderer.Fills, order map[int]int, useColor bool) {
-	rows := vd.legendRows()
+func (vd *vennDiagram) drawLegend(c *renderer.Canvas, titleRows, left, width int, colors [][3]int, fills renderer.Fills, order map[int]int, useColor bool, m chartMarks) {
+	rows := vd.legendRows(m)
 	height := len(rows) + 2
 	top := titleRows
 
-	c.Put(top, left, '┌', "node")
-	c.DrawHorizontal(top, left, left+width-1, glyph.Light, "node")
-	c.Put(top, left+width-1, '┐', "node")
-	for row := top + 1; row < top+height-1; row++ {
-		c.Put(row, left, '│', "node")
-		c.Put(row, left+width-1, '│', "node")
-	}
-	c.Put(top+height-1, left, '└', "node")
-	c.DrawHorizontal(top+height-1, left, left+width-1, glyph.Light, "node")
-	c.Put(top+height-1, left+width-1, '┘', "node")
-	for row := top; row < top+height; row++ {
-		for col := left; col < left+width; col++ {
-			c.SetFill(row, col, "subgraph_fill")
-		}
-	}
+	drawLegendBox(c, top, left, height, width, "node")
 
 	masks := make([]int, 0, len(rows))
 	for i := range vd.sets {

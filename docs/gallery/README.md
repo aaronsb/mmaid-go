@@ -409,6 +409,22 @@ radar-beta
 
 ![radar](radar.png)
 
+## radar-ascii
+
+Rendered with `-a`.
+
+```mermaid
+radar-beta
+    title Service Comparison
+    axis speed["Speed"], cost["Cost"], reliability["Reliability"]
+    axis support["Support"], features["Features"]
+    curve a["Vendor A"]{85, 60, 90, 70, 75}
+    curve b["Vendor B"]{60, 90, 70, 85, 65}
+    max 100
+```
+
+![radar-ascii](radar-ascii.png)
+
 ## requirement
 
 Rendered with `-t default -w 120`.
@@ -592,6 +608,24 @@ venn-beta
 ```
 
 ![venn](venn.png)
+
+## venn-ascii
+
+Rendered with `-a`.
+
+```mermaid
+venn-beta
+    title What makes a good feature
+    set Desirable
+    set Feasible
+    set Viable
+    union Desirable,Feasible["Buildable"]
+    union Feasible,Viable["Sustainable"]
+    union Desirable,Viable["Marketable"]
+    union Desirable,Feasible,Viable["Ship it"]
+```
+
+![venn-ascii](venn-ascii.png)
 
 ## wardley
 
