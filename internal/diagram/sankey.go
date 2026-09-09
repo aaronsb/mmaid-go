@@ -3,7 +3,9 @@ package diagram
 import (
 	"fmt"
 	"math"
+	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -14,7 +16,10 @@ import (
 //   - the `sankey` header and its original `sankey-beta` spelling;
 //   - rows of three CSV fields — source, target, value — per RFC 4180, so a
 //     field may be quoted, a quoted field may hold commas, and a pair of
-//     quotes inside a quoted field is one quote;
+//     quotes inside a quoted field is one quote. Every field is trimmed, as
+//     `sankey.jison` trims both the escaped and the plain form;
+//   - a value in decimal or exponent notation, which is what upstream's
+//     `parseFloat` reads;
 //   - empty lines between rows, which plain CSV forbids and this diagram
 //     allows;
 //   - `%%` comment lines.
@@ -29,6 +34,15 @@ import (
 //     line.
 //   - a row without exactly three fields, or whose third field is not a
 //     number. Upstream fails the parse; this drops the row.
+//   - a hexadecimal float, a digit separator and the words `NaN`, `Inf` and
+//     `Infinity`, all of which Go's `ParseFloat` reads and upstream's
+//     `parseFloat` does not.
+//   - a row whose value is negative or does not resolve to a finite number.
+//     A sankey has no negative flow, and one unbounded row sets the scale for
+//     every other. The parse warns once, naming the row.
+//   - a link that closes a cycle, and a link from a node to itself. Upstream
+//     refuses the whole diagram as a circular link; this drops the link,
+//     leaves it out of both nodes' totals, and warns once.
 
 // sankeyNode is one node: what flows into and out of it, which column it
 // sits in, and where its bar lands.
@@ -37,8 +51,7 @@ type sankeyNode struct {
 	in, out float64
 	depth   int
 
-	top, height   int
-	inRow, outRow int // the next free row for an incoming and outgoing band
+	top, height int
 }
 
 // value is the flow the node's bar stands for.
@@ -46,11 +59,15 @@ func (n *sankeyNode) value() float64 {
 	return max(n.in, n.out)
 }
 
-// sankeyLink is one row of the CSV, and the band it draws.
+// sankeyLink is one row of the CSV, and the band it draws. A band is as thick
+// as its share of each bar it meets, which is not the same number at both
+// ends when the flow through a node is not balanced.
 type sankeyLink struct {
 	source, target string
 	value          float64
-	sy, ty, h      int // the band's first row at each end, and its thickness
+	back           bool // closes a cycle: kept for the record, never drawn
+	sy, hs         int  // the band's first row and thickness at the source
+	ty, ht         int  // and at the target
 }
 
 // sankeyData is the parsed diagram: nodes in order of first appearance and
@@ -72,50 +89,67 @@ func (sd *sankeyData) node(name string) *sankeyNode {
 	return n
 }
 
-var reSankeyHeader = regexp.MustCompile(`(?i)^sankey(-beta)?$`)
+var (
+	reSankeyHeader = regexp.MustCompile(`(?i)^sankey(-beta)?$`)
+	// reSankeyValue is what upstream's parseFloat reads: decimal or exponent
+	// notation, and nothing else.
+	reSankeyValue = regexp.MustCompile(`^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$`)
+)
 
-// parseSankey reads the CSV rows under a `sankey` header.
+// parseSankey reads the CSV rows under a `sankey` header, drops the links
+// that close a cycle, and totals what flows through each node.
 //
 //	sankey-beta
 //	Electricity grid,Industry,342.165
 //	Electricity grid,"Heating and cooling, homes",113.726
 func parseSankey(source string) *sankeyData {
 	sd := &sankeyData{index: map[string]int{}}
+	warned := false
 	for _, raw := range strings.Split(source, "\n") {
 		line := strings.TrimSpace(raw)
 		if line == "" || strings.HasPrefix(line, "%%") || reSankeyHeader.MatchString(line) {
 			continue
 		}
 		fields := splitCSVRow(line)
-		if len(fields) != 3 {
+		if len(fields) != 3 || fields[0] == "" || fields[1] == "" {
+			continue
+		}
+		if !reSankeyValue.MatchString(fields[2]) {
 			continue
 		}
 		value, err := strconv.ParseFloat(fields[2], 64)
-		if err != nil || fields[0] == "" || fields[1] == "" {
+		if err != nil || math.IsNaN(value) || math.IsInf(value, 0) || value < 0 {
+			if !warned {
+				fmt.Fprintf(os.Stderr, "mmaid: sankey: dropped %q: a flow is a finite, non-negative number\n", line)
+				warned = true
+			}
 			continue
 		}
-		sd.node(fields[0]).out += value
-		sd.node(fields[1]).in += value
+		sd.node(fields[0])
+		sd.node(fields[1])
 		sd.links = append(sd.links, sankeyLink{source: fields[0], target: fields[1], value: value})
+	}
+	sankeyMarkCycles(sd)
+	for _, l := range sd.links {
+		if l.back {
+			continue
+		}
+		sd.nodes[sd.index[l.source]].out += l.value
+		sd.nodes[sd.index[l.target]].in += l.value
 	}
 	return sd
 }
 
-// splitCSVRow splits one CSV row. An unquoted field is trimmed; a quoted one
-// is taken as written, with `""` standing for a quote.
+// splitCSVRow splits one CSV row into trimmed fields. A quoted field carries
+// commas, and `""` inside one is a single quote.
 func splitCSVRow(line string) []string {
 	var fields []string
 	var cur strings.Builder
-	quoted, sawQuote := false, false
 
+	quoted := false
 	flush := func() {
-		s := cur.String()
-		if !sawQuote {
-			s = strings.TrimSpace(s)
-		}
-		fields = append(fields, s)
+		fields = append(fields, strings.TrimSpace(cur.String()))
 		cur.Reset()
-		sawQuote = false
 	}
 	for i := 0; i < len(line); i++ {
 		switch ch := line[i]; {
@@ -124,7 +158,6 @@ func splitCSVRow(line string) []string {
 			i++
 		case ch == '"':
 			quoted = !quoted
-			sawQuote = true
 		case ch == ',' && !quoted:
 			flush()
 		default:
@@ -135,17 +168,65 @@ func splitCSVRow(line string) []string {
 	return fields
 }
 
+// sankeyMarkCycles marks every link that closes a cycle, so what is left is a
+// directed acyclic graph. A link to the node itself closes the shortest cycle
+// there is. It warns once, naming the first link it drops.
+func sankeyMarkCycles(sd *sankeyData) {
+	out := make([][]int, len(sd.nodes))
+	for i, l := range sd.links {
+		out[sd.index[l.source]] = append(out[sd.index[l.source]], i)
+	}
+	const (
+		white = iota
+		grey
+		black
+	)
+	state := make([]int, len(sd.nodes))
+	dropped := 0
+	first := ""
+
+	var visit func(int)
+	visit = func(n int) {
+		state[n] = grey
+		for _, li := range out[n] {
+			t := sd.index[sd.links[li].target]
+			switch {
+			case t == n || state[t] == grey:
+				sd.links[li].back = true
+				dropped++
+				if first == "" {
+					first = sd.links[li].source + " -> " + sd.links[li].target
+				}
+			case state[t] == white:
+				visit(t)
+			}
+		}
+		state[n] = black
+	}
+	for i := range sd.nodes {
+		if state[i] == white {
+			visit(i)
+		}
+	}
+	switch {
+	case dropped == 1:
+		fmt.Fprintf(os.Stderr, "mmaid: sankey: %s closes a cycle and is not drawn\n", first)
+	case dropped > 1:
+		fmt.Fprintf(os.Stderr, "mmaid: sankey: %s closes a cycle and is not drawn, with %d more\n", first, dropped-1)
+	}
+}
+
 // sankeyDepths lays the nodes out in columns by longest path from a source.
-// A cycle stops the walk after one pass per node, leaving the nodes it
-// reached in the order it reached them.
+// The links that close a cycle are already out of the walk, so it settles
+// after one pass per node at the most.
 func sankeyDepths(sd *sankeyData) {
 	for range sd.nodes {
 		changed := false
 		for _, l := range sd.links {
-			s, t := sd.nodes[sd.index[l.source]], sd.nodes[sd.index[l.target]]
-			if s == t {
+			if l.back {
 				continue
 			}
+			s, t := sd.nodes[sd.index[l.source]], sd.nodes[sd.index[l.target]]
 			if t.depth < s.depth+1 {
 				t.depth, changed = s.depth+1, true
 			}
@@ -175,49 +256,150 @@ func (p sankeyPlan) node(name string) *sankeyNode {
 	return p.sd.nodes[p.sd.index[name]]
 }
 
-// sankeyValue formats a flow the way the source wrote it, without a trailing
-// zero the parse introduced.
+// sankeyValue formats a flow in at most six significant digits, and a whole
+// number as a whole number.
 func sankeyValue(v float64) string {
-	return strconv.FormatFloat(v, 'f', -1, 64)
+	if v == math.Trunc(v) && math.Abs(v) < 1e15 {
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	}
+	return strconv.FormatFloat(v, 'g', 6, 64)
 }
 
 func sankeyLabel(n *sankeyNode) string {
 	return n.name + " " + sankeyValue(n.value())
 }
 
-// sankeyLayout places the columns across the canvas and the bars down each
-// one, then allocates every band its rows at both ends.
-func sankeyLayout(sd *sankeyData) sankeyPlan {
-	sankeyDepths(sd)
-
-	depth := 0
-	for _, n := range sd.nodes {
-		depth = max(depth, n.depth)
+// sankeyApportion divides total rows among weights by largest remainder, so
+// the shares add up to total exactly. A share may be zero: a flow too small
+// for a row of its own does not borrow one from a bigger flow.
+func sankeyApportion(weights []float64, total int) []int {
+	shares := make([]int, len(weights))
+	sum := 0.0
+	for _, w := range weights {
+		sum += w
 	}
-	p := sankeyPlan{sd: sd, cols: make([][]*sankeyNode, depth+1)}
-	for _, n := range sd.nodes {
-		p.cols[n.depth] = append(p.cols[n.depth], n)
+	if len(weights) == 0 || total <= 0 || !(sum > 0) || math.IsInf(sum, 0) {
+		return shares
 	}
+	type remainder struct {
+		i    int
+		frac float64
+	}
+	rems := make([]remainder, len(weights))
+	assigned := 0
+	for i, w := range weights {
+		exact := w / sum * float64(total)
+		shares[i] = int(exact)
+		assigned += shares[i]
+		rems[i] = remainder{i, exact - float64(shares[i])}
+	}
+	sort.SliceStable(rems, func(a, b int) bool { return rems[a].frac > rems[b].frac })
+	for k := 0; assigned < total && k < len(rems); k++ {
+		shares[rems[k].i]++
+		assigned++
+	}
+	return shares
+}
 
-	// One scale for the whole diagram, so a row is the same flow everywhere:
-	// the heaviest column fills sankeyMaxRows.
+// sankeyAllocateBands gives every band its rows at each end. A bar's rows are
+// apportioned among the links that meet that side of it, so the bands leaving
+// a bar cover it exactly and none of them starts below it.
+func sankeyAllocateBands(sd *sankeyData, rows func(float64) int) {
+	out := make([][]int, len(sd.nodes))
+	in := make([][]int, len(sd.nodes))
+	for i, l := range sd.links {
+		if l.back {
+			continue
+		}
+		s, t := sd.index[l.source], sd.index[l.target]
+		out[s] = append(out[s], i)
+		in[t] = append(in[t], i)
+	}
+	weights := func(idx []int) []float64 {
+		w := make([]float64, len(idx))
+		for k, li := range idx {
+			w[k] = sd.links[li].value
+		}
+		return w
+	}
+	for ni, n := range sd.nodes {
+		row := n.top
+		for k, share := range sankeyApportion(weights(out[ni]), rows(n.out)) {
+			l := &sd.links[out[ni][k]]
+			l.sy, l.hs = row, share
+			row += share
+		}
+		row = n.top
+		for k, share := range sankeyApportion(weights(in[ni]), rows(n.in)) {
+			l := &sd.links[in[ni][k]]
+			l.ty, l.ht = row, share
+			row += share
+		}
+	}
+}
+
+// sankeyColumns groups the nodes into columns by depth. A depth no node
+// reached holds no column: a dropped cycle leaves gaps in the numbering, and
+// an empty column would still reserve a label, a bar and a gap.
+func sankeyColumns(sd *sankeyData) [][]*sankeyNode {
+	used := map[int]bool{}
+	for _, n := range sd.nodes {
+		used[n.depth] = true
+	}
+	depths := make([]int, 0, len(used))
+	for d := range used {
+		depths = append(depths, d)
+	}
+	sort.Ints(depths)
+	at := make(map[int]int, len(depths))
+	for i, d := range depths {
+		at[d] = i
+	}
+	cols := make([][]*sankeyNode, len(depths))
+	for _, n := range sd.nodes {
+		n.depth = at[n.depth]
+		cols[n.depth] = append(cols[n.depth], n)
+	}
+	return cols
+}
+
+// sankeyScale returns the rows one unit of flow draws in, and the function
+// that converts a flow to whole rows. The heaviest column fills sankeyMaxRows;
+// a total that is not a finite positive number leaves every bar at its
+// minimum rather than setting an unbounded scale.
+func sankeyScale(cols [][]*sankeyNode) func(float64) int {
 	heaviest := 0.0
-	for _, col := range p.cols {
+	for _, col := range cols {
 		total := 0.0
 		for _, n := range col {
 			total += n.value()
 		}
 		heaviest = max(heaviest, total)
 	}
-	scale := float64(sankeyMaxRows)
-	if heaviest > 0 {
-		scale /= heaviest
+	scale := 0.0
+	if heaviest > 0 && !math.IsInf(heaviest, 0) {
+		scale = float64(sankeyMaxRows) / heaviest
 	}
-	rows := func(v float64) int { return max(1, int(math.Round(v*scale))) }
+	return func(v float64) int {
+		if !(v > 0) || math.IsInf(v, 0) {
+			return 0
+		}
+		return min(int(math.Round(v*scale)), sankeyMaxRows)
+	}
+}
 
+// sankeyLayout places the columns across the canvas and the bars down each
+// one, then allocates every band its rows at both ends.
+func sankeyLayout(sd *sankeyData) sankeyPlan {
+	sankeyDepths(sd)
+	p := sankeyPlan{sd: sd, cols: sankeyColumns(sd)}
+	rows := sankeyScale(p.cols)
+
+	// A bar stands for a flow, so it is never shorter than one row even when
+	// the flow rounds to none.
 	for _, col := range p.cols {
 		for _, n := range col {
-			n.height = rows(n.value())
+			n.height = max(1, rows(n.value()))
 		}
 	}
 
@@ -226,7 +408,7 @@ func sankeyLayout(sd *sankeyData) sankeyPlan {
 	for _, col := range p.cols {
 		row := 0
 		for _, n := range col {
-			n.top, n.inRow, n.outRow = row, row, row
+			n.top = row
 			row += n.height + sankeyNodeGap
 		}
 		p.height = max(p.height, row-sankeyNodeGap)
@@ -263,17 +445,7 @@ func sankeyLayout(sd *sankeyData) sankeyPlan {
 	}
 	p.width = x + 1
 
-	for i := range sd.links {
-		l := &sd.links[i]
-		s, t := p.node(l.source), p.node(l.target)
-		h := rows(l.value)
-		h = min(h, s.top+s.height-s.outRow)
-		h = min(h, t.top+t.height-t.inRow)
-		l.h = max(1, h)
-		l.sy, l.ty = s.outRow, t.inRow
-		s.outRow += l.h
-		t.inRow += l.h
-	}
+	sankeyAllocateBands(sd, rows)
 	return p
 }
 
@@ -304,32 +476,45 @@ func sankeyStyle(colors [][3]int, i int, fallback string) string {
 	return "_ansi:" + ansiFG(colors[i%len(colors)])
 }
 
-// sankeyBand draws one link as a ribbon: each of its rows leaves the source
-// bar and slides evenly across the gap to the row it arrives on, and a column
-// the slide skips a row over is filled so the ribbon stays whole.
+// sankeyBand draws one link as a ribbon: it leaves the source bar as thick as
+// its share of that bar, slides evenly across the gap, and arrives as thick as
+// its share of the target's. A column the slide steps a row over is filled so
+// the ribbon stays whole.
 func sankeyBand(c *renderer.Canvas, p sankeyPlan, l sankeyLink, ch rune, style string) {
+	if l.back || (l.hs <= 0 && l.ht <= 0) {
+		return
+	}
 	s, t := p.node(l.source), p.node(l.target)
 	x0 := p.barX[s.depth] + sankeyBarWidth
 	x1 := p.barX[t.depth] - 1
 	if x1 < x0 {
 		return
 	}
-	drop := float64(l.ty - l.sy)
 	span := float64(x1 - x0)
+	prevLo, prevHi := 0, -1
 
-	for k := range l.h {
-		row, prev := l.sy+k, l.sy+k
-		for x := x0; x <= x1; x++ {
-			if span > 0 {
-				row = l.sy + k + int(math.Round(drop*float64(x-x0)/span))
-			} else {
-				row = l.ty + k
-			}
-			for r := min(prev, row); r <= max(prev, row); r++ {
-				c.Put(r, x, ch, style)
-			}
-			prev = row
+	for x := x0; x <= x1; x++ {
+		at := 1.0
+		if span > 0 {
+			at = float64(x-x0) / span
 		}
+		lo := int(math.Round(float64(l.sy) + float64(l.ty-l.sy)*at))
+		h := int(math.Round(float64(l.hs) + float64(l.ht-l.hs)*at))
+		if h <= 0 {
+			prevHi = -1
+			continue
+		}
+		hi := lo + h - 1
+		// Close the step between this column's span and the last one's, so a
+		// steep ribbon has no holes in it.
+		if prevHi >= prevLo {
+			lo = min(lo, prevHi+1)
+			hi = max(hi, prevLo-1)
+		}
+		for r := lo; r <= hi; r++ {
+			c.Put(r, x, ch, style)
+		}
+		prevLo, prevHi = lo, hi
 	}
 }
 

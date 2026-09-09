@@ -1,6 +1,7 @@
 package diagram
 
 import (
+	"fmt"
 	"math"
 	"slices"
 	"strings"
@@ -1664,6 +1665,17 @@ Pumped heat,"Heating and cooling, ""homes""",193.026`)
 	if sd.links[0].value != 193.026 {
 		t.Errorf("value = %v, want 193.026", sd.links[0].value)
 	}
+
+	// Upstream trims the escaped form as well as the plain one, so a quoted
+	// name and a bare one are the same node.
+	sd = parseSankey("sankey\n\"A\" ,B,3\nA,C,3")
+	if len(sd.nodes) != 3 {
+		names := []string{}
+		for _, n := range sd.nodes {
+			names = append(names, n.name)
+		}
+		t.Errorf("nodes = %q, want A, B and C", names)
+	}
 }
 
 // A row is dropped when it does not hold three fields, or when the third one
@@ -1687,9 +1699,43 @@ func TestSankeyDepthIsLongestPath(t *testing.T) {
 	}
 }
 
-// A cycle stops the depth walk instead of running forever.
-func TestSankeyCycleTerminates(t *testing.T) {
+// A link that closes a cycle is dropped: it is left out of both totals and
+// out of the drawing, and the columns behind it do not spread.
+func TestSankeyCycleLinksAreDropped(t *testing.T) {
+	sd := parseSankey("sankey\nA,B,1\nB,A,1")
+	if len(sd.links) != 2 || sd.links[0].back || !sd.links[1].back {
+		t.Fatalf("links = %+v, want the second marked as the back edge", sd.links)
+	}
+	a, b := sd.nodes[sd.index["A"]], sd.nodes[sd.index["B"]]
+	if a.in != 0 || a.out != 1 || b.in != 1 || b.out != 0 {
+		t.Errorf("totals: A in=%v out=%v, B in=%v out=%v; want the back edge out of both", a.in, a.out, b.in, b.out)
+	}
+	p := sankeyLayout(sd)
+	if len(p.cols) != 2 {
+		t.Errorf("columns = %d, want 2 with none empty", len(p.cols))
+	}
+	for i, col := range p.cols {
+		if len(col) == 0 {
+			t.Errorf("column %d is empty", i)
+		}
+	}
 	assertCanvasNotEmpty(t, RenderSankey("sankey\nA,B,1\nB,A,1", renderer.UNICODE, nil))
+}
+
+// A link from a node to itself closes the shortest cycle there is, so it does
+// not inflate the node's value with rows nothing draws.
+func TestSankeySelfLinkIsDropped(t *testing.T) {
+	sd := parseSankey("sankey\nA,A,3\nA,B,2")
+	if !sd.links[0].back || sd.links[1].back {
+		t.Fatalf("links = %+v, want the self link marked", sd.links)
+	}
+	if a := sd.nodes[sd.index["A"]]; a.value() != 2 {
+		t.Errorf("A value = %v, want 2", a.value())
+	}
+	p := sankeyLayout(sd)
+	if len(p.cols) != 2 {
+		t.Errorf("columns = %d, want 2", len(p.cols))
+	}
 }
 
 func TestSankeyRendersLabelsWithValues(t *testing.T) {
@@ -1909,4 +1955,97 @@ func TestZenUMLTitle(t *testing.T) {
 
 func TestZenUMLEmpty(t *testing.T) {
 	assertCanvasNotEmpty(t, RenderZenUML("zenuml\nAlice->Bob: hi", renderer.UNICODE))
+}
+
+// assertSankeyBandsFitTheirBars checks the invariant the apportionment
+// exists for: every band leaves and lands inside the bar it meets, and the
+// bands meeting one side of a bar cover it exactly when that side carries the
+// node's whole flow.
+func assertSankeyBandsFitTheirBars(t *testing.T, source string) {
+	t.Helper()
+	sd := parseSankey(source)
+	p := sankeyLayout(sd)
+	fromRows := map[string]int{}
+	intoRows := map[string]int{}
+
+	for _, l := range sd.links {
+		if l.back {
+			continue
+		}
+		s, tn := p.node(l.source), p.node(l.target)
+		if l.sy < s.top || l.sy+l.hs > s.top+s.height {
+			t.Errorf("%s->%s leaves rows %d..%d, outside %s's bar at %d..%d",
+				l.source, l.target, l.sy, l.sy+l.hs-1, l.source, s.top, s.top+s.height-1)
+		}
+		if l.ty < tn.top || l.ty+l.ht > tn.top+tn.height {
+			t.Errorf("%s->%s lands on rows %d..%d, outside %s's bar at %d..%d",
+				l.source, l.target, l.ty, l.ty+l.ht-1, l.target, tn.top, tn.top+tn.height-1)
+		}
+		fromRows[l.source] += l.hs
+		intoRows[l.target] += l.ht
+	}
+	for _, n := range sd.nodes {
+		if n.out == n.value() && fromRows[n.name] != n.height {
+			t.Errorf("bands leaving %s cover %d rows of a %d-row bar", n.name, fromRows[n.name], n.height)
+		}
+		if n.in == n.value() && intoRows[n.name] != n.height {
+			t.Errorf("bands meeting %s cover %d rows of a %d-row bar", n.name, intoRows[n.name], n.height)
+		}
+	}
+}
+
+// Five equal flows into one node round to four rows each and the bar is 18:
+// apportionment spends the bar's rows, it does not hand out more than it has.
+func TestSankeyBandRowsFitTheBarTheyMeet(t *testing.T) {
+	assertSankeyBandsFitTheirBars(t, "sankey-beta\nP,X,0.3\nQ,X,0.3\nR,X,0.3\nS,X,0.3\nT,X,0.3")
+	assertSankeyBandsFitTheirBars(t, "sankey-beta\nCoal,Electricity,45\nGas,Electricity,30\nSolar,Electricity,15\nElectricity,Homes,40\nElectricity,Industry,35\nElectricity,\"Losses, grid\",15")
+
+	// Thirty sources of one unit each, at the width the reviewer used: more
+	// links than the target bar has rows.
+	var b strings.Builder
+	b.WriteString("sankey-beta\n")
+	for i := range 30 {
+		fmt.Fprintf(&b, "S%d,Electricity,1\n", i)
+	}
+	src := b.String()
+	SetWidthOverride(60)
+	defer SetWidthOverride(0)
+	assertSankeyBandsFitTheirBars(t, src)
+	assertCanvasNotEmpty(t, RenderSankey(src, renderer.UNICODE, nil))
+}
+
+// A value is read the way upstream's parseFloat reads one, and a row that is
+// not a finite, non-negative number is dropped.
+func TestSankeyValuesMustBeFiniteAndPositive(t *testing.T) {
+	for _, source := range []string{
+		"sankey\nA,B,NaN\nC,D,1000",
+		"sankey\nA,B,Inf\nC,D,1000",
+		"sankey\nA,B,-5\nC,D,1000",
+		"sankey\nA,B,1_000\nC,D,1000",
+		"sankey\nA,B,0x1p4\nC,D,1000",
+	} {
+		sd := parseSankey(source)
+		if len(sd.links) != 1 || sd.links[0].source != "C" {
+			t.Errorf("%q parsed %+v, want the C,D row only", source, sd.links)
+		}
+	}
+	// A total that overflows to infinity must not set an unbounded scale.
+	c := RenderSankey("sankey\nA,B,1e308\nA,C,1e308", renderer.UNICODE, nil)
+	if c.Height > 4*sankeyMaxRows {
+		t.Errorf("canvas is %d rows for an overflowing total", c.Height)
+	}
+}
+
+// A flow prints in at most six significant digits, and a whole number prints
+// as one.
+func TestSankeyValueFormat(t *testing.T) {
+	cases := map[float64]string{
+		45: "45", 124.729: "124.729", 0.5: "0.5",
+		1000000: "1000000", 1e308: "1e+308", 1.0 / 3.0: "0.333333",
+	}
+	for v, want := range cases {
+		if got := sankeyValue(v); got != want {
+			t.Errorf("sankeyValue(%v) = %q, want %q", v, got, want)
+		}
+	}
 }
