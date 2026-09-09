@@ -160,6 +160,8 @@ clearing the screen between renders, polling at 250 ms.
 
 ### Neutral
 
+- The decision lands in two pull requests: the profiles, colour, links and
+  output half first, then the glyph families and the tester.
 - The CLI grows a `config` subcommand beside its flags.
 - Theme colours are unchanged by this ADR; base16 scheme files are a
   separate decision.

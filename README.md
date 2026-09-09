@@ -152,9 +152,43 @@ FLAGS
       --padding-x N    Horizontal node padding (default: 4)
       --padding-y N    Vertical node padding (default: 2)
       --sharp-edges    Sharp corners on edge routing
+      --output FILE    Write what would go to stdout to FILE
+      --watch          Re-render the file whenever it changes (Ctrl-C to stop)
       --cells FILE     Write the rendered frame as a .cells dump (- is stdout)
       --cells-lint     With --cells, print structural lint findings to stderr
+
+SUBCOMMANDS
+  mmaid config show    Every setting with its resolved value and source
+  mmaid config init    Probe the terminal and write its profile (not yet)
 ```
+
+## Configuration
+
+Settings live in `$XDG_CONFIG_HOME/mmaid/config.json`, else
+`~/.config/mmaid/config.json`. A profile's key is the terminal's identity:
+`TERM_PROGRAM` when the terminal sets it, `TERM` otherwise.
+
+```json
+{
+  "default": { "theme": "blueprint", "width": 0 },
+  "profiles": {
+    "WezTerm": { "truecolor": true, "hyperlinks": true },
+    "Apple_Terminal": { "truecolor": false }
+  }
+}
+```
+
+Every setting resolves in one order, first match winning: a command-line flag,
+`MMAID_<SETTING>` in the environment, the terminal's profile, the file's
+`default`, the built-in default. The keys are `theme`, `glyphs`, `width`,
+`orientation`, `padding_x`, `padding_y`, `sharp_edges`, `truecolor`,
+`hyperlinks`, `ambiguous_wide`, and `failed`; booleans read `1`, `0`, `true`
+and `false`. `mmaid config show` prints each one with the layer it came from.
+
+`NO_COLOR`, set and non-empty, drops a theme that came from the file or the
+environment; `-t` still colours. `truecolor` false emits 256-colour
+approximations. `hyperlinks` true wraps the label of a node named by a
+`click ID "url"` line in an OSC 8 hyperlink, in themed output.
 
 ## Themes
 
