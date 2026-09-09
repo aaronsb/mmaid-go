@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/aaronsb/mmaid-go/internal/renderer"
+	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
 
 // ── layout constants ────────────────────────────────────────────────
@@ -450,7 +451,7 @@ func computeLayout(diagram *sequenceDiagram, autonumber bool, flatEvents []inter
 	// Box widths based on label length
 	boxWidths := make([]int, n)
 	for i, p := range diagram.participants {
-		boxWidths[i] = maxInt(len(p.label)+boxPad, 12)
+		boxWidths[i] = maxInt(textwidth.String(p.label)+boxPad, 12)
 	}
 
 	// Header height: tallest participant kind
@@ -519,7 +520,7 @@ func computeLayout(diagram *sequenceDiagram, autonumber bool, flatEvents []inter
 			lines := noteLines(e)
 			noteWidth := 4
 			for _, line := range lines {
-				noteWidth = maxInt(noteWidth, len(line)+4)
+				noteWidth = maxInt(noteWidth, textwidth.String(line)+4)
 			}
 			for _, pid := range e.participants {
 				pi := participantIndex(diagram, pid)
@@ -555,7 +556,7 @@ func computeLayout(diagram *sequenceDiagram, autonumber bool, flatEvents []inter
 			}
 			lo := minInt(si, ti)
 			hi := maxInt(si, ti)
-			labelNeed := len(eff) + 6
+			labelNeed := textwidth.String(eff) + 6
 			spans := hi - lo
 			perGap := (labelNeed + spans - 1) / spans
 			for g := lo; g < hi; g++ {
@@ -594,7 +595,7 @@ func computeLayout(diagram *sequenceDiagram, autonumber bool, flatEvents []inter
 			si := participantIndex(diagram, e.source)
 			ti := participantIndex(diagram, e.target)
 			if si >= 0 && si == ti {
-				loopWidth := maxInt(len(e.label)+4, 8)
+				loopWidth := maxInt(textwidth.String(e.label)+4, 8)
 				needed := colCenters[si] + loopWidth + 1
 				maxRight = maxInt(maxRight, needed)
 			}
@@ -605,7 +606,7 @@ func computeLayout(diagram *sequenceDiagram, autonumber bool, flatEvents []inter
 					lines := noteLines(e)
 					noteWidth := 4
 					for _, line := range lines {
-						noteWidth = maxInt(noteWidth, len(line)+4)
+						noteWidth = maxInt(noteWidth, textwidth.String(line)+4)
 					}
 					needed := colCenters[pi] + 2 + noteWidth + 1
 					maxRight = maxInt(maxRight, needed)
@@ -646,7 +647,7 @@ func drawActor(canvas *renderer.Canvas, cx, y int, label string, useASCII bool) 
 	canvas.Put(y+1, cx+1, '\\', false, style)
 	canvas.Put(y+2, cx-1, '/', false, style)
 	canvas.Put(y+2, cx+1, '\\', false, style)
-	labelCol := cx - len(label)/2
+	labelCol := cx - textwidth.String(label)/2
 	canvas.PutText(y+4, labelCol, label, "label")
 }
 
@@ -693,7 +694,7 @@ func drawQueue(canvas *renderer.Canvas, cx, y, width int, label string, cs rende
 	}
 
 	// Label centered
-	labelCol := bx + (width-len(label))/2
+	labelCol := bx + (width-textwidth.String(label))/2
 	labelRow := y + h/2
 	canvas.PutText(labelRow, labelCol, label, "label")
 }
@@ -726,7 +727,7 @@ func drawBoundary(canvas *renderer.Canvas, cx, y int, label string, cs renderer.
 	canvas.Put(y+2, boxRight, cs.BottomRight, true, style)
 
 	// Label below
-	labelCol := cx - len(label)/2
+	labelCol := cx - textwidth.String(label)/2
 	canvas.PutText(y+4, labelCol, label, "label")
 }
 
@@ -757,7 +758,7 @@ func drawControl(canvas *renderer.Canvas, cx, y int, label string, cs renderer.C
 	}
 
 	// Label below
-	labelCol := cx - len(label)/2
+	labelCol := cx - textwidth.String(label)/2
 	canvas.PutText(y+4, labelCol, label, "label")
 }
 
@@ -786,7 +787,7 @@ func drawEntity(canvas *renderer.Canvas, cx, y int, label string, cs renderer.Ch
 	canvas.Put(y+2, cx+1, cs.Horizontal, false, style)
 
 	// Label below
-	labelCol := cx - len(label)/2
+	labelCol := cx - textwidth.String(label)/2
 	canvas.PutText(y+4, labelCol, label, "label")
 }
 
@@ -836,7 +837,7 @@ func drawCollections(canvas *renderer.Canvas, cx, y, width int, label string, cs
 	canvas.Put(y+h-1, bx+width-1, cs.BottomRight, true, style)
 
 	// Label centered in front rectangle
-	labelCol := bx + (width-len(label))/2
+	labelCol := bx + (width-textwidth.String(label))/2
 	labelRow := y + 1 + (h-1)/2
 	canvas.PutText(labelRow, labelCol, label, "label")
 }
@@ -1033,7 +1034,7 @@ func drawNote(
 	lines := noteLines(n)
 	noteWidth := 4
 	for _, line := range lines {
-		noteWidth = maxInt(noteWidth, len(line)+4)
+		noteWidth = maxInt(noteWidth, textwidth.String(line)+4)
 	}
 	noteHeight := len(lines) + 2
 
@@ -1125,7 +1126,7 @@ func drawMessage(
 			canvas.Put(row, left, '<', false, "arrow")
 			canvas.Put(row, right, '>', false, "arrow")
 		} else {
-			canvas.Put(row, left, '\u25C4', false, "arrow") // ◄
+			canvas.Put(row, left, '\u25C4', false, "arrow")  // ◄
 			canvas.Put(row, right, '\u25BA', false, "arrow") // ►
 		}
 	case "arrow":
@@ -1183,7 +1184,7 @@ func drawSelfMessage(
 	msg *message, displayLabel string,
 	cs renderer.CharSet, useASCII bool,
 ) {
-	loopWidth := maxInt(len(displayLabel)+4, 8)
+	loopWidth := maxInt(textwidth.String(displayLabel)+4, 8)
 
 	var hChar, vChar rune
 	if msg.lineType == "dotted" {

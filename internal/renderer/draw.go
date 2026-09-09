@@ -6,6 +6,7 @@ import (
 	"github.com/aaronsb/mmaid-go/internal/graph"
 	"github.com/aaronsb/mmaid-go/internal/layout"
 	"github.com/aaronsb/mmaid-go/internal/routing"
+	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
 
 // graphFillPercent is the fraction of terminal width used for graph layouts.
@@ -227,7 +228,7 @@ func drawNodes(canvas *Canvas, g *graph.Graph, l *layout.GridLayout, cs CharSet)
 			// Center the styled text in the node
 			totalLen := 0
 			for _, seg := range segments {
-				totalLen += len(seg.Text)
+				totalLen += textwidth.String(seg.Text)
 			}
 			col := p.DrawX + (p.DrawWidth-totalLen)/2
 			row := p.DrawY + p.DrawHeight/2
@@ -571,7 +572,7 @@ func labelOverlaps(row, colStart, colEnd int, placed []placedLabel) bool {
 
 // tryPlaceLabel attempts to place a label on the canvas, checking for collisions.
 func tryPlaceLabel(canvas *Canvas, row, col int, label string, placed *[]placedLabel) bool {
-	colEnd := col + len(label)
+	colEnd := col + textwidth.String(label)
 	if col < 0 || row < 0 {
 		return false
 	}
@@ -606,7 +607,7 @@ func findLastTurn(path []routing.Point) int {
 
 // tryPlaceOnSegment attempts to place a label on a segment (vertical or horizontal).
 func tryPlaceOnSegment(canvas *Canvas, x1, y1, x2, y2 int, label string, placed *[]placedLabel, prevPoint *routing.Point, preferLeft bool, biasTarget bool) bool {
-	labelLen := len(label)
+	labelLen := textwidth.String(label)
 
 	if x1 == x2 {
 		// Vertical segment: place beside the line
@@ -715,11 +716,12 @@ func drawEdgeLabel(canvas *Canvas, re routing.RoutedEdge, placed *[]placedLabel)
 	if row < 0 {
 		row = midY + 1
 	}
-	if col+len(label) >= canvas.Width || row >= canvas.Height {
-		canvas.Resize(col+len(label)+2, row+2)
+	labelWidth := textwidth.String(label)
+	if col+labelWidth >= canvas.Width || row >= canvas.Height {
+		canvas.Resize(col+labelWidth+2, row+2)
 	}
 	canvas.PutText(row, col, label, "edge_label")
-	*placed = append(*placed, placedLabel{row: row, colStart: col, colEnd: col + len(label)})
+	*placed = append(*placed, placedLabel{row: row, colStart: col, colEnd: col + labelWidth})
 }
 
 // drawNotes draws notes attached to nodes.
@@ -733,8 +735,8 @@ func drawNotes(canvas *Canvas, g *graph.Graph, l *layout.GridLayout, cs CharSet)
 		lines := strings.Split(note.Text, "\n")
 		noteWidth := 4 // minimum: 2 border + 2 padding
 		for _, line := range lines {
-			if len(line)+4 > noteWidth {
-				noteWidth = len(line) + 4
+			if w := textwidth.String(line) + 4; w > noteWidth {
+				noteWidth = w
 			}
 		}
 		noteHeight := len(lines) + 2

@@ -24,6 +24,41 @@ func TestInterpretPlainText(t *testing.T) {
 	}
 }
 
+func TestInterpretWideRune(t *testing.T) {
+	f, err := Interpret("日a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.W != 3 || f.H != 1 {
+		t.Fatalf("got %dx%d, want 3x1", f.W, f.H)
+	}
+	want := []rune{'日', 0, 'a'}
+	for col, cp := range want {
+		if got := f.At(0, col).Cp; got != cp {
+			t.Errorf("(0,%d) codepoint %U, want %U", col, got, cp)
+		}
+	}
+	if lead, cont := f.At(0, 0), f.At(0, 1); lead.Fg != cont.Fg || lead.Bg != cont.Bg {
+		t.Errorf("continuation colours %+v differ from the rune's %+v", cont, lead)
+	}
+}
+
+func TestInterpretZeroWidthRune(t *testing.T) {
+	f, err := Interpret("e\u0301x") // e followed by a combining acute
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.W != 2 || f.H != 1 {
+		t.Fatalf("got %dx%d, want 2x1", f.W, f.H)
+	}
+	if got := f.At(0, 0).Cp; got != 'e' {
+		t.Errorf("(0,0) codepoint %U, want %U", got, 'e')
+	}
+	if got := f.At(0, 1).Cp; got != 'x' {
+		t.Errorf("(0,1) codepoint %U, want %U", got, 'x')
+	}
+}
+
 func TestInterpretNamedColorsAndAttributes(t *testing.T) {
 	tests := []struct {
 		name string

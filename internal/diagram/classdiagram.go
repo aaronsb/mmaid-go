@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/aaronsb/mmaid-go/internal/renderer"
+	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
 
 // member represents a class member (field or method).
@@ -53,26 +54,26 @@ type classDiagram struct {
 
 // Regex patterns for class diagram parsing.
 var (
-	reClassDiagramHeader = regexp.MustCompile(`(?i)^\s*classDiagram\s*$`)
-	reClassDirection     = regexp.MustCompile(`(?i)^\s*direction\s+(LR|RL|TB|BT|TD)\s*$`)
-	reClassDeclaration   = regexp.MustCompile(`^\s*class\s+(\w+)\s*$`)
-	reClassWithBody      = regexp.MustCompile(`^\s*class\s+(\w+)\s*\{\s*$`)
-	reClassBodyClose     = regexp.MustCompile(`^\s*\}\s*$`)
-	reClassAnnotation    = regexp.MustCompile(`^\s*<<(\w+)>>\s*$`)
-	reClassMember        = regexp.MustCompile(`^\s*([+\-#~])?(\w[\w\s<>\[\],]*?)(\(.*?\))?\s*(\$|\*)?(?:\s*:\s*(\w+))?\s*$`)
-	reClassColonMember   = regexp.MustCompile(`^\s*(\w+)\s*:\s*(.+)$`)
+	reClassDiagramHeader  = regexp.MustCompile(`(?i)^\s*classDiagram\s*$`)
+	reClassDirection      = regexp.MustCompile(`(?i)^\s*direction\s+(LR|RL|TB|BT|TD)\s*$`)
+	reClassDeclaration    = regexp.MustCompile(`^\s*class\s+(\w+)\s*$`)
+	reClassWithBody       = regexp.MustCompile(`^\s*class\s+(\w+)\s*\{\s*$`)
+	reClassBodyClose      = regexp.MustCompile(`^\s*\}\s*$`)
+	reClassAnnotation     = regexp.MustCompile(`^\s*<<(\w+)>>\s*$`)
+	reClassMember         = regexp.MustCompile(`^\s*([+\-#~])?(\w[\w\s<>\[\],]*?)(\(.*?\))?\s*(\$|\*)?(?:\s*:\s*(\w+))?\s*$`)
+	reClassColonMember    = regexp.MustCompile(`^\s*(\w+)\s*:\s*(.+)$`)
 	reClassAnnotationLine = regexp.MustCompile(`^\s*<<(\w+)>>\s+(\w+)\s*$`)
-	reClassNote          = regexp.MustCompile(`(?i)^\s*note\s+(?:for\s+)?(\w+)\s*:\s*(.*)$`)
+	reClassNote           = regexp.MustCompile(`(?i)^\s*note\s+(?:for\s+)?(\w+)\s*:\s*(.*)$`)
 	// Relationship regex: Class1 "card1" markers--markers "card2" Class2 : label
 	reClassRelationship = regexp.MustCompile(
-		`^\s*(\w+)\s*` +                          // source
-			`(?:"([^"]*)")?\s*` +                  // optional source cardinality
-			`([<*o]?\|?|(?:<\|)?)` +               // source marker
-			`(--|\.\.|\-\-)` +                     // line style
-			`(\|?[>*o]?|(?:\|>)?)` +               // target marker
-			`\s*(?:"([^"]*)")?\s*` +               // optional target cardinality
-			`(\w+)` +                              // target
-			`(?:\s*:\s*(.*))?$`,                   // optional label
+		`^\s*(\w+)\s*` + // source
+			`(?:"([^"]*)")?\s*` + // optional source cardinality
+			`([<*o]?\|?|(?:<\|)?)` + // source marker
+			`(--|\.\.|\-\-)` + // line style
+			`(\|?[>*o]?|(?:\|>)?)` + // target marker
+			`\s*(?:"([^"]*)")?\s*` + // optional target cardinality
+			`(\w+)` + // target
+			`(?:\s*:\s*(.*))?$`, // optional label
 	)
 )
 
@@ -228,7 +229,7 @@ func parseClassMember(text string) *member {
 	m := &member{}
 
 	// Extract visibility
-	if len(text) > 0 {
+	if len(text) > 0 { // bytes, not columns
 		switch text[0] {
 		case '+', '-', '#', '~':
 			m.visibility = string(text[0])
@@ -240,10 +241,10 @@ func parseClassMember(text string) *member {
 	text = strings.TrimSpace(text)
 	if strings.HasSuffix(text, "$") {
 		m.classifier = "$"
-		text = text[:len(text)-1]
+		text = text[:len(text)-1] // bytes, not columns
 	} else if strings.HasSuffix(text, "*") {
 		m.classifier = "*"
-		text = text[:len(text)-1]
+		text = text[:len(text)-1] // bytes, not columns
 	}
 
 	// Check for return type after last colon (not inside parens)
@@ -361,7 +362,7 @@ func RenderClassDiagram(source string, useASCII bool) *renderer.Canvas {
 		if box == nil {
 			continue
 		}
-		noteWidth := len(note.text) + 4
+		noteWidth := textwidth.String(note.text) + 4
 		noteHeight := 3
 		noteX := box.x + box.width + 2
 		noteY := box.y
@@ -429,11 +430,11 @@ func computeClassBox(cls *classDef) *classBoxInfo {
 	box := &classBoxInfo{name: cls.name}
 
 	// Minimum width from class name
-	minWidth := len(cls.name) + 4
+	minWidth := textwidth.String(cls.name) + 4
 
 	// Account for annotation
 	if cls.annotation != "" {
-		annotationWidth := len(cls.annotation) + 6 // <<annotation>>
+		annotationWidth := textwidth.String(cls.annotation) + 6 // <<annotation>>
 		if annotationWidth > minWidth {
 			minWidth = annotationWidth
 		}
@@ -442,7 +443,7 @@ func computeClassBox(cls *classDef) *classBoxInfo {
 	// Account for members
 	for _, mem := range cls.members {
 		memberStr := formatClassMember(mem)
-		memberWidth := len(memberStr) + 4
+		memberWidth := textwidth.String(memberStr) + 4
 		if memberWidth > minWidth {
 			minWidth = memberWidth
 		}
@@ -457,7 +458,7 @@ func computeClassBox(cls *classDef) *classBoxInfo {
 	}
 	box.height++ // class name
 	if len(cls.members) > 0 {
-		box.height++                  // divider line
+		box.height++                   // divider line
 		box.height += len(cls.members) // member lines
 	}
 
@@ -592,13 +593,13 @@ func drawClassBox(c *renderer.Canvas, cls *classDef, box *classBoxInfo, cs rende
 	// Annotation
 	if cls.annotation != "" {
 		ann := fmt.Sprintf("<<%s>>", cls.annotation)
-		col := x + (w-len(ann))/2
+		col := x + (w-textwidth.String(ann))/2
 		c.PutText(row, col, ann, "node")
 		row++
 	}
 
 	// Class name (centered)
-	nameCol := x + (w-len(cls.name))/2
+	nameCol := x + (w-textwidth.String(cls.name))/2
 	c.PutText(row, nameCol, cls.name, "node")
 	row++
 
@@ -679,13 +680,13 @@ func drawClassRelationship(c *renderer.Canvas, rel classRelationship, src, tgt *
 	if rel.label != "" {
 		midX := (srcX + tgtX) / 2
 		midY := (srcY + tgtY) / 2
-		labelCol := midX - len(rel.label)/2
+		labelCol := midX - textwidth.String(rel.label)/2
 		labelRow := midY - 1
 		if labelRow < 0 {
 			labelRow = midY + 1
 		}
-		if labelCol+len(rel.label)+1 > c.Width || labelRow+1 > c.Height {
-			c.Resize(labelCol+len(rel.label)+2, labelRow+2)
+		if labelCol+textwidth.String(rel.label)+1 > c.Width || labelRow+1 > c.Height {
+			c.Resize(labelCol+textwidth.String(rel.label)+2, labelRow+2)
 		}
 		c.PutText(labelRow, labelCol, rel.label, "edge_label")
 	}
@@ -697,8 +698,8 @@ func drawClassRelationship(c *renderer.Canvas, rel classRelationship, src, tgt *
 		if cardRow < 0 {
 			cardRow = srcY + 1
 		}
-		if cardCol+len(rel.sourceCard)+1 > c.Width || cardRow+1 > c.Height {
-			c.Resize(cardCol+len(rel.sourceCard)+2, cardRow+2)
+		if cardCol+textwidth.String(rel.sourceCard)+1 > c.Width || cardRow+1 > c.Height {
+			c.Resize(cardCol+textwidth.String(rel.sourceCard)+2, cardRow+2)
 		}
 		c.PutText(cardRow, cardCol, rel.sourceCard, "edge_label")
 	}
@@ -708,8 +709,8 @@ func drawClassRelationship(c *renderer.Canvas, rel classRelationship, src, tgt *
 		if cardRow < 0 {
 			cardRow = tgtY + 1
 		}
-		if cardCol+len(rel.targetCard)+1 > c.Width || cardRow+1 > c.Height {
-			c.Resize(cardCol+len(rel.targetCard)+2, cardRow+2)
+		if cardCol+textwidth.String(rel.targetCard)+1 > c.Width || cardRow+1 > c.Height {
+			c.Resize(cardCol+textwidth.String(rel.targetCard)+2, cardRow+2)
 		}
 		c.PutText(cardRow, cardCol, rel.targetCard, "edge_label")
 	}

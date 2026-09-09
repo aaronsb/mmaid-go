@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/aaronsb/mmaid-go/internal/renderer"
+	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
 
 type kanbanCard struct {
@@ -76,9 +77,9 @@ func RenderKanban(source string, useASCII bool, theme *renderer.Theme) *renderer
 	colWidths := make([]int, len(kb.columns))
 	maxCards := 0
 	for i, col := range kb.columns {
-		w := len(col.title) + 4
+		w := textwidth.String(col.title) + 4
 		for _, card := range col.cards {
-			if cw := len(card.label) + 6; cw > w {
+			if cw := textwidth.String(card.label) + 6; cw > w {
 				w = cw
 			}
 		}
@@ -183,7 +184,7 @@ func RenderKanban(source string, useASCII bool, theme *renderer.Theme) *renderer
 		}
 
 		// Column title (centered, bold)
-		titleX := x + (w-len(col.title))/2
+		titleX := x + (w-textwidth.String(col.title))/2
 		c.PutText(1, titleX, col.title, colTitleStyle)
 
 		// Separator under title
@@ -192,7 +193,7 @@ func RenderKanban(source string, useASCII bool, theme *renderer.Theme) *renderer
 		// Cards
 		for j, card := range col.cards {
 			cardRow := 3 + j*3
-			cardW := len(card.label) + 4
+			cardW := textwidth.String(card.label) + 4
 			cardX := x + (w-cardW)/2
 
 			c.Put(cardRow, cardX, cardTL, false, cardBorderStyle)
@@ -200,7 +201,7 @@ func RenderKanban(source string, useASCII bool, theme *renderer.Theme) *renderer
 			c.Put(cardRow, cardX+cardW-1, cardTR, false, cardBorderStyle)
 
 			c.Put(cardRow+1, cardX, vLine, false, cardBorderStyle)
-			labelX := cardX + (cardW-len(card.label))/2
+			labelX := cardX + (cardW-textwidth.String(card.label))/2
 			c.PutText(cardRow+1, labelX, card.label, cardLabelStyle)
 			c.Put(cardRow+1, cardX+cardW-1, vLine, false, cardBorderStyle)
 

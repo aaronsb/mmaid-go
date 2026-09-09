@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/aaronsb/mmaid-go/internal/renderer"
+	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
 
 type mindmapNode struct {
@@ -128,7 +129,7 @@ func RenderMindmap(source string, useASCII bool) *renderer.Canvas {
 	depthWidths := map[int]int{}
 	var measureDepth func(n *mindmapNode, depth int)
 	measureDepth = func(n *mindmapNode, depth int) {
-		w := len(n.label) + 4 // box padding
+		w := textwidth.String(n.label) + 4 // box padding
 		if w > depthWidths[depth] {
 			depthWidths[depth] = w
 		}
@@ -221,7 +222,7 @@ func RenderMindmap(source string, useASCII bool) *renderer.Canvas {
 		n := ln.node
 		row := ln.row
 		col := ln.col
-		boxW := len(n.label) + 4
+		boxW := textwidth.String(n.label) + 4
 
 		c.Put(row, col, tl, false, "node")
 		c.DrawHorizontal(row, col+1, col+boxW-2, hLine, "node")
@@ -252,7 +253,7 @@ func RenderMindmap(source string, useASCII bool) *renderer.Canvas {
 
 		// Find parent's row
 		parentRow := -1
-		parentBoxW := len(n.label) + 4
+		parentBoxW := textwidth.String(n.label) + 4
 		parentX := depthX[depth]
 		for _, ln := range nodes {
 			if ln.node == n {

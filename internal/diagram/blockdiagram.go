@@ -8,6 +8,7 @@ import (
 
 	"github.com/aaronsb/mmaid-go/internal/graph"
 	"github.com/aaronsb/mmaid-go/internal/renderer"
+	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
 
 // ── model ────────────────────────────────────────────────────────
@@ -37,12 +38,12 @@ type blockDiagram struct {
 // ── layout constants ─────────────────────────────────────────────
 
 const (
-	blockPad   = 2
-	minBlockW  = 12
-	minBlockH  = 5
+	blockPad    = 2
+	minBlockW   = 12
+	minBlockH   = 5
 	blockRowGap = 2
 	blockMargin = 2
-	groupPad   = 2
+	groupPad    = 2
 )
 
 // blockColumnGap returns the column gap scaled to available width.
@@ -82,19 +83,19 @@ var shapePatterns = []shapePattern{
 
 // shapeToNodeShape converts a shape string to a graph.NodeShape.
 var shapeToNodeShape = map[string]graph.NodeShape{
-	"rectangle":        graph.ShapeRectangle,
-	"rounded":          graph.ShapeRounded,
-	"diamond":          graph.ShapeDiamond,
-	"circle":           graph.ShapeCircle,
-	"double_circle":    graph.ShapeDoubleCircle,
-	"stadium":          graph.ShapeStadium,
-	"cylinder":         graph.ShapeCylinder,
-	"subroutine":       graph.ShapeSubroutine,
-	"hexagon":          graph.ShapeHexagon,
-	"asymmetric":       graph.ShapeAsymmetric,
-	"trapezoid":        graph.ShapeTrapezoid,
-	"trapezoid_alt":    graph.ShapeTrapezoidAlt,
-	"parallelogram":    graph.ShapeParallelogram,
+	"rectangle":         graph.ShapeRectangle,
+	"rounded":           graph.ShapeRounded,
+	"diamond":           graph.ShapeDiamond,
+	"circle":            graph.ShapeCircle,
+	"double_circle":     graph.ShapeDoubleCircle,
+	"stadium":           graph.ShapeStadium,
+	"cylinder":          graph.ShapeCylinder,
+	"subroutine":        graph.ShapeSubroutine,
+	"hexagon":           graph.ShapeHexagon,
+	"asymmetric":        graph.ShapeAsymmetric,
+	"trapezoid":         graph.ShapeTrapezoid,
+	"trapezoid_alt":     graph.ShapeTrapezoidAlt,
+	"parallelogram":     graph.ShapeParallelogram,
 	"parallelogram_alt": graph.ShapeParallelogramAlt,
 }
 
@@ -392,8 +393,8 @@ func parseBlockToken(token string) *blockNode {
 }
 
 func stripBlockQuotes(text string) string {
-	if len(text) >= 2 && text[0] == '"' && text[len(text)-1] == '"' {
-		return text[1 : len(text)-1]
+	if len(text) >= 2 && text[0] == '"' && text[len(text)-1] == '"' { // bytes, not columns
+		return text[1 : len(text)-1] // bytes, not columns
 	}
 	return text
 }
@@ -533,7 +534,7 @@ func blockComputeBlockSize(block *blockNode, cs renderer.CharSet) (int, int) {
 	if label == "" {
 		label = block.id
 	}
-	w := max(len(label)+blockPad*2, minBlockW)
+	w := max(textwidth.String(label)+blockPad*2, minBlockW)
 	h := minBlockH
 	return w, h
 }
@@ -783,7 +784,7 @@ func blockDrawGroups(c *renderer.Canvas, blocks []blockNode, positions map[strin
 
 		// Draw group label (skip for anonymous groups)
 		if block.label != "" {
-			labelCol := x + (w-len(block.label))/2
+			labelCol := x + (w-textwidth.String(block.label))/2
 			c.PutText(y+1, labelCol, block.label, "label")
 		}
 
@@ -906,7 +907,7 @@ func blockDrawLink(c *renderer.Canvas, link blockLink, positions map[string][2]i
 	if link.label != "" {
 		midR := (r1 + r2) / 2
 		midC := (c1 + c2) / 2
-		labelCol := midC - len(link.label)/2
+		labelCol := midC - textwidth.String(link.label)/2
 		c.PutText(midR, labelCol, link.label, "edge_label")
 	}
 }
@@ -982,4 +983,3 @@ func intSum(s []int) int {
 	}
 	return total
 }
-

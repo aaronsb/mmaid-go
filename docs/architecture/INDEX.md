@@ -29,3 +29,10 @@ _Input formats, JSON templates, data pipelines_
 | ADR | Title | Status |
 |-----|-------|--------|
 | [ADR-300](./ingest/ADR-300-opinionated-json-ingest-modes.md) | Opinionated JSON ingest modes | Draft |
+
+## Renderer
+_Canvas, glyph selection, character sets, ANSI serialization_
+
+| ADR | Title | Status |
+|-----|-------|--------|
+| [ADR-401](./renderer/ADR-401-display-width-for-wide-characters.md) | Display width for wide characters | Accepted |

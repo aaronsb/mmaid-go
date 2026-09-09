@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/aaronsb/mmaid-go/internal/renderer"
+	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
 
 type quadrantPoint struct {
@@ -14,16 +15,16 @@ type quadrantPoint struct {
 }
 
 type quadrantData struct {
-	title      string
-	xAxisLeft  string
-	xAxisRight string
+	title       string
+	xAxisLeft   string
+	xAxisRight  string
 	yAxisBottom string
 	yAxisTop    string
-	quadrant1  string // top-right
-	quadrant2  string // top-left
-	quadrant3  string // bottom-left
-	quadrant4  string // bottom-right
-	points     []quadrantPoint
+	quadrant1   string // top-right
+	quadrant2   string // top-left
+	quadrant3   string // bottom-left
+	quadrant4   string // bottom-right
+	points      []quadrantPoint
 }
 
 var (
@@ -102,7 +103,7 @@ func RenderQuadrantChart(source string, useASCII bool, theme *renderer.Theme) *r
 	plotH := 20
 	yLabelW := 0
 	if qd.yAxisBottom != "" || qd.yAxisTop != "" {
-		yLabelW = max(len(qd.yAxisBottom), len(qd.yAxisTop)) + 2
+		yLabelW = max(textwidth.String(qd.yAxisBottom), textwidth.String(qd.yAxisTop)) + 2
 	}
 	// Minimum y-label width for axis label
 	if yLabelW < 2 {
@@ -132,7 +133,7 @@ func RenderQuadrantChart(source string, useASCII bool, theme *renderer.Theme) *r
 
 	// Title
 	if qd.title != "" {
-		titleCol := (canvasWidth - len(qd.title)) / 2
+		titleCol := (canvasWidth - textwidth.String(qd.title)) / 2
 		c.PutText(0, titleCol, qd.title, "bold_label")
 	}
 
@@ -223,7 +224,7 @@ func RenderQuadrantChart(source string, useASCII bool, theme *renderer.Theme) *r
 		}
 		if reg.label != "" {
 			labelR := reg.startR + (reg.endR-reg.startR)/2
-			labelC := reg.startC + (reg.endC-reg.startC-len(reg.label))/2
+			labelC := reg.startC + (reg.endC-reg.startC-textwidth.String(reg.label))/2
 			c.PutText(labelR, labelC, reg.label, labelStyle)
 		}
 	}
@@ -233,11 +234,11 @@ func RenderQuadrantChart(source string, useASCII bool, theme *renderer.Theme) *r
 		c.PutText(axisRow+1, plotStartX, qd.xAxisLeft, "label")
 	}
 	if qd.xAxisRight != "" {
-		c.PutText(axisRow+1, plotStartX+plotW-len(qd.xAxisRight), qd.xAxisRight, "label")
+		c.PutText(axisRow+1, plotStartX+plotW-textwidth.String(qd.xAxisRight), qd.xAxisRight, "label")
 	}
 	if qd.yAxisTop != "" {
 		row := plotStartY
-		col := plotStartX - len(qd.yAxisTop) - 1
+		col := plotStartX - textwidth.String(qd.yAxisTop) - 1
 		if col < 0 {
 			col = 0
 		}
@@ -245,7 +246,7 @@ func RenderQuadrantChart(source string, useASCII bool, theme *renderer.Theme) *r
 	}
 	if qd.yAxisBottom != "" {
 		row := plotEndY
-		col := plotStartX - len(qd.yAxisBottom) - 1
+		col := plotStartX - textwidth.String(qd.yAxisBottom) - 1
 		if col < 0 {
 			col = 0
 		}
@@ -270,18 +271,18 @@ func RenderQuadrantChart(source string, useASCII bool, theme *renderer.Theme) *r
 		// Label with solid connector: ●─Label (right) or Label─● (left)
 		// Clear cells first so spaces in labels overwrite underlying text
 		rightSpace := canvasWidth - p.px - 2
-		if rightSpace >= len(p.label)+1 {
-			for i := 0; i < len(p.label)+1; i++ {
+		if rightSpace >= textwidth.String(p.label)+1 {
+			for i := 0; i < textwidth.String(p.label)+1; i++ {
 				c.ClearCell(p.py, p.px+1+i)
 			}
 			c.Put(p.py, p.px+1, '─', false, "arrow")
 			c.PutText(p.py, p.px+2, p.label, "label")
 		} else {
-			labelStart := p.px - len(p.label) - 2
+			labelStart := p.px - textwidth.String(p.label) - 2
 			if labelStart < plotStartX {
 				labelStart = plotStartX
 			}
-			for i := 0; i < len(p.label)+1; i++ {
+			for i := 0; i < textwidth.String(p.label)+1; i++ {
 				c.ClearCell(p.py, labelStart+i)
 			}
 			c.PutText(p.py, labelStart, p.label, "label")

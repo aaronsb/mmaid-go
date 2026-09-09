@@ -1,8 +1,13 @@
 package mmaid
 
 import (
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -488,6 +493,144 @@ func TestRenderPacketDispatch(t *testing.T) {
 	out := Render("packet-beta\n  0-15: \"Src\"\n  16-31: \"Dst\"")
 	if !strings.Contains(out, "Src") || !strings.Contains(out, "Dst") {
 		t.Errorf("packet did not dispatch/render:\n%s", out)
+	}
+}
+
+// ── Wide character tests ─────────────────────────────────────────────────────
+
+// columnsOf returns the display columns at which target appears in line.
+func columnsOf(line string, target rune) []int {
+	var cols []int
+	col := 0
+	for _, r := range line {
+		if r == target {
+			cols = append(cols, col)
+		}
+		col += textwidth.Rune(r)
+	}
+	return cols
+}
+
+// lineContaining returns the first line of output that contains substr.
+func lineContaining(t *testing.T, output, substr string) string {
+	t.Helper()
+	for _, line := range strings.Split(output, "\n") {
+		if strings.Contains(line, substr) {
+			return line
+		}
+	}
+	t.Fatalf("no line containing %q\n---\n%s\n---", substr, output)
+	return ""
+}
+
+// columnRange returns the part of line between display columns from and to.
+func columnRange(line string, from, to int) string {
+	var b strings.Builder
+	col := 0
+	for _, r := range line {
+		if col >= from && col < to {
+			b.WriteRune(r)
+		}
+		col += textwidth.Rune(r)
+	}
+	return b.String()
+}
+
+// runeAtColumn returns the rune occupying the given display column of line.
+func runeAtColumn(line string, want int) rune {
+	col := 0
+	for _, r := range line {
+		if col == want {
+			return r
+		}
+		col += textwidth.Rune(r)
+	}
+	return ' '
+}
+
+func TestWideLabelBoxAlignment(t *testing.T) {
+	out := Render("graph LR\n A[日本語テキスト] --> B[emoji 🚀 ok]")
+	assertValidUnicode(t, out)
+
+	lines := strings.Split(out, "\n")
+	if len(lines) < 3 {
+		t.Fatalf("expected a box, got:\n%s", out)
+	}
+
+	want := textwidth.String(strings.TrimRight(lines[0], " "))
+	for i, line := range lines {
+		if got := textwidth.String(strings.TrimRight(line, " ")); got != want {
+			t.Errorf("line %d display width %d, want %d\n---\n%s\n---", i, got, want, out)
+		}
+	}
+
+	// Every row of A's box carries a border rune in A's right-border column.
+	corners := columnsOf(lines[0], '┐')
+	if len(corners) < 2 {
+		t.Fatalf("expected two boxes, got corners %v\n---\n%s\n---", corners, out)
+	}
+	rightCol := corners[0]
+	for i, line := range lines {
+		r := runeAtColumn(line, rightCol)
+		if !strings.ContainsRune("┐│├┤┘", r) {
+			t.Errorf("line %d has %q at A's right border column %d\n---\n%s\n---", i, r, rightCol, out)
+		}
+	}
+
+	// The label sits centred between A's borders.
+	label := lineContaining(t, out, "日本語テキスト")
+	interior := columnRange(label, 1, rightCol)
+	leftPad := textwidth.String(interior) - textwidth.String(strings.TrimLeft(interior, " "))
+	rightPad := textwidth.String(interior) - textwidth.String(strings.TrimRight(interior, " "))
+	if leftPad-rightPad > 1 || rightPad-leftPad > 1 {
+		t.Errorf("label padding %d left, %d right\n---\n%s\n---", leftPad, rightPad, out)
+	}
+}
+
+func TestWideParticipantLifelineCentred(t *testing.T) {
+	out := Render("sequenceDiagram\n    participant 日本語ユーザー\n    participant B\n    日本語ユーザー->>B: hello")
+	assertValidUnicode(t, out)
+
+	borders := columnsOf(lineContaining(t, out, "日本語ユーザー"), '│')
+	if len(borders) < 2 {
+		t.Fatalf("expected a participant box, got %v\n---\n%s\n---", borders, out)
+	}
+	centre := (borders[0] + borders[1]) / 2
+
+	lifelines := columnsOf(lineContaining(t, out, "┆"), '┆')
+	if len(lifelines) == 0 {
+		t.Fatalf("no lifeline in:\n%s", out)
+	}
+	if lifelines[0] < centre-1 || lifelines[0] > centre+1 {
+		t.Errorf("lifeline at column %d, box centre %d\n---\n%s\n---", lifelines[0], centre, out)
+	}
+}
+
+func TestNoByteLengthLabelsInLayoutRendererAndDiagram(t *testing.T) {
+	pattern := regexp.MustCompile(`len\([A-Za-z_.\[\]]*([Ll]abel|[Tt]itle|[Tt]ext|[Nn]ame)\)`)
+	for _, dir := range []string{"internal/layout", "internal/renderer", "internal/diagram"} {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range entries {
+			if !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
+				continue
+			}
+			path := filepath.Join(dir, e.Name())
+			src, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i, line := range strings.Split(string(src), "\n") {
+				if strings.Contains(line, "// bytes, not columns") {
+					continue
+				}
+				if m := pattern.FindString(line); m != "" {
+					t.Errorf("%s:%d measures a label by bytes: %s", path, i+1, m)
+				}
+			}
+		}
 	}
 }
 

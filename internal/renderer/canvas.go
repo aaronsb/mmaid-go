@@ -2,7 +2,12 @@ package renderer
 
 import (
 	"strings"
+
+	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
+
+// Continuation occupies the second cell of a wide rune. It is never emitted.
+const Continuation rune = -1
 
 // boxChars is the set of all box-drawing characters that participate in
 // junction merging.
@@ -112,6 +117,23 @@ func (c *Canvas) Get(row, col int) rune {
 	return c.grid[row][col]
 }
 
+// clearRightHalf blanks a continuation cell orphaned by a write at (row, col).
+func (c *Canvas) clearRightHalf(row, col int) {
+	if col+1 < c.Width && c.grid[row][col+1] == Continuation {
+		c.grid[row][col+1] = ' '
+		c.styleGrid[row][col+1] = "default"
+	}
+}
+
+// clearLeftHalf blanks the wide rune whose continuation cell (row, col) is
+// being overwritten.
+func (c *Canvas) clearLeftHalf(row, col int) {
+	if c.grid[row][col] == Continuation && col > 0 {
+		c.grid[row][col-1] = ' '
+		c.styleGrid[row][col-1] = "default"
+	}
+}
+
 // Put places a character on the canvas, optionally merging box-drawing junctions.
 // Spaces are silently ignored. Out-of-bounds writes are silently ignored.
 func (c *Canvas) Put(row, col int, ch rune, merge bool, style string) {
@@ -121,7 +143,14 @@ func (c *Canvas) Put(row, col int, ch rune, merge bool, style string) {
 	if ch == ' ' {
 		return
 	}
+	c.clearRightHalf(row, col)
+	if ch != Continuation {
+		c.clearLeftHalf(row, col)
+	}
 	existing := c.grid[row][col]
+	if existing == Continuation {
+		existing = ' '
+	}
 	if existing == ' ' {
 		c.grid[row][col] = ch
 	} else if merge && boxChars[existing] && boxChars[ch] {
@@ -140,9 +169,28 @@ func (c *Canvas) Put(row, col int, ch rune, merge bool, style string) {
 
 // PutText places a string starting at (row, col) without junction merging.
 func (c *Canvas) PutText(row, col int, text string, style string) {
-	for i, ch := range text {
-		c.Put(row, col+i, ch, false, style)
+	offset := 0
+	for _, ch := range text {
+		offset += c.putWide(row, col+offset, ch, style)
 	}
+}
+
+// putWide writes one rune and, when it is two columns wide, its continuation
+// cell. A rune of no width leaves no cell. It returns the columns consumed.
+func (c *Canvas) putWide(row, col int, ch rune, style string) int {
+	w := textwidth.Rune(ch)
+	if w == 0 {
+		return 0
+	}
+	// A wide rune in the last column needs one more for its continuation.
+	if w == 2 && row >= 0 && row < c.Height && col == c.Width-1 {
+		c.Resize(c.Width+1, c.Height)
+	}
+	c.Put(row, col, ch, false, style)
+	if w == 2 {
+		c.Put(row, col+1, Continuation, false, style)
+	}
+	return w
 }
 
 // PutStyledText places text with per-segment style keys.
@@ -151,8 +199,7 @@ func (c *Canvas) PutStyledText(row, col int, segments []StyledSegment) {
 	offset := 0
 	for _, seg := range segments {
 		for _, ch := range seg.Text {
-			c.Put(row, col+offset, ch, false, seg.Style)
-			offset++
+			offset += c.putWide(row, col+offset, ch, seg.Style)
 		}
 	}
 }
@@ -163,11 +210,14 @@ type StyledSegment struct {
 	Style string
 }
 
-// ClearCell sets a cell back to a space with default style.
+// ClearCell sets a cell back to a space with default style. Clearing either
+// half of a wide rune clears both.
 func (c *Canvas) ClearCell(row, col int) {
 	if row < 0 || row >= c.Height || col < 0 || col >= c.Width {
 		return
 	}
+	c.clearRightHalf(row, col)
+	c.clearLeftHalf(row, col)
 	c.grid[row][col] = ' '
 	c.styleGrid[row][col] = "default"
 }
@@ -268,6 +318,9 @@ func (c *Canvas) ToString() string {
 	for y := range c.Height {
 		var b strings.Builder
 		for x := range c.Width {
+			if c.grid[y][x] == Continuation {
+				continue
+			}
 			b.WriteRune(c.grid[y][x])
 		}
 		lines[y] = strings.TrimRight(b.String(), " ")
@@ -324,6 +377,13 @@ func (c *Canvas) FlipHorizontal() {
 			c.grid[r][i], c.grid[r][j] = c.grid[r][j], c.grid[r][i]
 			c.styleGrid[r][i], c.styleGrid[r][j] = c.styleGrid[r][j], c.styleGrid[r][i]
 		}
+		// Reversal puts each continuation cell before its wide rune
+		for col := 0; col < c.Width-1; col++ {
+			if c.grid[r][col] == Continuation && textwidth.Rune(c.grid[r][col+1]) == 2 {
+				c.grid[r][col], c.grid[r][col+1] = c.grid[r][col+1], c.grid[r][col]
+				c.styleGrid[r][col], c.styleGrid[r][col+1] = c.styleGrid[r][col+1], c.styleGrid[r][col]
+			}
+		}
 		// Remap characters
 		for col := range c.Width {
 			if mapped, ok := flipHorizontalMap[c.grid[r][col]]; ok {
@@ -343,9 +403,12 @@ type StyledPair struct {
 func (c *Canvas) ToStyledPairs() [][]StyledPair {
 	result := make([][]StyledPair, c.Height)
 	for y := range c.Height {
-		row := make([]StyledPair, c.Width)
+		row := make([]StyledPair, 0, c.Width)
 		for x := range c.Width {
-			row[x] = StyledPair{Char: c.grid[y][x], Style: c.styleGrid[y][x]}
+			if c.grid[y][x] == Continuation {
+				continue
+			}
+			row = append(row, StyledPair{Char: c.grid[y][x], Style: c.styleGrid[y][x]})
 		}
 		result[y] = row
 	}

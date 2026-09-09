@@ -434,6 +434,9 @@ func (c *Canvas) ToColorString(theme Theme) string {
 		prevStyle := ""
 		for x := 0; x <= lastCol; x++ {
 			ch := c.grid[y][x]
+			if ch == Continuation {
+				continue
+			}
 			styleKey := c.styleGrid[y][x]
 			fillKey := c.fillGrid[y][x]
 

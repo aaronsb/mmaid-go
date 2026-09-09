@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/aaronsb/mmaid-go/internal/renderer"
+	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
 
 // ── model ────────────────────────────────────────────────────────
@@ -466,9 +467,9 @@ func renderGitGraph(gg *gitGraph, useASCII bool) *renderer.Canvas {
 
 func gitSortBranches(gg *gitGraph) []string {
 	type sortEntry struct {
-		key   int
-		idx   int
-		name  string
+		key  int
+		idx  int
+		name string
 	}
 	var ordered []sortEntry
 	for i, b := range gg.branches {
@@ -498,9 +499,9 @@ func gitSortBranches(gg *gitGraph) []string {
 }
 
 func gitCommitFootprint(c *gitCommit) int {
-	w := len(c.id)
+	w := textwidth.String(c.id)
 	if c.tag != "" {
-		tagW := len(c.tag) + 2 // "[tag]"
+		tagW := textwidth.String(c.tag) + 2 // "[tag]"
 		if tagW > w {
 			w = tagW
 		}
@@ -518,8 +519,8 @@ func gitComputeLayoutLR(gg *gitGraph, useASCII bool) (map[string]int, map[string
 
 	branchLabelWidth := 0
 	for _, name := range sortedBranches {
-		if len(name) > branchLabelWidth {
-			branchLabelWidth = len(name)
+		if textwidth.String(name) > branchLabelWidth {
+			branchLabelWidth = textwidth.String(name)
 		}
 	}
 	leftOffset := gitMargin + branchLabelWidth + 2
@@ -620,8 +621,8 @@ func gitDrawLR(gg *gitGraph, c *renderer.Canvas, commitCol, branchRow map[string
 
 	branchLabelWidth := 0
 	for _, b := range sortedBranches {
-		if len(b) > branchLabelWidth {
-			branchLabelWidth = len(b)
+		if textwidth.String(b) > branchLabelWidth {
+			branchLabelWidth = textwidth.String(b)
 		}
 	}
 	lineStartCol := gitMargin + branchLabelWidth + 1
@@ -688,12 +689,12 @@ func gitDrawLR(gg *gitGraph, c *renderer.Canvas, commitCol, branchRow map[string
 		c.Put(row, col, marker, false, "node")
 
 		label := cmt.id
-		labelCol := col - len(label)/2
+		labelCol := col - textwidth.String(label)/2
 		c.PutText(row+1, labelCol, label, "label")
 
 		if cmt.tag != "" {
 			tagText := "[" + cmt.tag + "]"
-			tagCol := col - len(tagText)/2
+			tagCol := col - textwidth.String(tagText)/2
 			c.PutText(row-1, tagCol, tagText, "edge_label")
 		}
 	}
@@ -724,17 +725,17 @@ func gitDrawTB(gg *gitGraph, canvas *renderer.Canvas, useASCII bool, cs renderer
 	// Compute column gap based on max label width
 	maxLabel := 0
 	for _, b := range sortedBranches {
-		if len(b) > maxLabel {
-			maxLabel = len(b)
+		if textwidth.String(b) > maxLabel {
+			maxLabel = textwidth.String(b)
 		}
 	}
 	for i := range gg.commits {
 		cmt := &gg.commits[i]
-		if len(cmt.id) > maxLabel {
-			maxLabel = len(cmt.id)
+		if textwidth.String(cmt.id) > maxLabel {
+			maxLabel = textwidth.String(cmt.id)
 		}
-		if cmt.tag != "" && len(cmt.tag)+2 > maxLabel {
-			maxLabel = len(cmt.tag) + 2
+		if cmt.tag != "" && textwidth.String(cmt.tag)+2 > maxLabel {
+			maxLabel = textwidth.String(cmt.tag) + 2
 		}
 	}
 
@@ -836,7 +837,7 @@ func gitDrawTB(gg *gitGraph, canvas *renderer.Canvas, useASCII bool, cs renderer
 	}
 	for _, name := range sortedBranches {
 		col := branchCol[name]
-		labelCol := col - len(name)/2
+		labelCol := col - textwidth.String(name)/2
 		canvas.PutText(labelRow, labelCol, name, "subgraph")
 	}
 
@@ -892,19 +893,19 @@ func gitDrawTB(gg *gitGraph, canvas *renderer.Canvas, useASCII bool, cs renderer
 
 		canvas.Put(row, col, marker, false, "node")
 
-		labelCol := col - len(cmt.id)/2
+		labelCol := col - textwidth.String(cmt.id)/2
 		if bottomToTop {
 			canvas.PutText(row-1, labelCol, cmt.id, "label")
 			if cmt.tag != "" {
 				tagText := "[" + cmt.tag + "]"
-				tagCol := col - len(tagText)/2
+				tagCol := col - textwidth.String(tagText)/2
 				canvas.PutText(row+1, tagCol, tagText, "edge_label")
 			}
 		} else {
 			canvas.PutText(row+1, labelCol, cmt.id, "label")
 			if cmt.tag != "" {
 				tagText := "[" + cmt.tag + "]"
-				tagCol := col - len(tagText)/2
+				tagCol := col - textwidth.String(tagText)/2
 				canvas.PutText(row-1, tagCol, tagText, "edge_label")
 			}
 		}

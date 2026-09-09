@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/aaronsb/mmaid-go/internal/renderer"
+	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
 
 type xyChartData struct {
@@ -130,12 +131,12 @@ func RenderXYChart(source string, useASCII bool, theme *renderer.Theme) *rendere
 
 	plotH := 15
 
-	yLabelW := len(formatNum(xd.yMax)) + 1
-	if yLabelW < len(formatNum(xd.yMin))+1 {
-		yLabelW = len(formatNum(xd.yMin)) + 1
+	yLabelW := textwidth.String(formatNum(xd.yMax)) + 1
+	if yLabelW < textwidth.String(formatNum(xd.yMin))+1 {
+		yLabelW = textwidth.String(formatNum(xd.yMin)) + 1
 	}
-	if xd.yLabel != "" && len(xd.yLabel)+2 > yLabelW {
-		yLabelW = len(xd.yLabel) + 2
+	if xd.yLabel != "" && textwidth.String(xd.yLabel)+2 > yLabelW {
+		yLabelW = textwidth.String(xd.yLabel) + 2
 	}
 
 	// Scale plot width to terminal, with minimum from label count
@@ -168,7 +169,7 @@ func RenderXYChart(source string, useASCII bool, theme *renderer.Theme) *rendere
 
 	// Title
 	if xd.title != "" {
-		titleCol := (canvasWidth - len(xd.title)) / 2
+		titleCol := (canvasWidth - textwidth.String(xd.title)) / 2
 		c.PutText(0, titleCol, xd.title, "bold_label")
 	}
 
@@ -212,9 +213,9 @@ func RenderXYChart(source string, useASCII bool, theme *renderer.Theme) *rendere
 	topLabel := formatNum(xd.yMax)
 	midLabel := formatNum((xd.yMin + xd.yMax) / 2)
 	botLabel := formatNum(xd.yMin)
-	c.PutText(plotY, plotX-1-len(topLabel), topLabel, "default")
-	c.PutText(plotY+plotH/2, plotX-1-len(midLabel), midLabel, "default")
-	c.PutText(plotBottom, plotX-1-len(botLabel), botLabel, "default")
+	c.PutText(plotY, plotX-1-textwidth.String(topLabel), topLabel, "default")
+	c.PutText(plotY+plotH/2, plotX-1-textwidth.String(midLabel), midLabel, "default")
+	c.PutText(plotBottom, plotX-1-textwidth.String(botLabel), botLabel, "default")
 
 	// Y axis label (vertical, abbreviated)
 	if xd.yLabel != "" {
@@ -271,7 +272,7 @@ func RenderXYChart(source string, useASCII bool, theme *renderer.Theme) *rendere
 		lineStyle := "arrow"
 		connStyle := "bold_label"
 		if useRegion {
-			lineStyle = "_ansi:\033[1m\033[38;2;255;215;0m" // bold gold
+			lineStyle = "_ansi:\033[1m\033[38;2;255;215;0m"   // bold gold
 			connStyle = "_ansi:\033[1m\033[38;2;255;255;255m" // bold white
 		}
 
@@ -306,7 +307,7 @@ func RenderXYChart(source string, useASCII bool, theme *renderer.Theme) *rendere
 		if i >= nPoints {
 			break
 		}
-		lx := plotX + i*colW + colW/2 - len(label)/2
+		lx := plotX + i*colW + colW/2 - textwidth.String(label)/2
 		if lx < 0 {
 			lx = 0
 		}
