@@ -91,6 +91,14 @@ func main() {
 	flag.Usage = func() { printUsage() }
 	flag.Parse()
 
+	if cellsPath != "" && (markdown || insert != "") {
+		fmt.Fprintf(os.Stderr, "%smmaid:%s --cells cannot be combined with --markdown or --insert\n", ansiBold+ansiCyan, ansiReset)
+		os.Exit(1)
+	}
+	if cellsLint && cellsPath == "" {
+		fmt.Fprintf(os.Stderr, "%smmaid:%s --cells-lint has no effect without --cells\n", ansiBold+ansiCyan, ansiReset)
+	}
+
 	if width > 0 {
 		diagram.SetWidthOverride(width)
 	} else if cellsPath != "" {
@@ -222,17 +230,21 @@ func writeCells(result, path string, lint bool) {
 		fail(err)
 	}
 
-	out := os.Stdout
+	out, opened := os.Stdout, false
 	if path != "-" {
 		f, err := os.Create(path)
 		if err != nil {
 			fail(err)
 		}
-		defer f.Close()
-		out = f
+		out, opened = f, true
 	}
 	if err := cells.Write(out, frame); err != nil {
 		fail(err)
+	}
+	if opened {
+		if err := out.Close(); err != nil {
+			fail(err)
+		}
 	}
 
 	if lint {
