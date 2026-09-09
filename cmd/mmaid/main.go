@@ -20,6 +20,7 @@ import (
 	"github.com/aaronsb/mmaid-go/internal/diagram"
 	"github.com/aaronsb/mmaid-go/internal/ingest"
 	"github.com/aaronsb/mmaid-go/internal/renderer"
+	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
 
 const version = "0.5.0"
@@ -40,6 +41,12 @@ const (
 )
 
 func main() {
+	// The config subcommand takes no flags and is dispatched before flag.Parse.
+	if len(os.Args) > 1 && os.Args[1] == "config" {
+		runConfig(os.Args[2:])
+		return
+	}
+
 	// GNU-style: both short (-a) and long (--ascii) forms
 	var (
 		ascii       bool
@@ -61,6 +68,8 @@ func main() {
 		orientation string
 		cellsPath   string
 		cellsLint   bool
+		output      string
+		watch       bool
 	)
 
 	flag.BoolVar(&ascii, "ascii", false, "")
@@ -87,6 +96,8 @@ func main() {
 	flag.StringVar(&orientation, "orientation", "", "")
 	flag.StringVar(&cellsPath, "cells", "", "")
 	flag.BoolVar(&cellsLint, "cells-lint", false, "")
+	flag.StringVar(&output, "output", "", "")
+	flag.BoolVar(&watch, "watch", false, "")
 
 	flag.Usage = func() { printUsage() }
 	flag.Parse()
@@ -98,34 +109,75 @@ func main() {
 	if cellsLint && cellsPath == "" {
 		fmt.Fprintf(os.Stderr, "%smmaid:%s --cells-lint has no effect without --cells\n", ansiBold+ansiCyan, ansiReset)
 	}
-
-	if width > 0 {
-		diagram.SetWidthOverride(width)
-	} else if cellsPath != "" {
-		// A frame is a comparable artifact, so it never tracks the window the
-		// command happens to run in.
-		diagram.SetWidthOverride(cellsWidth)
+	if output != "" && insert != "" {
+		fmt.Fprintf(os.Stderr, "%smmaid:%s --output cannot be combined with --insert\n", ansiBold+ansiCyan, ansiReset)
+		os.Exit(1)
 	}
-	if orientation != "" && !diagram.SetOrientationOverride(orientation) {
-		fmt.Fprintf(os.Stderr, "%smmaid:%s unknown orientation %q (use TB or LR)\n", ansiBold+ansiCyan, ansiReset, orientation)
+	if watch && (insert != "" || cellsPath != "" || output != "" || jsonMode != "" || showTmpl) {
+		fmt.Fprintf(os.Stderr, "%smmaid:%s --watch cannot be combined with --insert, --cells, --output or --json\n", ansiBold+ansiCyan, ansiReset)
+		os.Exit(1)
 	}
 
+	// Neither of these renders anything, so neither reads the configuration.
 	if showVer {
 		fmt.Printf("%smmaid%s %s%s%s\n", ansiBold+ansiCyan, ansiReset, ansiYellow, version, ansiReset)
 		os.Exit(0)
 	}
-
 	if listThemes {
 		printThemes()
 		os.Exit(0)
 	}
 
+	// Resolution order: flag, MMAID_*, the terminal's profile, the file's
+	// default section, the built-in default (ADR-500). A file that cannot be
+	// read is a warning: it must not stand between the user and a render.
+	res, _, err := resolveSettings()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%smmaid:%s config: %v\n", ansiBold+ansiCyan, ansiReset, err)
+	}
+	for _, w := range res.Warnings {
+		fmt.Fprintf(os.Stderr, "%smmaid:%s config: %s\n", ansiBold+ansiCyan, ansiReset, w)
+	}
+	theme = res.Theme
+	ascii = res.Glyphs == "ascii"
+	paddingX, paddingY = res.PaddingX, res.PaddingY
+	sharpEdges = res.SharpEdges
+
+	if res.Width > 0 {
+		diagram.SetWidthOverride(res.Width)
+	} else if cellsPath != "" {
+		// A frame is a comparable artifact, so it never tracks the window the
+		// command happens to run in.
+		diagram.SetWidthOverride(cellsWidth)
+	}
+	if res.Orientation != "" && !diagram.SetOrientationOverride(res.Orientation) {
+		fmt.Fprintf(os.Stderr, "%smmaid:%s unknown orientation %q (use TB or LR)\n", ansiBold+ansiCyan, ansiReset, res.Orientation)
+	}
+	renderer.SetTruecolor(res.Truecolor)
+	textwidth.SetAmbiguousWide(res.AmbiguousWide)
+
 	if demo != "" {
 		if theme == "" {
 			theme = "default"
 		}
-		runDemo(theme, demo)
+		w, closeOut := openOutput(output)
+		runDemo(w, theme, demo)
+		closeOut()
 		os.Exit(0)
+	}
+
+	out := outputSpec{
+		ascii:      ascii,
+		paddingX:   paddingX,
+		paddingY:   paddingY,
+		sharpEdges: sharpEdges,
+		theme:      theme,
+		hyperlinks: res.Hyperlinks,
+		markdown:   markdown,
+		insert:     insert,
+		cellsPath:  cellsPath,
+		cellsLint:  cellsLint,
+		output:     output,
 	}
 
 	// JSON ingest mode
@@ -168,8 +220,13 @@ func main() {
 		}
 
 		// Render the generated Mermaid syntax.
-		renderAndOutput(mermaidSrc, ascii, paddingX, paddingY, sharpEdges, theme, markdown, insert, cellsPath, cellsLint)
+		renderAndOutput(mermaidSrc, out)
 		os.Exit(0)
+	}
+
+	if watch {
+		runWatch(flag.Args(), out)
+		return
 	}
 
 	input, err := readInput(flag.Args())
@@ -178,42 +235,91 @@ func main() {
 		os.Exit(1)
 	}
 
-	renderAndOutput(input, ascii, paddingX, paddingY, sharpEdges, theme, markdown, insert, cellsPath, cellsLint)
+	renderAndOutput(input, out)
 }
 
-func renderAndOutput(source string, ascii bool, paddingX, paddingY int, sharpEdges bool, theme string, markdown bool, insert, cellsPath string, cellsLint bool) {
+// outputSpec is what the render pass needs after the settings are resolved.
+type outputSpec struct {
+	ascii      bool
+	paddingX   int
+	paddingY   int
+	sharpEdges bool
+	theme      string
+	hyperlinks bool
+	markdown   bool
+	insert     string
+	cellsPath  string
+	cellsLint  bool
+	output     string
+}
+
+func render(source string, o outputSpec) string {
 	var opts []mmaid.Option
-	if ascii {
+	if o.ascii {
 		opts = append(opts, mmaid.WithASCII())
 	}
-	if paddingX != 4 || paddingY != 2 {
-		opts = append(opts, mmaid.WithPadding(paddingX, paddingY))
+	if o.paddingX != 4 || o.paddingY != 2 {
+		opts = append(opts, mmaid.WithPadding(o.paddingX, o.paddingY))
 	}
-	if sharpEdges {
+	if o.sharpEdges {
 		opts = append(opts, mmaid.WithSharpEdges())
 	}
-	if theme != "" {
-		opts = append(opts, mmaid.WithTheme(theme))
+	if o.theme != "" {
+		opts = append(opts, mmaid.WithTheme(o.theme))
 	}
+	if o.hyperlinks {
+		opts = append(opts, mmaid.WithHyperlinks())
+	}
+	return mmaid.Render(source, opts...)
+}
 
-	result := mmaid.Render(source, opts...)
+// decorate wraps the render in a fenced code block when --markdown asks for it.
+func decorate(result string, o outputSpec) string {
+	if o.markdown {
+		return "```\n" + result + "\n```"
+	}
+	return result
+}
 
-	if cellsPath != "" {
-		writeCells(result, cellsPath, cellsLint)
+func renderAndOutput(source string, o outputSpec) {
+	result := render(source, o)
+
+	if o.cellsPath != "" {
+		writeCells(result, o.cellsPath, o.cellsLint)
 		return
 	}
 
-	if markdown {
-		result = "```\n" + result + "\n```"
-	}
+	result = decorate(result, o)
 
-	if insert != "" {
-		if err := insertIntoFile(insert, result); err != nil {
+	if o.insert != "" {
+		if err := insertIntoFile(o.insert, result); err != nil {
 			fmt.Fprintf(os.Stderr, "%smmaid:%s %v\n", ansiBold+ansiCyan, ansiReset, err)
 			os.Exit(1)
 		}
-	} else {
-		fmt.Println(result)
+		return
+	}
+
+	w, closeOut := openOutput(o.output)
+	fmt.Fprintln(w, result)
+	closeOut()
+}
+
+// openOutput returns where stdout should go: the file --output names, created
+// or truncated, or os.Stdout when it names none.
+func openOutput(path string) (io.Writer, func()) {
+	if path == "" {
+		return os.Stdout, func() {}
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%smmaid:%s %v\n", ansiBold+ansiCyan, ansiReset, err)
+		os.Exit(1)
+	}
+	return f, func() {
+		if err := f.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "%smmaid:%s writing %s: %v\n", ansiBold+ansiCyan, ansiReset, path, err)
+			os.Exit(1)
+		}
 	}
 }
 
@@ -275,8 +381,16 @@ func printUsage() {
 	fmt.Fprintf(w, "        %s--orientation%s %sTB|LR%s  Force layout orientation (overrides 'direction')\n", ansiYellow, ansiReset, ansiDim, ansiReset)
 	fmt.Fprintf(w, "        %s--sharp-edges%s    Sharp corners on edge routing\n\n", ansiYellow, ansiReset)
 	fmt.Fprintf(w, "  %sOUTPUT%s\n", ansiBold+ansiWhite, ansiReset)
+	fmt.Fprintf(w, "        %s--output%s %sFILE%s    Write what would go to stdout to FILE\n", ansiYellow, ansiReset, ansiDim, ansiReset)
+	fmt.Fprintf(w, "        %s--watch%s          Re-render the file whenever it changes (Ctrl-C to stop)\n", ansiYellow, ansiReset)
 	fmt.Fprintf(w, "        %s--cells%s %sFILE%s     Write the rendered frame as a .cells dump (- is stdout)\n", ansiYellow, ansiReset, ansiDim, ansiReset)
 	fmt.Fprintf(w, "        %s--cells-lint%s     With %s--cells%s, print structural lint findings to stderr\n\n", ansiYellow, ansiReset, ansiYellow, ansiReset)
+	fmt.Fprintf(w, "  %sCONFIG%s\n", ansiBold+ansiWhite, ansiReset)
+	fmt.Fprintf(w, "    %smmaid config show%s  Every setting with its resolved value and source\n", ansiYellow, ansiReset)
+	fmt.Fprintf(w, "    %smmaid config init%s  Probe the terminal and write its profile (not implemented yet)\n", ansiYellow, ansiReset)
+	fmt.Fprintf(w, "    %sFile%s      %s$XDG_CONFIG_HOME/mmaid/config.json%s, else ~/.config/mmaid/config.json\n", ansiDim, ansiReset, ansiDim, ansiReset)
+	fmt.Fprintf(w, "    %sOrder%s     flag, %sMMAID_*%s, the terminal's profile, the file's default, built in\n", ansiDim, ansiReset, ansiDim, ansiReset)
+	fmt.Fprintf(w, "    %sColour%s    %sNO_COLOR%s disables a theme that came from the file or the environment\n\n", ansiDim, ansiReset, ansiDim, ansiReset)
 	fmt.Fprintf(w, "  %sJSON INGEST%s\n", ansiBold+ansiWhite, ansiReset)
 	fmt.Fprintf(w, "        %s--json%s %sMODE%s     Read JSON from stdin, render as MODE (treemap, pie)\n", ansiYellow, ansiReset, ansiDim, ansiReset)
 	fmt.Fprintf(w, "        %s--template%s       Print minimum valid JSON for the given --json mode\n", ansiYellow, ansiReset)
@@ -471,19 +585,19 @@ var demoTypes = []struct{ name, key string }{
 	{"Packet Diagram", "packet"},
 }
 
-func runDemo(themeName, diagramType string) {
+func runDemo(w io.Writer, themeName, diagramType string) {
 	if _, ok := renderer.Themes[themeName]; !ok {
 		fmt.Fprintf(os.Stderr, "%smmaid:%s unknown theme %q (use --themes to list)\n", ansiBold+ansiCyan, ansiReset, themeName)
 		os.Exit(1)
 	}
 
-	fmt.Printf("\n  %sTheme: %s%s\n", ansiBold+ansiCyan, themeName, ansiReset)
+	fmt.Fprintf(w, "\n  %sTheme: %s%s\n", ansiBold+ansiCyan, themeName, ansiReset)
 
 	if diagramType == "all" {
 		for _, s := range demoTypes {
-			fmt.Printf("\n  %s%s%s\n\n", ansiBold+ansiWhite, s.name, ansiReset)
+			fmt.Fprintf(w, "\n  %s%s%s\n\n", ansiBold+ansiWhite, s.name, ansiReset)
 			result := mmaid.Render(demoSamples[s.key], mmaid.WithTheme(themeName))
-			fmt.Println(result)
+			fmt.Fprintln(w, result)
 		}
 		return
 	}
@@ -510,7 +624,7 @@ func runDemo(themeName, diagramType string) {
 	}
 
 	result := mmaid.Render(source, mmaid.WithTheme(themeName))
-	fmt.Println(result)
+	fmt.Fprintln(w, result)
 }
 
 func demoKeys() []string {

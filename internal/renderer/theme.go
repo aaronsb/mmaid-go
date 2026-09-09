@@ -41,10 +41,16 @@ func italic(s string) string { return "\033[3m" + s }
 func reset() string          { return "\033[0m" }
 
 func fg256(r, g, b int) string {
+	if !Truecolor() {
+		return fmt.Sprintf("\033[38;5;%dm", rgbTo256(r, g, b))
+	}
 	return fmt.Sprintf("\033[38;2;%d;%d;%dm", r, g, b)
 }
 
 func bg256(r, g, b int) string {
+	if !Truecolor() {
+		return fmt.Sprintf("\033[48;5;%dm", rgbTo256(r, g, b))
+	}
 	return fmt.Sprintf("\033[48;2;%d;%d;%dm", r, g, b)
 }
 
@@ -379,12 +385,18 @@ var Themes = map[string]Theme{
 	),
 }
 
-// GetTheme returns a theme by name, falling back to "default".
+// GetTheme returns a theme by name, falling back to "default". A theme's
+// sequences are built once at startup, so the 256-colour approximation is
+// applied here rather than in fg256.
 func GetTheme(name string) Theme {
-	if t, ok := Themes[name]; ok {
-		return t
+	t, ok := Themes[name]
+	if !ok {
+		t = Themes["default"]
 	}
-	return Themes["default"]
+	if !Truecolor() {
+		t = t.downgraded()
+	}
+	return t
 }
 
 // ToColorString renders the canvas using ANSI colors based on the theme.
@@ -432,7 +444,7 @@ func (c *Canvas) ToColorString(theme Theme) string {
 			lastCol--
 		}
 
-		prevStyle := ""
+		prevStyle, openLink := "", ""
 		for x := 0; x <= lastCol; x++ {
 			ch := c.grid[y][x]
 			if ch == Continuation {
@@ -463,6 +475,14 @@ func (c *Canvas) ToColorString(theme Theme) string {
 				}
 			}
 
+			// Styles a diagram renderer built as raw ANSI reach here still in
+			// 24-bit form.
+			if !Truecolor() {
+				ansi = Downgrade(ansi)
+			}
+
+			openLink = c.writeLink(&b, y, x, openLink)
+
 			if ansi == "" {
 				if prevStyle != "" {
 					b.WriteString(rst)
@@ -479,6 +499,9 @@ func (c *Canvas) ToColorString(theme Theme) string {
 				}
 				b.WriteRune(ch)
 			}
+		}
+		if openLink != "" {
+			b.WriteString(oscClose)
 		}
 		if prevStyle != "" {
 			b.WriteString(rst)

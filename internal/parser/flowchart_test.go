@@ -186,6 +186,66 @@ func TestParseLinkStyle(t *testing.T) {
 	}
 }
 
+func TestParseClick(t *testing.T) {
+	g := ParseFlowchart(`graph LR
+  A[One] --> B[Two]
+  C[Three]
+  D[Four]
+  click A "https://example.com/a"
+  click B href "https://example.com/b" _blank
+  click C callback "a tooltip"
+`)
+	for id, want := range map[string]string{
+		"A": "https://example.com/a",
+		"B": "https://example.com/b",
+		"C": "",
+		"D": "",
+	} {
+		node, ok := g.Nodes[id]
+		if !ok {
+			t.Fatalf("node %s not found", id)
+		}
+		if node.Link != want {
+			t.Errorf("node %s link = %q, want %q", id, node.Link, want)
+		}
+	}
+}
+
+// TestParseClickRejectsUnsafeURL keeps a diagram from steering the terminal
+// through the OSC 8 sequence a link is emitted in.
+func TestParseClickRejectsUnsafeURL(t *testing.T) {
+	unsafe := map[string]string{
+		"escape":     "https://x/\x1b]0;PWNED\x07\x1b]52;c;cGduZWQ=\x07",
+		"bel":        "https://x/\x07",
+		"newline":    "https://x/\nclick",
+		"delete":     "https://x/\x7f",
+		"javascript": "javascript:alert(1)",
+		"data":       "data:text/html,<script>alert(1)</script>",
+		"schemeless": "example.com/docs",
+	}
+	for name, url := range unsafe {
+		t.Run(name, func(t *testing.T) {
+			g := ParseFlowchart("graph LR\n  A[One]\n  click A \"" + url + "\"")
+			if link := g.Nodes["A"].Link; link != "" {
+				t.Errorf("link = %q, want none", link)
+			}
+		})
+	}
+
+	for _, url := range []string{
+		"https://example.com/a",
+		"http://example.com/a",
+		"mailto:someone@example.com",
+		"file:///tmp/notes.md",
+		"HTTPS://EXAMPLE.COM/A",
+	} {
+		g := ParseFlowchart("graph LR\n  A[One]\n  click A \"" + url + "\"")
+		if g.Nodes["A"].Link != url {
+			t.Errorf("link for %q = %q, want it kept", url, g.Nodes["A"].Link)
+		}
+	}
+}
+
 func TestSanitizeLabel_StripsControlChars(t *testing.T) {
 	tests := []struct {
 		input string
@@ -195,9 +255,9 @@ func TestSanitizeLabel_StripsControlChars(t *testing.T) {
 		{"has\ttab", "has tab"},
 		{"has\x1b[31mANSI\x1b[0m", "hasANSI"},
 		{"null\x00byte", "nullbyte"},
-		{"line\nbreak", "linebreak"},         // real newline stripped by stripControlChars
-		{`line\nbreak`, "line break"},        // literal \n replaced by sanitizeLabel
-		{"html<br>break", "html break"},     // <br> → space
+		{"line\nbreak", "linebreak"},    // real newline stripped by stripControlChars
+		{`line\nbreak`, "line break"},   // literal \n replaced by sanitizeLabel
+		{"html<br>break", "html break"}, // <br> → space
 	}
 	for _, tt := range tests {
 		got := sanitizeLabel(tt.input)

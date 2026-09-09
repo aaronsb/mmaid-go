@@ -29,9 +29,18 @@ type Canvas struct {
 	grid      [][]rune
 	styleGrid [][]string
 	fillGrid  [][]string // background fill layer (composed with styleGrid in ToColorString)
+	linkGrid  [][]string // hyperlink layer: the URL a cell belongs to, if any
 	lines     [][]lineCell
 	literal   [][]bool
 	cs        CharSet
+
+	// currentLink is stamped on every cell of text written while it is set,
+	// so a node's label carries its link without the shape renderers knowing
+	// anything about links.
+	currentLink string
+
+	// hyperlinks says whether serialization emits the link layer as OSC 8.
+	hyperlinks bool
 }
 
 // NewCanvas creates a Canvas of the given width and height, filled with spaces.
@@ -41,6 +50,7 @@ func NewCanvas(width, height int) *Canvas {
 	c.grid = make([][]rune, 0, height)
 	c.styleGrid = make([][]string, 0, height)
 	c.fillGrid = make([][]string, 0, height)
+	c.linkGrid = make([][]string, 0, height)
 	c.lines = make([][]lineCell, 0, height)
 	c.literal = make([][]bool, 0, height)
 	for range height {
@@ -61,6 +71,7 @@ func (c *Canvas) appendRow(width int) {
 	c.grid = append(c.grid, row)
 	c.styleGrid = append(c.styleGrid, srow)
 	c.fillGrid = append(c.fillGrid, make([]string, width))
+	c.linkGrid = append(c.linkGrid, make([]string, width))
 	c.lines = append(c.lines, make([]lineCell, width))
 	c.literal = append(c.literal, make([]bool, width))
 }
@@ -216,6 +227,12 @@ func (c *Canvas) putWide(row, col int, ch rune, style string) int {
 			c.lines[row][col+1] = lineCell{}
 		}
 	}
+	if c.currentLink != "" {
+		c.SetLink(row, col, c.currentLink)
+		if w == 2 {
+			c.SetLink(row, col+1, c.currentLink)
+		}
+	}
 	return w
 }
 
@@ -246,6 +263,7 @@ func (c *Canvas) ClearCell(row, col int) {
 	c.clearLeftHalf(row, col)
 	c.grid[row][col] = ' '
 	c.styleGrid[row][col] = "default"
+	c.linkGrid[row][col] = ""
 	c.lines[row][col] = lineCell{}
 	c.literal[row][col] = false
 }
@@ -258,6 +276,36 @@ func (c *Canvas) SetFill(row, col int, fill string) {
 		return
 	}
 	c.fillGrid[row][col] = fill
+}
+
+// SetLink records that the cell at (row, col) belongs to a hyperlink. An empty
+// URL clears it.
+func (c *Canvas) SetLink(row, col int, url string) {
+	if !c.inBounds(row, col) {
+		return
+	}
+	c.linkGrid[row][col] = url
+}
+
+// GetLink returns the URL the cell at (row, col) belongs to, or "".
+func (c *Canvas) GetLink(row, col int) string {
+	if !c.inBounds(row, col) {
+		return ""
+	}
+	return c.linkGrid[row][col]
+}
+
+// SetCurrentLink makes the following text belong to a hyperlink. Callers set it
+// around the drawing of one node and clear it afterwards.
+func (c *Canvas) SetCurrentLink(url string) {
+	c.currentLink = url
+}
+
+// SetHyperlinks says whether serialization emits the link layer as OSC 8. The
+// links are recorded either way, so the decision belongs to the caller that
+// knows the setting.
+func (c *Canvas) SetHyperlinks(on bool) {
+	c.hyperlinks = on
 }
 
 // GetFill returns the fill style at (row, col).
@@ -314,6 +362,7 @@ func (c *Canvas) Resize(newWidth, newHeight int) {
 			c.grid[r] = append(c.grid[r], ' ')
 			c.styleGrid[r] = append(c.styleGrid[r], "default")
 			c.fillGrid[r] = append(c.fillGrid[r], "")
+			c.linkGrid[r] = append(c.linkGrid[r], "")
 			c.lines[r] = append(c.lines[r], lineCell{})
 			c.literal[r] = append(c.literal[r], false)
 		}
@@ -346,11 +395,16 @@ func (c *Canvas) ToString() string {
 	lines := make([]string, c.Height)
 	for y := range c.Height {
 		var b strings.Builder
+		open := ""
 		for x := range c.Width {
 			if c.grid[y][x] == Continuation {
 				continue
 			}
+			open = c.writeLink(&b, y, x, open)
 			b.WriteRune(c.grid[y][x])
+		}
+		if open != "" {
+			b.WriteString(oscClose)
 		}
 		lines[y] = strings.TrimRight(b.String(), " ")
 	}

@@ -104,6 +104,7 @@ type Node struct {
 	Shape         NodeShape
 	StyleClass    string          // empty string means no class
 	LabelSegments []LabelSegment // nil means no rich segments
+	Link          string          // URL from a `click` line; empty means none
 }
 
 // Edge represents a connection between two nodes.

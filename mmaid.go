@@ -19,6 +19,7 @@ type config struct {
 	paddingY     int
 	roundedEdges bool
 	theme        string // "" = no color, "default", "terra", etc.
+	hyperlinks   bool
 }
 
 func defaultConfig() config {
@@ -54,6 +55,12 @@ func WithSharpEdges() Option {
 // Available themes: default, terra, neon, mono, amber, phosphor.
 func WithTheme(name string) Option {
 	return func(c *config) { c.theme = name }
+}
+
+// WithHyperlinks wraps the label of every node carrying a `click ID "url"` line
+// in an OSC 8 hyperlink.
+func WithHyperlinks() Option {
+	return func(c *config) { c.hyperlinks = true }
 }
 
 // frontmatterRe matches YAML frontmatter at the start of a document.
@@ -179,6 +186,10 @@ func Render(source string, opts ...Option) (result string) {
 	if canvas == nil {
 		return ""
 	}
+
+	// The link layer is recorded whatever the setting says; this decides
+	// whether it is emitted.
+	canvas.SetHyperlinks(cfg.hyperlinks)
 
 	// Apply theme if set, otherwise plain text
 	if cfg.theme != "" {
