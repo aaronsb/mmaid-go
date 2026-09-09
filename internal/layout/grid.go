@@ -46,6 +46,11 @@ const (
 	// can go below 3.
 	GapWidth  = 4
 	GapHeight = 3
+
+	// SGGapMin is the least size of any gap in a graph with subgraphs: a
+	// stub or arrowhead cell at each end, the corridor, and a free cell on
+	// each side of it for a crossing run to move to.
+	SGGapMin = 5
 )
 
 // GridCoord represents a position on the logical grid.
@@ -56,8 +61,13 @@ type GridCoord struct {
 
 // NodePlacement stores the grid and drawing coordinates of a placed node.
 type NodePlacement struct {
-	NodeID     string
-	Grid       GridCoord
+	NodeID string
+	Grid   GridCoord
+	// Min and Max are the first and last node cells the placement covers:
+	// Grid for a node, the block's corners for a subgraph an edge ends at,
+	// which Block marks.
+	Min, Max   GridCoord
+	Block      bool
 	DrawX      int
 	DrawY      int
 	DrawWidth  int

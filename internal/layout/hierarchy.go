@@ -64,7 +64,7 @@ func layoutHierarchy(g *graph.Graph) (map[string]GridCoord, map[*graph.Subgraph]
 	for _, nid := range g.NodeOrder {
 		h.owner[nid] = g.FindSubgraphForNode(nid)
 	}
-	root := h.layoutScope(nil, g.Direction.Normalized())
+	root := h.layoutScope(nil, g.Direction)
 
 	positions := make(map[string]GridCoord, len(g.NodeOrder))
 	rects := make(map[*graph.Subgraph]posRect)
@@ -116,8 +116,8 @@ func (h *hierarchy) rep(scope *graph.Subgraph, id string, isSubgraph bool) (stri
 
 // local builds the scope's graph: its direct nodes and one compound per
 // child subgraph that holds any node, in the order their first node appears
-// in the graph, with the edges between them. An edge inside one child is
-// dropped; a plain self-edge stays.
+// in the graph, with the edges between them. An edge inside one child or to
+// a subgraph with no node is dropped; a plain self-edge stays.
 func (h *hierarchy) local(scope *graph.Subgraph) (*localGraph, map[string]*graph.Subgraph) {
 	lg := &localGraph{}
 	compounds := make(map[string]*graph.Subgraph)
@@ -140,7 +140,7 @@ func (h *hierarchy) local(scope *graph.Subgraph) (*localGraph, map[string]*graph
 	for _, e := range h.g.Edges {
 		s, ok1 := h.rep(scope, e.Source, e.SourceIsSubgraph)
 		t, ok2 := h.rep(scope, e.Target, e.TargetIsSubgraph)
-		if !ok1 || !ok2 {
+		if !ok1 || !ok2 || !seen[s] || !seen[t] {
 			continue
 		}
 		if s == t && compounds[s] != nil {
@@ -163,12 +163,12 @@ func (h *hierarchy) layoutScope(scope *graph.Subgraph, dir graph.Direction) *blo
 	for v, sg := range compounds {
 		d := dir
 		if sg.Direction != nil {
-			d = sg.Direction.Normalized()
+			d = *sg.Direction
 		}
 		blocks[v] = h.layoutScope(sg, d)
 	}
 
-	vertical := dir.IsVertical()
+	vertical := dir.Normalized().IsVertical()
 	span := func(cb *block) int {
 		if vertical {
 			return cb.h
@@ -210,7 +210,39 @@ func (h *hierarchy) layoutScope(scope *graph.Subgraph, dir graph.Direction) *blo
 	} else {
 		b.w, b.h = flow, crossMax
 	}
+
+	// The canvas flips the whole diagram for a reversed graph direction,
+	// so a block is reversed in its own space only where its direction and
+	// the graph's disagree on its axis.
+	if scope != nil {
+		if vertical && (dir == graph.DirBT) != (h.g.Direction == graph.DirBT) {
+			b.flip(true)
+		}
+		if !vertical && (dir == graph.DirRL) != (h.g.Direction == graph.DirRL) {
+			b.flip(false)
+		}
+	}
 	return b
+}
+
+// flip reverses the block's rows, or its columns, in its own space; child
+// blocks move but keep their own arrangement.
+func (b *block) flip(rows bool) {
+	for nid, p := range b.nodes {
+		if rows {
+			p.Row = b.h - 1 - p.Row
+		} else {
+			p.Col = b.w - 1 - p.Col
+		}
+		b.nodes[nid] = p
+	}
+	for i, cb := range b.children {
+		if rows {
+			b.children[i].at.Row = b.h - cb.at.Row - cb.b.h
+		} else {
+			b.children[i].at.Col = b.w - cb.at.Col - cb.b.w
+		}
+	}
 }
 
 // roots returns the vertices with no incoming edge, in order; the first
@@ -422,7 +454,7 @@ func orderLayers(lg *localGraph, layers map[string]int) [][]string {
 func placeNodes(layout *GridLayout, positions map[string]GridCoord) {
 	for nid, p := range positions {
 		gc := GridCoord{Col: p.Col*Stride + 1, Row: p.Row*Stride + 1}
-		layout.Placements[nid] = &NodePlacement{NodeID: nid, Grid: gc}
+		layout.Placements[nid] = &NodePlacement{NodeID: nid, Grid: gc, Min: gc, Max: gc}
 		for dc := -1; dc <= 1; dc++ {
 			for dr := -1; dr <= 1; dr++ {
 				layout.GridOccupied[GridCoord{gc.Col + dc, gc.Row + dr}] = nid

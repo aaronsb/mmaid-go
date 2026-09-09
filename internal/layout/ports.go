@@ -36,6 +36,29 @@ func (s Side) AttachCell(gc GridCoord) GridCoord {
 	}
 }
 
+// Attach returns the grid cell an edge attaches to a placement through on
+// a side: the border cell of a node, or the gap cell just outside a
+// subgraph's block at the middle of that side.
+func (p *NodePlacement) Attach(side Side) GridCoord {
+	mid := GridCoord{(p.Min.Col + p.Max.Col) / 2, (p.Min.Row + p.Max.Row) / 2}
+	mid.Col -= (mid.Col - 1) % Stride
+	mid.Row -= (mid.Row - 1) % Stride
+	out := 1
+	if p.Block {
+		out = 2
+	}
+	switch side {
+	case Top:
+		return GridCoord{mid.Col, p.Min.Row - out}
+	case Bottom:
+		return GridCoord{mid.Col, p.Max.Row + out}
+	case Left:
+		return GridCoord{p.Min.Col - out, mid.Row}
+	default:
+		return GridCoord{p.Max.Col + out, mid.Row}
+	}
+}
+
 // PreferredSides returns the pair of sides an edge from src to tgt prefers to
 // leave and enter through, and the alternative pair, from their relative
 // grid positions and the flow direction.
@@ -93,7 +116,8 @@ func PreferredSides(src, tgt GridCoord, direction graph.Direction) (preferred, a
 // PortRange returns the offsets, in draw cells from the side's centre, at
 // which a port may sit: every border cell between the corners.
 func (l *GridLayout) PortRange(p *NodePlacement, side Side) (lo, hi int) {
-	cx, cy := l.GridToDrawCenter(side.AttachCell(p.Grid).Col, side.AttachCell(p.Grid).Row)
+	ac := p.Attach(side)
+	cx, cy := l.GridToDrawCenter(ac.Col, ac.Row)
 	if side.Vertical() {
 		return p.DrawY + 1 - cy, p.DrawY + p.DrawHeight - 2 - cy
 	}
@@ -114,6 +138,13 @@ type PortRequest struct {
 // runs past a corner slides back inside; when the side has fewer ports than
 // requests, the requests past the corners take the centre.
 func (l *GridLayout) AssignPorts(reqs []PortRequest) []int {
+	return l.AssignPortsWith(reqs, func(node string) *NodePlacement { return l.Placements[node] })
+}
+
+// AssignPortsWith is AssignPorts with the placement each request's node
+// resolves through, so a subgraph an edge ends at can offer ports along
+// its border; a nil placement takes the centre.
+func (l *GridLayout) AssignPortsWith(reqs []PortRequest, placement func(node string) *NodePlacement) []int {
 	type key struct {
 		node string
 		side Side
@@ -131,15 +162,15 @@ func (l *GridLayout) AssignPorts(reqs []PortRequest) []int {
 	out := make([]int, len(reqs))
 	for _, k := range order {
 		idx := groups[k]
-		p, ok := l.Placements[k.node]
-		if !ok || len(idx) == 1 {
+		p := placement(k.node)
+		if p == nil || len(idx) == 1 {
 			continue
 		}
 		sort.SliceStable(idx, func(a, b int) bool {
 			return reqs[idx[a]].Other < reqs[idx[b]].Other
 		})
 
-		ac := k.side.AttachCell(p.Grid)
+		ac := p.Attach(k.side)
 		cx, cy := l.GridToDrawCenter(ac.Col, ac.Row)
 		centre := cx
 		if k.side.Vertical() {

@@ -7,23 +7,23 @@ import "slices"
 type NodeShape int
 
 const (
-	ShapeRectangle      NodeShape = iota // A[text] or plain A
-	ShapeRounded                         // A(text)
-	ShapeStadium                         // A([text])
-	ShapeSubroutine                      // A[[text]]
-	ShapeDiamond                         // A{text}
-	ShapeHexagon                         // A{{text}}
-	ShapeCircle                          // A((text))
-	ShapeDoubleCircle                    // A(((text)))
-	ShapeAsymmetric                      // A>text]
-	ShapeCylinder                        // A[(text)]
-	ShapeParallelogram                   // A[/text/]
-	ShapeParallelogramAlt                // A[\text\]
-	ShapeTrapezoid                       // A[/text\]
-	ShapeTrapezoidAlt                    // A[\text/]
-	ShapeStartState                      // [*] start (filled circle)
-	ShapeEndState                        // [*] end (bullseye)
-	ShapeForkJoin                        // <<fork>>/<<join>> (thick bar)
+	ShapeRectangle        NodeShape = iota // A[text] or plain A
+	ShapeRounded                           // A(text)
+	ShapeStadium                           // A([text])
+	ShapeSubroutine                        // A[[text]]
+	ShapeDiamond                           // A{text}
+	ShapeHexagon                           // A{{text}}
+	ShapeCircle                            // A((text))
+	ShapeDoubleCircle                      // A(((text)))
+	ShapeAsymmetric                        // A>text]
+	ShapeCylinder                          // A[(text)]
+	ShapeParallelogram                     // A[/text/]
+	ShapeParallelogramAlt                  // A[\text\]
+	ShapeTrapezoid                         // A[/text\]
+	ShapeTrapezoidAlt                      // A[\text/]
+	ShapeStartState                        // [*] start (filled circle)
+	ShapeEndState                          // [*] end (bullseye)
+	ShapeForkJoin                          // <<fork>>/<<join>> (thick bar)
 )
 
 // ArrowType represents the tip style of an edge arrow.
@@ -102,9 +102,9 @@ type Node struct {
 	ID            string
 	Label         string
 	Shape         NodeShape
-	StyleClass    string          // empty string means no class
+	StyleClass    string         // empty string means no class
 	LabelSegments []LabelSegment // nil means no rich segments
-	Link          string          // URL from a `click` line; empty means none
+	Link          string         // URL from a `click` line; empty means none
 }
 
 // Edge represents a connection between two nodes.
@@ -150,23 +150,23 @@ type Subgraph struct {
 	Label     string
 	NodeIDs   []string
 	Children  []*Subgraph
-	Direction *Direction  // nil means inherit from parent
-	Parent    *Subgraph   // nil for top-level subgraphs
+	Direction *Direction // nil means inherit from parent
+	Parent    *Subgraph  // nil for top-level subgraphs
 }
 
 // Graph is the top-level container for a parsed flowchart.
 type Graph struct {
 	Direction         Direction
 	DirectionExplicit bool // true if direction was set in source (not default)
-	Nodes      map[string]*Node
-	Edges      []Edge
-	Subgraphs  []*Subgraph
-	NodeOrder  []string
-	ClassDefs  map[string]map[string]string
-	NodeStyles map[string]map[string]string
-	LinkStyles map[int]map[string]string
-	Warnings   []string
-	Notes      []GraphNote
+	Nodes             map[string]*Node
+	Edges             []Edge
+	Subgraphs         []*Subgraph
+	NodeOrder         []string
+	ClassDefs         map[string]map[string]string
+	NodeStyles        map[string]map[string]string
+	LinkStyles        map[int]map[string]string
+	Warnings          []string
+	Notes             []GraphNote
 }
 
 // NewGraph returns a Graph initialized with default values.
@@ -269,15 +269,18 @@ func searchSubgraphs(subs []*Subgraph, match func(*Subgraph) bool) *Subgraph {
 	return nil
 }
 
-// findInnermostSubgraph searches children first so the deepest match wins.
+// findInnermostSubgraph returns the last subgraph in declaration order that
+// lists the node, as Mermaid does; a child is declared after its parent, so
+// nesting resolves to the innermost.
 func findInnermostSubgraph(subs []*Subgraph, nodeID string) *Subgraph {
+	var found *Subgraph
 	for _, sg := range subs {
-		if result := findInnermostSubgraph(sg.Children, nodeID); result != nil {
-			return result
-		}
 		if slices.Contains(sg.NodeIDs, nodeID) {
-			return sg
+			found = sg
+		}
+		if result := findInnermostSubgraph(sg.Children, nodeID); result != nil {
+			found = result
 		}
 	}
-	return nil
+	return found
 }
