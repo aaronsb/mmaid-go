@@ -275,7 +275,9 @@ func sign(x int) int {
 // drawEdgeLines draws a routed edge's path as segments (Pass 1a). Bends are
 // cells where two segments meet. With arrowEnd, the last segment ends at the
 // arrowhead's cell, one short of the node border, so the edge never writes
-// an arm into the target node.
+// an arm into the target node. At a subgraph border crossing the line stops
+// one cell before the border and starts again at the border cell, whose
+// own arms make it a tee toward the target.
 func drawEdgeLines(canvas *Canvas, re routing.RoutedEdge, roundedEdges, arrowEnd bool) {
 	path := re.DrawPath
 	if len(path) < 2 {
@@ -301,8 +303,33 @@ func drawEdgeLines(canvas *Canvas, re routing.RoutedEdge, roundedEdges, arrowEnd
 			x2, y2 = x2-dx, y2-dy
 		}
 
-		canvas.Segment(y1, x1, y2, x2, w, roundedEdges, "edge")
+		start := routing.Point{Col: x1, Row: y1}
+		end := routing.Point{Col: x2, Row: y2}
+		for _, c := range crossingsOn(re.Crossings, start, end) {
+			before := routing.Point{Col: c.At.Col - dx, Row: c.At.Row - dy}
+			if before != start {
+				canvas.Segment(start.Row, start.Col, before.Row, before.Col, w, roundedEdges, "edge")
+			}
+			start = c.At
+		}
+		canvas.Segment(start.Row, start.Col, end.Row, end.Col, w, roundedEdges, "edge")
 	}
+}
+
+// crossingsOn returns the crossings strictly inside the segment a-b, in
+// travel order.
+func crossingsOn(crossings []routing.Crossing, a, b routing.Point) []routing.Crossing {
+	var out []routing.Crossing
+	for _, c := range crossings {
+		p := c.At
+		switch {
+		case a.Col == b.Col && p.Col == a.Col && p.Row > min(a.Row, b.Row) && p.Row < max(a.Row, b.Row):
+			out = append(out, c)
+		case a.Row == b.Row && p.Row == a.Row && p.Col > min(a.Col, b.Col) && p.Col < max(a.Col, b.Col):
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // drawEdgeEndpoints draws arrow heads and the source tee for a routed edge (Pass 1b).

@@ -43,6 +43,9 @@ type RoutedEdge struct {
 	LabelCol      int
 	Index         int
 	OccupiedCells map[Point]bool
+	// Crossings are the subgraph borders the draw path passes through, in
+	// path order.
+	Crossings []Crossing
 }
 
 // edgeEnds is what routing resolved for one edge of the graph.
@@ -65,7 +68,8 @@ func RouteEdges(g *graph.Graph, l *layout.GridLayout) []RoutedEdge {
 //
 // Routing takes two passes over the edges. The first chooses each edge's
 // sides on the bare grid; ports are then assigned per side. The second
-// routes each edge through its chosen sides, places its label, and reserves
+// routes each edge through its chosen sides, moves each subgraph border
+// crossing to a free cell of the border, places its label, and reserves
 // the label's cells against the edges after it. A line is never drawn under
 // a label: a label a later path runs under is placed again, or dropped.
 func RouteEdgesWith(g *graph.Graph, l *layout.GridLayout, ellipsis string, warn io.Writer) []RoutedEdge {
@@ -131,6 +135,7 @@ func RouteEdgesWith(g *graph.Graph, l *layout.GridLayout, ellipsis string, warn 
 	// Pass 2: paths, draw paths, labels.
 	soft = make(map[Point]Axis)
 	space := newLabelSpace(g, l, aprons(g, ends, direction), warn)
+	borders := newBorderPorts(l)
 	var routed []RoutedEdge
 	for i, edge := range g.Edges {
 		e := ends[i]
@@ -160,6 +165,8 @@ func RouteEdgesWith(g *graph.Graph, l *layout.GridLayout, ellipsis string, warn 
 		for _, p := range path {
 			re.OccupiedCells[p] = true
 		}
+		re.DrawPath, re.Crossings = borders.cross(re.DrawPath, space.lines)
+		cutAtOwnBorder(&re)
 		displaced := space.addLines(re.DrawPath)
 		space.place(&re, ellipsis)
 		routed = append(routed, re)
