@@ -879,3 +879,370 @@ c   -   verifies   ->   a`)
 		}
 	}
 }
+
+// ── TreeView ────────────────────────────────────────────────────────────────
+
+// Indentation is the whole hierarchy, and a trailing slash is what makes a
+// node a directory.
+func TestTreeViewIndentationAndFolders(t *testing.T) {
+	td := parseTreeView(`treeView-beta
+    my-project/
+        src/
+            index.js
+        README.md`)
+
+	if len(td.roots) != 1 {
+		t.Fatalf("roots = %d, want the one outermost node", len(td.roots))
+	}
+	root := td.roots[0]
+	if root.label != "my-project/" || !root.folder {
+		t.Errorf("root = %q folder=%v", root.label, root.folder)
+	}
+	if len(root.children) != 2 {
+		t.Fatalf("children = %d, want src/ and README.md", len(root.children))
+	}
+	src := root.children[0]
+	if src.label != "src/" || !src.folder || len(src.children) != 1 {
+		t.Errorf("src = %+v", src)
+	}
+	if got := src.children[0]; got.label != "index.js" || got.folder {
+		t.Errorf("index.js = %q folder=%v", got.label, got.folder)
+	}
+	if leaf := root.children[1]; leaf.label != "README.md" || leaf.folder {
+		t.Errorf("README.md = %q folder=%v", leaf.label, leaf.folder)
+	}
+}
+
+// A quoted label keeps its spaces; `## text` becomes the description, and the
+// annotations this renderer does not draw are parsed off rather than kept.
+func TestTreeViewLabelsAndAnnotations(t *testing.T) {
+	td := parseTreeView(`treeView-beta
+    "my project"
+        notes.md ## the running log
+        theme.css :::highlight
+        main.rs icon(rust)`)
+
+	root := td.roots[0]
+	if root.label != "my project" {
+		t.Errorf("quoted label = %q", root.label)
+	}
+	want := []struct{ label, desc string }{
+		{"notes.md", "the running log"},
+		{"theme.css", ""},
+		{"main.rs", ""},
+	}
+	if len(root.children) != len(want) {
+		t.Fatalf("children = %d, want %d", len(root.children), len(want))
+	}
+	for i, w := range want {
+		got := root.children[i]
+		if got.label != w.label || got.desc != w.desc {
+			t.Errorf("child %d = %q / %q, want %q / %q", i, got.label, got.desc, w.label, w.desc)
+		}
+	}
+}
+
+// Every node at the outermost indent is a root, so a treeView may be a forest.
+func TestTreeViewForest(t *testing.T) {
+	td := parseTreeView("treeView-beta\napps/\n    web/\nlibs/")
+	if len(td.roots) != 2 {
+		t.Fatalf("roots = %d, want apps/ and libs/", len(td.roots))
+	}
+	if td.roots[0].label != "apps/" || td.roots[1].label != "libs/" {
+		t.Errorf("roots = %q, %q", td.roots[0].label, td.roots[1].label)
+	}
+}
+
+func TestTreeViewRenderGuides(t *testing.T) {
+	c := RenderTreeView("treeView-beta\nroot/\n    a.txt\n    b.txt", renderer.UNICODE)
+	assertCanvasContains(t, c, "├──a.txt")
+	assertCanvasContains(t, c, "└──b.txt")
+}
+
+// ── Event Modeling ──────────────────────────────────────────────────────────
+
+// Entity-type aliases collapse onto one kind and `->>` records the frames a
+// frame is fed from.
+func TestEventModelingFramesAndSources(t *testing.T) {
+	ed := parseEventModeling(`eventmodeling
+    tf 01 ui CartUI
+    tf 02 command AddItem
+    tf 03 readmodel CartView
+    tf 04 event ItemChanged ->> 02 ->> 03
+    rf 05 processor Rebuild`)
+
+	wantKind := []string{"ui", "cmd", "rmo", "evt", "pcr"}
+	if len(ed.frames) != len(wantKind) {
+		t.Fatalf("frames = %d, want %d", len(ed.frames), len(wantKind))
+	}
+	for i, k := range wantKind {
+		if ed.frames[i].kind != k {
+			t.Errorf("frame %s kind = %q, want %q", ed.frames[i].id, ed.frames[i].kind, k)
+		}
+	}
+	if got := ed.frames[3].sources; len(got) != 2 || got[0] != "02" || got[1] != "03" {
+		t.Errorf("sources = %v, want [02 03]", got)
+	}
+	if !ed.frames[4].reset {
+		t.Error("rf 05 is not marked a reset frame")
+	}
+}
+
+// A namespace owns one lane wherever it first appears, so a command and the
+// event it produces share it.
+func TestEventModelingNamespaceSharesOneLane(t *testing.T) {
+	ed := parseEventModeling(`eventmodeling
+    tf 01 ui CartUI
+    tf 02 cmd Inventory.AddItem
+    tf 03 evt Inventory.ItemAdded
+    tf 04 evt Shipped`)
+
+	lanes, laneOf := emAssignLanes(ed.frames)
+	if laneOf["02"] != laneOf["03"] {
+		t.Errorf("Inventory frames on lanes %d and %d, want one lane", laneOf["02"], laneOf["03"])
+	}
+	if laneOf["03"] == laneOf["04"] {
+		t.Error("the namespaced lane and the plain event stream are the same lane")
+	}
+	if lanes[laneOf["02"]].label != "C/RM: Inventory" {
+		t.Errorf("namespace lane label = %q", lanes[laneOf["02"]].label)
+	}
+	if lanes[0].label != "UI/Automation" {
+		t.Errorf("first lane = %q, want the automation band on top", lanes[0].label)
+	}
+}
+
+// A data block's body is not a frame.
+func TestEventModelingDataBlockIsNotAFrame(t *testing.T) {
+	ed := parseEventModeling(`eventmodeling
+    tf 01 cmd AddItem
+    tf 02 evt ItemAdded [[ItemAddedData]]
+
+data ItemAddedData
+{
+  productId: 7
+}`)
+	if len(ed.frames) != 2 {
+		t.Fatalf("frames = %d, want the two tf lines", len(ed.frames))
+	}
+	if ed.frames[1].name != "ItemAdded" {
+		t.Errorf("name = %q, want the payload reference dropped", ed.frames[1].name)
+	}
+}
+
+func TestEventModelingRendersLanesAndFrames(t *testing.T) {
+	c := RenderEventModeling("eventmodeling\n  tf 01 ui CartUI\n  tf 02 cmd AddItem ->> 01", renderer.UNICODE, nil)
+	assertCanvasContains(t, c, "UI/Automation")
+	assertCanvasContains(t, c, "Command/Read Model")
+	assertCanvasContains(t, c, "CartUI")
+	assertCanvasContains(t, c, "AddItem")
+}
+
+// ── Ishikawa ────────────────────────────────────────────────────────────────
+
+// The first line is the effect and the rest nest by indentation.
+func TestIshikawaHierarchy(t *testing.T) {
+	root := parseIshikawa(`ishikawa-beta
+    Blurry Photo
+        Process
+            Out of focus
+        User
+            Shaky hands`)
+
+	if root == nil || root.text != "Blurry Photo" {
+		t.Fatalf("effect = %+v", root)
+	}
+	if len(root.children) != 2 {
+		t.Fatalf("categories = %d, want Process and User", len(root.children))
+	}
+	if got := root.children[0]; got.text != "Process" || len(got.children) != 1 || got.children[0].text != "Out of focus" {
+		t.Errorf("Process = %+v", got)
+	}
+	if got := root.children[1]; got.text != "User" || got.children[0].text != "Shaky hands" {
+		t.Errorf("User = %+v", got)
+	}
+}
+
+// The first cause sets the base level, so an effect indented more than its
+// causes still parses.
+func TestIshikawaEffectIndentedMoreThanCauses(t *testing.T) {
+	root := parseIshikawa("ishikawa-beta\n    Problem\nCause A\n  Subcause A1\nCause B")
+	if root.text != "Problem" {
+		t.Fatalf("effect = %q", root.text)
+	}
+	if len(root.children) != 2 {
+		t.Fatalf("categories = %d, want Cause A and Cause B", len(root.children))
+	}
+	if got := root.children[0]; len(got.children) != 1 || got.children[0].text != "Subcause A1" {
+		t.Errorf("Cause A children = %+v", got.children)
+	}
+}
+
+// A cause below the first level keeps its place in the list, one marker per
+// level under the category.
+func TestIshikawaFlattensDeepCauses(t *testing.T) {
+	root := parseIshikawa("ishikawa\nEffect\n  Process\n    Slow\n      Queued\n    Manual")
+	var causes []string
+	ishikawaCauses(root.children[0], 0, "- ", &causes)
+	want := []string{"Slow", "- Queued", "Manual"}
+	if !slices.Equal(causes, want) {
+		t.Errorf("causes = %v, want %v", causes, want)
+	}
+}
+
+func TestIshikawaRendersSpineAndBones(t *testing.T) {
+	c := RenderIshikawa("ishikawa-beta\nLate Delivery\n  Process\n    Slow handoffs\n  People", renderer.UNICODE, nil)
+	assertCanvasContains(t, c, "Late Delivery")
+	assertCanvasContains(t, c, "╲")
+	assertCanvasContains(t, c, "╱")
+	assertCanvasContains(t, c, "━")
+	assertCanvasContains(t, c, "Slow handoffs")
+}
+
+// The title and accessibility terminals are case-sensitive, the two
+// accessibility ones need their separator, and all three sit before the nodes
+// in the entry rule — so these are three ordinary children.
+func TestTreeViewKeywordNamedNodes(t *testing.T) {
+	td := parseTreeView(`treeView-beta
+    docs/
+        accTitle.md
+        Title
+        notes.txt`)
+
+	if len(td.roots) != 1 {
+		t.Fatalf("roots = %d", len(td.roots))
+	}
+	kids := td.roots[0].children
+	want := []string{"accTitle.md", "Title", "notes.txt"}
+	if len(kids) != len(want) {
+		t.Fatalf("children = %d, want %d", len(kids), len(want))
+	}
+	for i, w := range want {
+		if kids[i].label != w {
+			t.Errorf("child %d = %q, want %q", i, kids[i].label, w)
+		}
+	}
+	if td.title != "" {
+		t.Errorf("title = %q, want none taken from a node", td.title)
+	}
+}
+
+// A real title is still read, and so is a bare `title`.
+func TestTreeViewTitle(t *testing.T) {
+	td := parseTreeView("treeView-beta\ntitle Project layout\nsrc/")
+	if td.title != "Project layout" {
+		t.Errorf("title = %q", td.title)
+	}
+	if len(td.roots) != 1 || td.roots[0].label != "src/" {
+		t.Errorf("roots = %+v", td.roots)
+	}
+}
+
+// BARE_NAME runs to end of line, so only a line that starts with %% is a
+// comment.
+func TestTreeViewCommentIsWholeLineOnly(t *testing.T) {
+	td := parseTreeView("treeView-beta\nnotes/\n    100%%done.txt\n%% a comment\n    todo.txt")
+	kids := td.roots[0].children
+	if len(kids) != 2 {
+		t.Fatalf("children = %d, want the two files", len(kids))
+	}
+	if kids[0].label != "100%%done.txt" {
+		t.Errorf("label = %q, want the %%%% kept", kids[0].label)
+	}
+}
+
+// The value converters count indentation one column per character, so a tab
+// is one column and nests under a two-space line.
+func TestTreeViewTabIsOneColumn(t *testing.T) {
+	td := parseTreeView("treeView-beta\nroot/\n\tchild/\n  grand.txt")
+	child := td.roots[0].children
+	if len(child) != 1 || child[0].label != "child/" {
+		t.Fatalf("children of root = %+v", child)
+	}
+	if len(child[0].children) != 1 || child[0].children[0].label != "grand.txt" {
+		t.Errorf("children of child = %+v, want grand.txt nested", child[0].children)
+	}
+}
+
+// A frame with no `->>` takes the nearest earlier frame in a different lane,
+// which is what decidePositionRelation falls back to.
+func TestEventModelingImplicitRelations(t *testing.T) {
+	p := emLayout(parseEventModeling(`eventmodeling
+    tf 01 ui CartUI
+    tf 02 cmd AddItem
+    tf 03 evt ItemAdded`))
+
+	if len(p.boxes) != 3 {
+		t.Fatalf("boxes = %d", len(p.boxes))
+	}
+	if len(p.boxes[0].from) != 0 {
+		t.Errorf("the first frame has sources %v", p.boxes[0].from)
+	}
+	for i, want := range map[int]int{1: 0, 2: 1} {
+		got := p.boxes[i].from
+		if len(got) != 1 || got[0] != want {
+			t.Errorf("box %d from = %v, want [%d]", i, got, want)
+		}
+	}
+}
+
+// A reset frame never receives a relation, explicit or not.
+func TestEventModelingResetFrameTakesNoRelation(t *testing.T) {
+	p := emLayout(parseEventModeling(`eventmodeling
+    tf 01 ui CartUI
+    rf 02 pcr Rebuild ->> 01`))
+
+	if got := p.boxes[1].from; len(got) != 0 {
+		t.Errorf("reset frame from = %v, want none", got)
+	}
+}
+
+// extractNamespace splits on "." and takes the first part only when there are
+// exactly two, so a three-part name is a plain label in its band's own lane.
+func TestEventModelingThreePartNameIsNotNamespaced(t *testing.T) {
+	ed := parseEventModeling("eventmodeling\n    tf 01 ui CartUI\n    tf 02 cmd Shop.Inventory.AddItem ->> 01")
+	f := ed.frames[1]
+	if f.ns != "" || f.name != "Shop.Inventory.AddItem" {
+		t.Errorf("frame = ns %q name %q, want no namespace and the whole label", f.ns, f.name)
+	}
+	lanes, laneOf := emAssignLanes(ed.frames)
+	if got := lanes[laneOf["02"]].label; got != "Command/Read Model" {
+		t.Errorf("lane = %q, want the band's own lane", got)
+	}
+}
+
+// The entity type is a closed set: a typo is a parse error upstream, and the
+// line is dropped here.
+func TestEventModelingUnknownEntityTypeIsDropped(t *testing.T) {
+	ed := parseEventModeling("eventmodeling\n    tf 01 ui CartUI\n    tf 02 cdm AddItem\n    tf 03 evt ItemAdded")
+	if len(ed.frames) != 2 {
+		t.Fatalf("frames = %d, want the two well-formed ones", len(ed.frames))
+	}
+	if ed.frames[1].id != "03" {
+		t.Errorf("second frame = %q, want 03", ed.frames[1].id)
+	}
+}
+
+// The start rule allows `ISHIKAWA document` with no newline between them, so
+// the rest of the header line is the effect.
+func TestIshikawaEffectOnTheHeaderLine(t *testing.T) {
+	root := parseIshikawa("ishikawa-beta Late Delivery\n    Process\n        Slow handoffs")
+	if root.text != "Late Delivery" {
+		t.Fatalf("effect = %q", root.text)
+	}
+	if len(root.children) != 1 || root.children[0].text != "Process" {
+		t.Errorf("categories = %+v", root.children)
+	}
+}
+
+// TEXT is `[^\n]+`, so only a line that starts with %% is a comment.
+func TestIshikawaCommentIsWholeLineOnly(t *testing.T) {
+	root := parseIshikawa("ishikawa\nEffect\n  Pricing\n    Discount 20%% off\n%% a note")
+	causes := root.children[0].children
+	if len(causes) != 1 {
+		t.Fatalf("causes = %+v", causes)
+	}
+	if causes[0].text != "Discount 20%% off" {
+		t.Errorf("cause = %q, want the %%%% kept", causes[0].text)
+	}
+}

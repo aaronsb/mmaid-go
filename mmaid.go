@@ -132,6 +132,8 @@ func detectDiagramType(source string) string {
 			return "pie"
 		case strings.HasPrefix(lower, "treemap"):
 			return "treemap"
+		case strings.HasPrefix(lower, "treeview"):
+			return "treeview"
 		case strings.HasPrefix(lower, "statediagram"):
 			return "state"
 		case strings.HasPrefix(lower, "gantt"):
@@ -150,6 +152,10 @@ func detectDiagramType(source string) string {
 			return "journey"
 		case strings.HasPrefix(lower, "packet"):
 			return "packet"
+		case strings.HasPrefix(lower, "eventmodeling"):
+			return "eventmodeling"
+		case strings.HasPrefix(lower, "ishikawa"):
+			return "ishikawa"
 		case strings.HasPrefix(lower, "requirementdiagram"):
 			return "requirement"
 		case strings.HasPrefix(lower, "c4context"), strings.HasPrefix(lower, "c4container"),
@@ -207,6 +213,8 @@ func Render(source string, opts ...Option) (result string) {
 		canvas = diagram.RenderGitGraph(source, cs)
 	case "treemap":
 		canvas = diagram.RenderTreemap(source, cs, getThemePtr(cfg.theme))
+	case "treeview":
+		canvas = diagram.RenderTreeView(source, cs)
 	case "gantt":
 		canvas = diagram.RenderGantt(source, cs, getThemePtr(cfg.theme))
 	case "timeline":
@@ -223,6 +231,10 @@ func Render(source string, opts ...Option) (result string) {
 		canvas = diagram.RenderJourney(source, cs, getThemePtr(cfg.theme))
 	case "packet":
 		canvas = diagram.RenderPacket(source, cs, getThemePtr(cfg.theme))
+	case "eventmodeling":
+		canvas = diagram.RenderEventModeling(source, cs, getThemePtr(cfg.theme))
+	case "ishikawa":
+		canvas = diagram.RenderIshikawa(source, cs, getThemePtr(cfg.theme))
 	case "requirement":
 		g := diagram.ParseRequirementDiagram(source)
 		canvas = renderer.RenderGraphCanvas(g, cs, cfg.paddingX, cfg.paddingY, cfg.roundedEdges, diagram.UsableWidth())
