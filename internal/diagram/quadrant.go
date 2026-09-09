@@ -251,7 +251,7 @@ func RenderQuadrantChart(source string, cs renderer.CharSet, theme *renderer.The
 			for i := 0; i < textwidth.String(p.label)+1; i++ {
 				c.ClearCell(p.py, p.px+1+i)
 			}
-			c.Put(p.py, p.px+1, '─', "arrow")
+			c.Arm(p.py, p.px+1, glyph.E|glyph.W, glyph.Light, false, "arrow")
 			c.PutText(p.py, p.px+2, p.label, "label")
 		} else {
 			labelStart := p.px - textwidth.String(p.label) - 2
@@ -262,7 +262,7 @@ func RenderQuadrantChart(source string, cs renderer.CharSet, theme *renderer.The
 				c.ClearCell(p.py, labelStart+i)
 			}
 			c.PutText(p.py, labelStart, p.label, "label")
-			c.Put(p.py, p.px-1, '─', "arrow")
+			c.Arm(p.py, p.px-1, glyph.E|glyph.W, glyph.Light, false, "arrow")
 		}
 	}
 
