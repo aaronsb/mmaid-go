@@ -42,6 +42,34 @@ classDiagram
 
 ![class](class.png)
 
+## edge-styles
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+graph LR
+    A -.-> B
+    B ==> C
+    C --- D
+    D <--> E
+```
+
+![edge-styles](edge-styles.png)
+
+## edge-styles-ascii
+
+Rendered with `-a`.
+
+```mermaid
+graph LR
+    A -.-> B
+    B ==> C
+    C --- D
+    D <--> E
+```
+
+![edge-styles-ascii](edge-styles-ascii.png)
+
 ## er
 
 Rendered with `-a`.
