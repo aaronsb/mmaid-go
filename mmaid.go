@@ -58,7 +58,7 @@ func WithTheme(name string) Option {
 }
 
 // WithHyperlinks wraps the label of every node carrying a `click ID "url"` line
-// in an OSC 8 hyperlink. It applies to themed output.
+// in an OSC 8 hyperlink.
 func WithHyperlinks() Option {
 	return func(c *config) { c.hyperlinks = true }
 }
@@ -181,15 +181,15 @@ func Render(source string, opts ...Option) (result string) {
 	default:
 		g := parser.ParseFlowchart(source)
 		canvas = renderer.RenderGraphCanvas(g, cfg.useASCII, cfg.paddingX, cfg.paddingY, cfg.roundedEdges, diagram.UsableWidth())
-		if cfg.hyperlinks {
-			renderer.SetLinks(nodeLinks(g))
-			defer renderer.SetLinks(nil)
-		}
 	}
 
 	if canvas == nil {
 		return ""
 	}
+
+	// The link layer is recorded whatever the setting says; this decides
+	// whether it is emitted.
+	canvas.SetHyperlinks(cfg.hyperlinks)
 
 	// Apply theme if set, otherwise plain text
 	if cfg.theme != "" {
@@ -197,17 +197,6 @@ func Render(source string, opts ...Option) (result string) {
 		return canvas.ToColorString(theme)
 	}
 	return canvas.ToString()
-}
-
-// nodeLinks maps the label of each linked node to its URL.
-func nodeLinks(g *graph.Graph) map[string]string {
-	links := make(map[string]string)
-	for _, node := range g.Nodes {
-		if node.Link != "" {
-			links[node.Label] = node.Link
-		}
-	}
-	return links
 }
 
 func getThemePtr(name string) *renderer.Theme {

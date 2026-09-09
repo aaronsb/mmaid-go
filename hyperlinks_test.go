@@ -41,6 +41,55 @@ func TestHyperlinksOffByDefault(t *testing.T) {
 	}
 }
 
+// TestHyperlinksNeedNoTheme: OSC 8 carries no colour, so plain output links too
+// and NO_COLOR does not take the links with it.
+func TestHyperlinksNeedNoTheme(t *testing.T) {
+	out := Render(clickSource, WithHyperlinks())
+	if !strings.Contains(out, "\033]8;;https://example.com/start\033\\Start\033]8;;\033\\") {
+		t.Errorf("plain output does not carry the link:\n%s", out)
+	}
+}
+
+// TestHyperlinksPerNode: the link belongs to the cells a node drew, so two
+// nodes reading the same each keep their own URL.
+func TestHyperlinksPerNode(t *testing.T) {
+	out := Render(`flowchart LR
+    A[Docs] --> B[Docs]
+    click A "https://example.com/a"
+    click B "https://example.com/b"
+`, WithHyperlinks())
+
+	for _, want := range []string{
+		"\033]8;;https://example.com/a\033\\Docs\033]8;;\033\\",
+		"\033]8;;https://example.com/b\033\\Docs\033]8;;\033\\",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q:\n%s", want, out)
+		}
+	}
+}
+
+// TestHyperlinksDoNotLeakIntoOtherLabels: a label that reads the same as part of
+// another label links only its own node.
+func TestHyperlinksDoNotLeakIntoOtherLabels(t *testing.T) {
+	out := Render(`flowchart LR
+    A[Auth] --> B[Auth Service]
+    B --> C[Auth]
+    click A "https://example.com/auth"
+`, WithHyperlinks())
+
+	if n := strings.Count(out, "\033]8;;https://example.com/auth\033\\"); n != 1 {
+		t.Errorf("the URL opens %d times, want once:\n%s", n, out)
+	}
+	if !strings.Contains(out, "\033]8;;https://example.com/auth\033\\Auth\033]8;;\033\\") {
+		t.Errorf("A's own label is not the linked run:\n%s", out)
+	}
+	// The unlinked nodes keep their text unwrapped.
+	if strings.Contains(out, "\033]8;;https://example.com/auth\033\\Auth Service") {
+		t.Error("the link reached into B's label")
+	}
+}
+
 // TestHyperlinksLeaveTheFrameAlone is ADR-101's guarantee: the interpreter skips
 // OSC, so a .cells frame is the same either way.
 func TestHyperlinksLeaveTheFrameAlone(t *testing.T) {

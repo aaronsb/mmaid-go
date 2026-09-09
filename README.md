@@ -188,7 +188,7 @@ and `false`. `mmaid config show` prints each one with the layer it came from.
 `NO_COLOR`, set and non-empty, drops a theme that came from the file or the
 environment; `-t` still colours. `truecolor` false emits 256-colour
 approximations. `hyperlinks` true wraps the label of a node named by a
-`click ID "url"` line in an OSC 8 hyperlink, in themed output.
+`click ID "url"` line in an OSC 8 hyperlink, with or without a theme.
 
 ## Themes
 

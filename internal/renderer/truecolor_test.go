@@ -94,7 +94,7 @@ func TestInterpreterReadsBackTheApproximation(t *testing.T) {
 	want := [3]int{249, 38, 114}
 
 	c := NewCanvas(1, 1)
-	c.Put(0, 0, 'x', true, "_ansi:"+hexColor(hex))
+	c.Put(0, 0, 'x', "_ansi:"+hexColor(hex))
 	frame, err := cells.Interpret(c.ToColorString(GetTheme("default")))
 	if err != nil {
 		t.Fatalf("interpret: %v", err)

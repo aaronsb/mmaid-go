@@ -166,6 +166,10 @@ func drawNodes(canvas *Canvas, g *graph.Graph, l *layout.GridLayout, cs CharSet)
 			renderer = DrawRectangle
 		}
 
+		// Text written while the link is current belongs to it, which is the
+		// node's label and nothing else: borders and edges are not text.
+		canvas.SetCurrentLink(node.Link)
+
 		renderer(canvas, p.DrawX, p.DrawY, p.DrawWidth, p.DrawHeight, node.Label, cs, style)
 
 		// If node has label segments, overwrite label with styled text
@@ -180,6 +184,8 @@ func drawNodes(canvas *Canvas, g *graph.Graph, l *layout.GridLayout, cs CharSet)
 			row := p.DrawY + p.DrawHeight/2
 			canvas.PutStyledText(row, col, segments)
 		}
+
+		canvas.SetCurrentLink("")
 	}
 }
 

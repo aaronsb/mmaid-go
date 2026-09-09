@@ -418,8 +418,6 @@ func (c *Canvas) ToColorString(theme Theme) string {
 		"subgraph_fill":  theme.SubgraphFill,
 	}
 
-	linkOpen, linkClose := linkSpans(c)
-
 	rst := reset()
 	var b strings.Builder
 	b.Grow(c.Height * (c.Width*4 + 1)) // rough estimate with escape codes
@@ -446,7 +444,7 @@ func (c *Canvas) ToColorString(theme Theme) string {
 			lastCol--
 		}
 
-		prevStyle := ""
+		prevStyle, openLink := "", ""
 		for x := 0; x <= lastCol; x++ {
 			ch := c.grid[y][x]
 			if ch == Continuation {
@@ -483,9 +481,7 @@ func (c *Canvas) ToColorString(theme Theme) string {
 				ansi = Downgrade(ansi)
 			}
 
-			if url, ok := linkOpen[[2]int{y, x}]; ok {
-				b.WriteString(oscOpen(url))
-			}
+			openLink = c.writeLink(&b, y, x, openLink)
 
 			if ansi == "" {
 				if prevStyle != "" {
@@ -503,10 +499,9 @@ func (c *Canvas) ToColorString(theme Theme) string {
 				}
 				b.WriteRune(ch)
 			}
-
-			if linkClose[[2]int{y, x}] {
-				b.WriteString(oscClose)
-			}
+		}
+		if openLink != "" {
+			b.WriteString(oscClose)
 		}
 		if prevStyle != "" {
 			b.WriteString(rst)
