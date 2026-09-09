@@ -225,25 +225,47 @@ func abs(x int) int {
 
 // countPorts records, per node and side, the edge ends the preferred sides
 // would put there. Routing may choose the alternative side for an edge, so
-// the count is the estimate node sizing works from.
+// the count is the estimate node sizing works from. A subgraph end stands
+// in for one of its nodes and takes no port itself.
 func countPorts(g *graph.Graph, layout *GridLayout) {
 	direction := g.Direction.Normalized()
+	stand := func(id string, isSubgraph bool) *NodePlacement {
+		if !isSubgraph {
+			return layout.Placements[id]
+		}
+		if sg := g.FindSubgraphByID(id); sg != nil {
+			for nid := range gatherIDs(sg) {
+				if p, ok := layout.Placements[nid]; ok {
+					return p
+				}
+			}
+		}
+		return nil
+	}
 	for _, e := range g.Edges {
-		if e.SourceIsSubgraph || e.TargetIsSubgraph {
+		src := stand(e.Source, e.SourceIsSubgraph)
+		tgt := stand(e.Target, e.TargetIsSubgraph)
+		if src == nil || tgt == nil {
 			continue
 		}
-		src, ok1 := layout.Placements[e.Source]
-		tgt, ok2 := layout.Placements[e.Target]
-		if !ok1 || !ok2 {
-			continue
-		}
-		if e.IsSelfReference() {
+		if e.IsSelfReference() && !e.SourceIsSubgraph {
 			src.PortCount[Top]++
 			src.PortCount[Right]++
 			continue
 		}
 		pref, _ := PreferredSides(src.Grid, tgt.Grid, direction)
-		src.PortCount[pref[0]]++
-		tgt.PortCount[pref[1]]++
+		if !e.SourceIsSubgraph {
+			src.PortCount[pref[0]]++
+		}
+		if !e.TargetIsSubgraph {
+			tgt.PortCount[pref[1]]++
+		}
 	}
+}
+
+// gatherIDs returns every node in a subgraph and its children.
+func gatherIDs(sg *graph.Subgraph) map[string]bool {
+	out := make(map[string]bool)
+	gatherAllNodes(sg, out)
+	return out
 }

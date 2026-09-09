@@ -1,6 +1,8 @@
 package routing
 
 import (
+	"fmt"
+	"io"
 	"sort"
 	"strings"
 
@@ -10,13 +12,28 @@ import (
 )
 
 // labelSpace is the draw-space bookkeeping label placement needs: the cells
-// no label may cover, the cells edges have drawn lines through so far, and
-// the node rectangles a label keeps away from.
+// no label may cover, the cells edges have drawn lines through so far, the
+// node rectangles a label keeps away from, and the labels placed so far
+// with the grid cells they hold.
 type labelSpace struct {
 	l       *layout.GridLayout
 	blocked map[Point]bool
 	lines   map[Point]bool
 	nodes   []rect
+	// aprons are the grid cells a node side's ports step into; a label
+	// never reserves one, so labels do not steer which side an edge uses.
+	aprons map[layout.GridCoord]bool
+	// held counts the labels reserving each grid cell.
+	held   map[layout.GridCoord]int
+	placed map[int]*placement // by RoutedEdge.Index
+	warned map[int]bool
+	warn   io.Writer
+}
+
+// placement is where one label sits and what it reserved.
+type placement struct {
+	row, col, w int
+	cells       []layout.GridCoord
 }
 
 // rect is an inclusive draw-space rectangle.
@@ -24,8 +41,17 @@ type rect struct {
 	x0, y0, x1, y1 int
 }
 
-func newLabelSpace(g *graph.Graph, l *layout.GridLayout) *labelSpace {
-	s := &labelSpace{l: l, blocked: make(map[Point]bool), lines: make(map[Point]bool)}
+func newLabelSpace(g *graph.Graph, l *layout.GridLayout, aprons map[layout.GridCoord]bool, warn io.Writer) *labelSpace {
+	s := &labelSpace{
+		l:       l,
+		blocked: make(map[Point]bool),
+		lines:   make(map[Point]bool),
+		aprons:  aprons,
+		held:    make(map[layout.GridCoord]int),
+		placed:  make(map[int]*placement),
+		warned:  make(map[int]bool),
+		warn:    warn,
+	}
 	for _, nid := range g.NodeOrder {
 		p, ok := l.Placements[nid]
 		if !ok {
@@ -63,26 +89,53 @@ func (s *labelSpace) block(r rect) {
 	}
 }
 
-// addLines records every cell of a draw path.
-func (s *labelSpace) addLines(path []Point) {
+// addLines records every cell of a draw path and returns the indices of
+// the labels the path runs under, which must move.
+func (s *labelSpace) addLines(path []Point) []int {
+	var hit []int
 	for i := 1; i < len(path); i++ {
 		a, b := path[i-1], path[i]
 		dx, dy := sign(b.Col-a.Col), sign(b.Row-a.Row)
 		for p := a; ; p = (Point{p.Col + dx, p.Row + dy}) {
 			s.lines[p] = true
+			if idx, ok := s.labelAt(p); ok && !contains(hit, idx) {
+				hit = append(hit, idx)
+			}
 			if p == b {
 				break
 			}
 		}
 	}
+	return hit
+}
+
+// labelAt returns the index of the label covering a cell.
+func (s *labelSpace) labelAt(p Point) (int, bool) {
+	for idx, pl := range s.placed {
+		if p.Row == pl.row && p.Col >= pl.col && p.Col < pl.col+pl.w {
+			return idx, true
+		}
+	}
+	return 0, false
+}
+
+func contains(xs []int, x int) bool {
+	for _, v := range xs {
+		if v == x {
+			return true
+		}
+	}
+	return false
 }
 
 // place finds the edge's label a home beside its path and reserves the
 // cells: the last segment first, then each earlier one; the whole label
-// first, then its first word with the ellipsis; off every line first, then
-// over lines but never over a border or another label. A label that fits
-// nowhere is dropped.
+// first, then its first word with the ellipsis; never over a line, a node,
+// a subgraph border or title, or another label. A label that fits nowhere
+// is dropped with a warning. Placing an edge's label again first releases
+// what it held.
 func (s *labelSpace) place(re *RoutedEdge, ellipsis string) {
+	s.release(re)
 	if re.Label == "" || len(re.DrawPath) < 2 {
 		return
 	}
@@ -91,17 +144,56 @@ func (s *labelSpace) place(re *RoutedEdge, ellipsis string) {
 		texts = append(texts, words[0]+ellipsis)
 	}
 	arrows := arrowCells(re)
-	for _, overLines := range []bool{false, true} {
-		for _, text := range texts {
-			if row, col, ok := s.find(re.DrawPath, arrows, text, overLines); ok {
-				w := textwidth.String(text)
-				re.LabelText, re.LabelRow, re.LabelCol = text, row, col
-				s.block(rect{col, row, col + w - 1, row})
-				s.l.ReserveDraw(col, row, col+w-1, row)
-				return
-			}
+	for _, text := range texts {
+		if row, col, ok := s.find(re.DrawPath, arrows, text); ok {
+			s.commit(re, text, row, col)
+			return
 		}
 	}
+	if s.warn != nil && !s.warned[re.Index] {
+		s.warned[re.Index] = true
+		fmt.Fprintf(s.warn, "mmaid: edge label %q dropped\n", re.Label)
+	}
+}
+
+// commit records a placement on the edge, blocks its cells, and reserves
+// the grid cells under it that are not aprons.
+func (s *labelSpace) commit(re *RoutedEdge, text string, row, col int) {
+	w := textwidth.String(text)
+	re.LabelText, re.LabelRow, re.LabelCol = text, row, col
+	s.block(rect{col, row, col + w - 1, row})
+	pl := &placement{row: row, col: col, w: w}
+	c0, r0 := s.l.DrawToGrid(col, row)
+	c1, _ := s.l.DrawToGrid(col+w-1, row)
+	for c := c0; c <= c1; c++ {
+		gc := layout.GridCoord{Col: c, Row: r0}
+		if s.aprons[gc] {
+			continue
+		}
+		s.held[gc]++
+		s.l.Reserve(c, r0)
+		pl.cells = append(pl.cells, gc)
+	}
+	s.placed[re.Index] = pl
+}
+
+// release gives back the cells an edge's label held.
+func (s *labelSpace) release(re *RoutedEdge) {
+	pl, ok := s.placed[re.Index]
+	if !ok {
+		return
+	}
+	delete(s.placed, re.Index)
+	for x := pl.col; x < pl.col+pl.w; x++ {
+		delete(s.blocked, Point{x, pl.row})
+	}
+	for _, gc := range pl.cells {
+		if s.held[gc]--; s.held[gc] <= 0 {
+			delete(s.held, gc)
+			delete(s.l.Reserved, gc)
+		}
+	}
+	re.LabelText, re.LabelRow, re.LabelCol = "", 0, 0
 }
 
 // arrowCells returns the cells the edge's arrowheads occupy.
@@ -127,7 +219,7 @@ func stepToward(a, b Point) Point {
 // first cell the label fits at. A label sits beside a plain run cell: not a
 // segment's end, which is a corner or a border, and not an arrowhead. A
 // segment with no such cell is skipped.
-func (s *labelSpace) find(path []Point, arrows map[Point]bool, text string, overLines bool) (row, col int, ok bool) {
+func (s *labelSpace) find(path []Point, arrows map[Point]bool, text string) (row, col int, ok bool) {
 	w := textwidth.String(text)
 	if w == 0 {
 		return 0, 0, false
@@ -150,7 +242,7 @@ func (s *labelSpace) find(path []Point, arrows map[Point]bool, text string, over
 			spots = s.besideHorizontal(a.Row, cols, w)
 		}
 		for _, p := range spots {
-			if s.fits(p.Row, p.Col, w, overLines) {
+			if s.fits(p.Row, p.Col, w) {
 				return p.Row, p.Col, true
 			}
 		}
@@ -171,14 +263,14 @@ func plainRun(lo, hi int, arrow func(int) bool) []int {
 }
 
 // fits reports whether a label of width w at (row, col) covers no blocked
-// cell, and no line cell unless overLines.
-func (s *labelSpace) fits(row, col, w int, overLines bool) bool {
+// cell and no line cell.
+func (s *labelSpace) fits(row, col, w int) bool {
 	if row < 0 || col < 0 {
 		return false
 	}
 	for x := col; x < col+w; x++ {
 		p := Point{x, row}
-		if s.blocked[p] || (!overLines && s.lines[p]) {
+		if s.blocked[p] || s.lines[p] {
 			return false
 		}
 	}

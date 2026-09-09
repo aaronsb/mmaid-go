@@ -1,6 +1,7 @@
 package renderer
 
 import (
+	"os"
 	"strings"
 
 	"github.com/aaronsb/mmaid-go/internal/glyph"
@@ -55,7 +56,7 @@ func RenderGraphCanvas(g *graph.Graph, cs CharSet, paddingX, paddingY int, round
 	if useASCII {
 		ellipsis = "..."
 	}
-	routed := routing.RouteEdgesWith(g, l, ellipsis)
+	routed := routing.RouteEdgesWith(g, l, ellipsis, os.Stderr)
 
 	// The canvas covers every layout column and row, so an edge routed
 	// through the gap past the last node has cells to draw in, plus a

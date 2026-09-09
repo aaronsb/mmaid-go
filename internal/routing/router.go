@@ -1,7 +1,9 @@
 package routing
 
 import (
+	"io"
 	"math"
+	"os"
 
 	"github.com/aaronsb/mmaid-go/internal/graph"
 	"github.com/aaronsb/mmaid-go/internal/layout"
@@ -52,18 +54,21 @@ type edgeEnds struct {
 }
 
 // RouteEdges routes all edges in the graph using the computed layout. Labels
-// shrink to their first word and Ellipsis when they do not fit.
+// shrink to their first word and Ellipsis when they do not fit; a label that
+// fits nowhere is dropped with a warning on stderr.
 func RouteEdges(g *graph.Graph, l *layout.GridLayout) []RoutedEdge {
-	return RouteEdgesWith(g, l, Ellipsis)
+	return RouteEdgesWith(g, l, Ellipsis, os.Stderr)
 }
 
-// RouteEdgesWith is RouteEdges with the ellipsis a shrunk label ends in.
+// RouteEdgesWith is RouteEdges with the ellipsis a shrunk label ends in and
+// the writer a dropped label is reported to (nil for none).
 //
 // Routing takes two passes over the edges. The first chooses each edge's
 // sides on the bare grid; ports are then assigned per side. The second
 // routes each edge through its chosen sides, places its label, and reserves
-// the label's cells against the edges after it.
-func RouteEdgesWith(g *graph.Graph, l *layout.GridLayout, ellipsis string) []RoutedEdge {
+// the label's cells against the edges after it. A line is never drawn under
+// a label: a label a later path runs under is placed again, or dropped.
+func RouteEdgesWith(g *graph.Graph, l *layout.GridLayout, ellipsis string, warn io.Writer) []RoutedEdge {
 	direction := g.Direction.Normalized()
 	l.Reserved = nil
 
@@ -125,7 +130,7 @@ func RouteEdgesWith(g *graph.Graph, l *layout.GridLayout, ellipsis string) []Rou
 
 	// Pass 2: paths, draw paths, labels.
 	soft = make(map[Point]Axis)
-	space := newLabelSpace(g, l)
+	space := newLabelSpace(g, l, aprons(g, ends, direction), warn)
 	var routed []RoutedEdge
 	for i, edge := range g.Edges {
 		e := ends[i]
@@ -136,7 +141,7 @@ func RouteEdgesWith(g *graph.Graph, l *layout.GridLayout, ellipsis string) []Rou
 		if e.self {
 			path = selfPath(e.src)
 		} else {
-			path = routeThrough(e, l, direction, &Obstacles{Soft: soft, Border: border})
+			path = routeThrough(e, ends, l, direction, &Obstacles{Soft: soft, Border: border})
 		}
 		Occupy(soft, path)
 
@@ -155,12 +160,49 @@ func RouteEdgesWith(g *graph.Graph, l *layout.GridLayout, ellipsis string) []Rou
 		for _, p := range path {
 			re.OccupiedCells[p] = true
 		}
-		space.addLines(re.DrawPath)
+		displaced := space.addLines(re.DrawPath)
 		space.place(&re, ellipsis)
 		routed = append(routed, re)
+		for _, idx := range displaced {
+			for j := range routed {
+				if routed[j].Index == idx {
+					space.place(&routed[j], ellipsis)
+				}
+			}
+		}
 	}
 
 	return routed
+}
+
+// aprons returns the grid cells a node side's ports step into, for every
+// side an edge may use.
+func aprons(g *graph.Graph, ends []*edgeEnds, direction graph.Direction) map[layout.GridCoord]bool {
+	out := make(map[layout.GridCoord]bool)
+	add := func(p *layout.NodePlacement, side AttachDir) {
+		a := side.AttachCell(p.Grid)
+		out[side.AttachCell(a)] = true
+	}
+	for i, e := range ends {
+		if e == nil {
+			continue
+		}
+		if e.self {
+			add(e.src, AttachTop)
+			add(e.src, AttachRight)
+			continue
+		}
+		pref, alt := layout.PreferredSides(e.src.Grid, e.tgt.Grid, direction)
+		for _, pair := range [][2]AttachDir{pref, alt} {
+			if !g.Edges[i].SourceIsSubgraph {
+				add(e.src, pair[0])
+			}
+			if !g.Edges[i].TargetIsSubgraph {
+				add(e.tgt, pair[1])
+			}
+		}
+	}
+	return out
 }
 
 // centreAlong returns a placement's centre along the axis a side runs
@@ -197,9 +239,10 @@ func choosePath(
 
 // routeThrough routes an edge through the sides pass 1 chose, with the
 // labels placed so far as hard obstacles. If those sides no longer connect
-// it tries the other pair, and if no label-free path exists it routes
-// through the labels rather than draw a direct line.
-func routeThrough(e *edgeEnds, l *layout.GridLayout, direction graph.Direction, obs *Obstacles) []Point {
+// it tries the other pair, taking the free port nearest each side's centre.
+// With no label-free path either way it routes through the labels, which
+// then move.
+func routeThrough(e *edgeEnds, ends []*edgeEnds, l *layout.GridLayout, direction graph.Direction, obs *Obstacles) []Point {
 	free := func(c, r int) bool { return l.IsFree(c, r, nil) }
 	if path, _ := findBetween(e.src, e.tgt, e.sides, free, obs); path != nil {
 		return path
@@ -209,10 +252,12 @@ func routeThrough(e *edgeEnds, l *layout.GridLayout, direction graph.Direction, 
 	if e.sides == alt {
 		other = pref
 	}
-	if path, _ := findBetween(e.src, e.tgt, other, free, obs); path != nil {
-		e.sides = other
-		e.ports = [2]int{}
-		return path
+	if other != e.sides {
+		if path, _ := findBetween(e.src, e.tgt, other, free, obs); path != nil {
+			e.sides = other
+			e.ports = [2]int{freePort(l, ends, e, 0), freePort(l, ends, e, 1)}
+			return path
+		}
 	}
 	ignoreLabels := func(c, r int) bool {
 		_, node := l.GridOccupied[layout.GridCoord{Col: c, Row: r}]
@@ -222,6 +267,37 @@ func routeThrough(e *edgeEnds, l *layout.GridLayout, direction graph.Direction, 
 		return path
 	}
 	return []Point{attachPoint(e.src, e.sides[0]), attachPoint(e.tgt, e.sides[1])}
+}
+
+// freePort returns the port nearest the centre of end which of e's side
+// that no other edge end on that side holds; the centre when the side is
+// full.
+func freePort(l *layout.GridLayout, ends []*edgeEnds, e *edgeEnds, which int) int {
+	node, side := e.src, e.sides[0]
+	if which == 1 {
+		node, side = e.tgt, e.sides[1]
+	}
+	taken := make(map[int]bool)
+	for _, o := range ends {
+		if o == nil || o == e {
+			continue
+		}
+		if o.src.NodeID == node.NodeID && o.sides[0] == side {
+			taken[o.ports[0]] = true
+		}
+		if o.tgt.NodeID == node.NodeID && o.sides[1] == side {
+			taken[o.ports[1]] = true
+		}
+	}
+	lo, hi := l.PortRange(node, side)
+	for d := 0; d <= max(-lo, hi); d++ {
+		for _, off := range []int{-d, d} {
+			if off >= lo && off <= hi && !taken[off] {
+				return off
+			}
+		}
+	}
+	return 0
 }
 
 func findBetween(src, tgt *layout.NodePlacement, sides [2]AttachDir, free func(c, r int) bool, obs *Obstacles) ([]Point, float64) {
