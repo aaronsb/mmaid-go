@@ -1098,3 +1098,68 @@ func TestIshikawaRendersSpineAndBones(t *testing.T) {
 	assertCanvasContains(t, c, "━")
 	assertCanvasContains(t, c, "Slow handoffs")
 }
+
+// The title and accessibility terminals are case-sensitive, the two
+// accessibility ones need their separator, and all three sit before the nodes
+// in the entry rule — so these are three ordinary children.
+func TestTreeViewKeywordNamedNodes(t *testing.T) {
+	td := parseTreeView(`treeView-beta
+    docs/
+        accTitle.md
+        Title
+        notes.txt`)
+
+	if len(td.roots) != 1 {
+		t.Fatalf("roots = %d", len(td.roots))
+	}
+	kids := td.roots[0].children
+	want := []string{"accTitle.md", "Title", "notes.txt"}
+	if len(kids) != len(want) {
+		t.Fatalf("children = %d, want %d", len(kids), len(want))
+	}
+	for i, w := range want {
+		if kids[i].label != w {
+			t.Errorf("child %d = %q, want %q", i, kids[i].label, w)
+		}
+	}
+	if td.title != "" {
+		t.Errorf("title = %q, want none taken from a node", td.title)
+	}
+}
+
+// A real title is still read, and so is a bare `title`.
+func TestTreeViewTitle(t *testing.T) {
+	td := parseTreeView("treeView-beta\ntitle Project layout\nsrc/")
+	if td.title != "Project layout" {
+		t.Errorf("title = %q", td.title)
+	}
+	if len(td.roots) != 1 || td.roots[0].label != "src/" {
+		t.Errorf("roots = %+v", td.roots)
+	}
+}
+
+// BARE_NAME runs to end of line, so only a line that starts with %% is a
+// comment.
+func TestTreeViewCommentIsWholeLineOnly(t *testing.T) {
+	td := parseTreeView("treeView-beta\nnotes/\n    100%%done.txt\n%% a comment\n    todo.txt")
+	kids := td.roots[0].children
+	if len(kids) != 2 {
+		t.Fatalf("children = %d, want the two files", len(kids))
+	}
+	if kids[0].label != "100%%done.txt" {
+		t.Errorf("label = %q, want the %%%% kept", kids[0].label)
+	}
+}
+
+// The value converters count indentation one column per character, so a tab
+// is one column and nests under a two-space line.
+func TestTreeViewTabIsOneColumn(t *testing.T) {
+	td := parseTreeView("treeView-beta\nroot/\n\tchild/\n  grand.txt")
+	child := td.roots[0].children
+	if len(child) != 1 || child[0].label != "child/" {
+		t.Fatalf("children of root = %+v", child)
+	}
+	if len(child[0].children) != 1 || child[0].children[0].label != "grand.txt" {
+		t.Errorf("children of child = %+v, want grand.txt nested", child[0].children)
+	}
+}

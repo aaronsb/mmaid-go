@@ -8,6 +8,18 @@ import (
 	"github.com/aaronsb/mmaid-go/internal/renderer"
 )
 
+// Skipped, against treeView.langium and its value converter at mermaid
+// fe0e2375:
+//   - `icon(...)`: the canvas has no icon pack to draw from.
+//   - `:::class`: there is no stylesheet behind a terminal frame.
+//   - `accTitle` and `accDescr`.
+//   - The box-drawing preprocessor, which takes a tree someone has already
+//     drawn and reads the structure back out of its guides.
+//
+// Only a line whose first non-blank characters are `%%` is a comment: the
+// grammar's BARE_NAME and DESC_ANNOTATION both run to end of line, so
+// `100%%done.txt` keeps its name.
+
 // treeViewNode is one label in a treeView-beta tree. A label ending in "/" is
 // a directory and renders bold; anything else is a leaf.
 type treeViewNode struct {
@@ -26,7 +38,12 @@ type treeViewData struct {
 
 var (
 	reTreeViewHeader = regexp.MustCompile(`(?i)^treeview(-beta)?$`)
-	reTreeViewTitle  = regexp.MustCompile(`(?i)^title(?:\s+(.*))?$`)
+	// TITLE, ACC_TITLE and ACC_DESCR are case-sensitive terminals, and the
+	// two accessibility ones need their separator, so `accTitle.md` and
+	// `Title` are ordinary labels.
+	reTreeViewTitle    = regexp.MustCompile(`^title(?:[ \t](.*))?$`)
+	reTreeViewAccTitle = regexp.MustCompile(`^accTitle[ \t]*:`)
+	reTreeViewAccDescr = regexp.MustCompile(`^accDescr[ \t]*[:{]`)
 	// The markers a bare label stops before, from the grammar's BARE_NAME
 	// terminal.
 	reTreeViewAnnotation = regexp.MustCompile(`[ \t]+(:::|icon\(|##)`)
@@ -34,26 +51,6 @@ var (
 
 // tvIndent is the column step per tree level: the width of "├──".
 const tvIndent = 3
-
-// stripTreeViewComment cuts a `%%` comment, leaving one inside a quoted label
-// alone.
-func stripTreeViewComment(line string) string {
-	quote := rune(0)
-	runes := []rune(line)
-	for i := 0; i < len(runes); i++ {
-		switch {
-		case quote != 0:
-			if runes[i] == quote {
-				quote = 0
-			}
-		case runes[i] == '"' || runes[i] == '\'':
-			quote = runes[i]
-		case runes[i] == '%' && i+1 < len(runes) && runes[i+1] == '%':
-			return string(runes[:i])
-		}
-	}
-	return line
-}
 
 // splitTreeViewLabel separates a node's label from its annotations.
 func splitTreeViewLabel(s string) (label, rest string) {
@@ -97,6 +94,19 @@ func treeViewDescription(rest string) string {
 	return ""
 }
 
+// indentWidth counts leading whitespace one column per character, as the
+// grammar's value converters do.
+func indentWidth(line string) int {
+	n := 0
+	for _, ch := range line {
+		if ch != ' ' && ch != '\t' {
+			break
+		}
+		n++
+	}
+	return n
+}
+
 // parseTreeView parses a Mermaid treeView-beta definition.
 //
 //	treeView-beta
@@ -114,7 +124,7 @@ func parseTreeView(source string) *treeViewData {
 	skipBlock := false
 
 	for _, line := range strings.Split(source, "\n") {
-		line = stripTreeViewComment(strings.TrimRight(line, "\r"))
+		line = strings.TrimRight(line, "\r")
 		trimmed := strings.TrimSpace(line)
 		if skipBlock {
 			if strings.HasPrefix(trimmed, "}") {
@@ -122,32 +132,26 @@ func parseTreeView(source string) *treeViewData {
 			}
 			continue
 		}
-		if trimmed == "" || reTreeViewHeader.MatchString(trimmed) {
+		if trimmed == "" || strings.HasPrefix(trimmed, "%%") || reTreeViewHeader.MatchString(trimmed) {
 			continue
 		}
-		if m := reTreeViewTitle.FindStringSubmatch(trimmed); m != nil {
-			td.title = strings.TrimSpace(m[1])
-			continue
-		}
-		lower := strings.ToLower(trimmed)
-		if strings.HasPrefix(lower, "acctitle") || strings.HasPrefix(lower, "accdescr") {
-			skipBlock = strings.HasSuffix(trimmed, "{")
-			continue
-		}
-
-		indent := 0
-	measure:
-		for _, ch := range line {
-			switch ch {
-			case ' ':
-				indent++
-			case '\t':
-				indent += 4
-			default:
-				break measure
+		// TitleAndAccessibilities sits before the nodes in the entry rule, so
+		// once a node has been read these keywords are labels again.
+		if len(stack) == 0 {
+			if m := reTreeViewTitle.FindStringSubmatch(trimmed); m != nil {
+				td.title = strings.TrimSpace(m[1])
+				continue
+			}
+			if reTreeViewAccTitle.MatchString(trimmed) {
+				continue
+			}
+			if reTreeViewAccDescr.MatchString(trimmed) {
+				skipBlock = strings.HasSuffix(trimmed, "{")
+				continue
 			}
 		}
 
+		indent := indentWidth(line)
 		label, rest := splitTreeViewLabel(trimmed)
 		label = strings.TrimSpace(label)
 		if label == "" {
