@@ -5,11 +5,13 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
 // Settings is one layer of configuration. A nil field is unset, so a layer can
@@ -133,25 +135,32 @@ func (r Resolved) Value(key string) string {
 }
 
 // Path returns the configuration file's location:
-// $XDG_CONFIG_HOME/mmaid/config.json, or ~/.config/mmaid/config.json.
+// $XDG_CONFIG_HOME/mmaid/config.json, or ~/.config/mmaid/config.json. With
+// neither variable set there is nowhere to look and it returns "", which Load
+// reads as no file rather than as a path relative to the working directory.
 func Path() string {
 	if dir := os.Getenv("XDG_CONFIG_HOME"); dir != "" {
 		return filepath.Join(dir, "mmaid", "config.json")
 	}
 	home, err := os.UserHomeDir()
-	if err != nil {
-		return filepath.Join(".config", "mmaid", "config.json")
+	if err != nil || home == "" {
+		return ""
 	}
 	return filepath.Join(home, ".config", "mmaid", "config.json")
 }
 
-// Load reads the file at path. A missing file is an empty configuration, not an
-// error; malformed JSON is an error naming the path.
+// Load reads the file at path. A path that names nothing — missing, or a
+// directory, or under one — is an empty configuration and no error. Malformed
+// JSON, a wrongly typed value and an unreadable file are errors naming the
+// path, and the caller decides whether one is fatal.
 func Load(path string) (File, error) {
 	var f File
+	if path == "" {
+		return f, nil
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if isAbsent(err) {
 			return f, nil
 		}
 		return f, fmt.Errorf("reading %s: %w", path, err)
@@ -160,6 +169,15 @@ func Load(path string) (File, error) {
 		return File{}, fmt.Errorf("%s: %w", path, err)
 	}
 	return f, nil
+}
+
+// isAbsent reports whether the error means there is no configuration file
+// there: no such path, a directory in place of the file, or a file where a
+// directory was expected.
+func isAbsent(err error) bool {
+	return os.IsNotExist(err) ||
+		errors.Is(err, syscall.EISDIR) ||
+		errors.Is(err, syscall.ENOTDIR)
 }
 
 // TerminalIdentity returns the key a profile is looked up by: TERM_PROGRAM when
@@ -185,91 +203,101 @@ type resolver struct {
 	out      *Resolved
 }
 
-// pick walks the layers for one setting: the flag, then the environment, then
-// the profile, then the file's default section. It reports the raw value, the
-// source label, and whether any layer answered.
-func (rs *resolver) pick(key string, flag *string, prof, def *string) (string, string, bool) {
+// candidate is one layer's answer for a setting.
+type candidate struct{ value, source string }
+
+// candidates lists the layers that answered for one setting, in resolution
+// order: the flag, the environment, the profile, the file's default section.
+func (rs *resolver) candidates(key string, flag, prof, def *string) []candidate {
+	var out []candidate
 	if flag != nil {
-		return *flag, "flag", true
+		out = append(out, candidate{*flag, "flag"})
 	}
 	name := envName(key)
 	if v := rs.env(name); v != "" {
-		return v, "env " + name, true
+		out = append(out, candidate{v, "env " + name})
 	}
 	if prof != nil {
-		return *prof, "profile " + rs.identity, true
+		out = append(out, candidate{*prof, "profile " + rs.identity})
 	}
 	if def != nil {
-		return *def, "default", true
+		out = append(out, candidate{*def, "default"})
 	}
-	return "", "builtin", false
+	return out
 }
 
 func (rs *resolver) str(key string, flag, prof, def *string, builtin string) string {
-	v, src, ok := rs.pick(key, flag, prof, def)
-	rs.out.Source[key] = src
-	if !ok {
-		return builtin
+	for _, c := range rs.candidates(key, flag, prof, def) {
+		rs.out.Source[key] = c.source
+		return c.value
 	}
-	return v
+	rs.out.Source[key] = "builtin"
+	return builtin
 }
 
+// num resolves an integer setting. A layer whose text is not a number is
+// reported and passed over, so the next layer down still answers.
 func (rs *resolver) num(key string, flag, prof, def *int, builtin int) int {
-	var fs, ps, ds *string
-	if flag != nil {
-		s := strconv.Itoa(*flag)
-		fs = &s
+	for _, c := range rs.candidates(key, itoa(flag), itoa(prof), itoa(def)) {
+		n, err := strconv.Atoi(c.value)
+		if err != nil {
+			rs.warn(c, "a number")
+			continue
+		}
+		rs.out.Source[key] = c.source
+		return n
 	}
-	if prof != nil {
-		s := strconv.Itoa(*prof)
-		ps = &s
-	}
-	if def != nil {
-		s := strconv.Itoa(*def)
-		ds = &s
-	}
-	v, src, ok := rs.pick(key, fs, ps, ds)
-	if !ok {
-		rs.out.Source[key] = src
-		return builtin
-	}
-	n, err := strconv.Atoi(v)
-	if err != nil {
-		rs.out.Warnings = append(rs.out.Warnings, fmt.Sprintf("%s: %q is not a number, ignored", src, v))
-		rs.out.Source[key] = "builtin"
-		return builtin
-	}
-	rs.out.Source[key] = src
-	return n
+	rs.out.Source[key] = "builtin"
+	return builtin
 }
 
+// boolean resolves a boolean setting, passing over any layer whose text is not
+// one of 1, 0, true or false.
 func (rs *resolver) boolean(key string, flag, prof, def *bool, builtin bool) bool {
-	var fs, ps, ds *string
-	if flag != nil {
-		s := strconv.FormatBool(*flag)
-		fs = &s
+	for _, c := range rs.candidates(key, btoa(flag), btoa(prof), btoa(def)) {
+		b, err := parseBool(c.value)
+		if err != nil {
+			rs.warn(c, "a boolean")
+			continue
+		}
+		rs.out.Source[key] = c.source
+		return b
 	}
-	if prof != nil {
-		s := strconv.FormatBool(*prof)
-		ps = &s
+	rs.out.Source[key] = "builtin"
+	return builtin
+}
+
+func (rs *resolver) warn(c candidate, want string) {
+	rs.out.Warnings = append(rs.out.Warnings,
+		fmt.Sprintf("%s: %q is not %s, ignored", c.source, c.value, want))
+}
+
+func itoa(v *int) *string {
+	if v == nil {
+		return nil
 	}
-	if def != nil {
-		s := strconv.FormatBool(*def)
-		ds = &s
+	s := strconv.Itoa(*v)
+	return &s
+}
+
+func btoa(v *bool) *string {
+	if v == nil {
+		return nil
 	}
-	v, src, ok := rs.pick(key, fs, ps, ds)
-	if !ok {
-		rs.out.Source[key] = src
-		return builtin
+	s := strconv.FormatBool(*v)
+	return &s
+}
+
+// splitList reads a comma-separated environment value as a list, dropping empty
+// entries and surrounding space.
+func splitList(s string) []string {
+	var out []string
+	for _, part := range strings.Split(s, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
 	}
-	b, err := parseBool(v)
-	if err != nil {
-		rs.out.Warnings = append(rs.out.Warnings, fmt.Sprintf("%s: %q is not a boolean, ignored", src, v))
-		rs.out.Source[key] = "builtin"
-		return builtin
-	}
-	rs.out.Source[key] = src
-	return b
+	return out
 }
 
 // parseBool accepts 1, 0, true and false in any case.
@@ -306,9 +334,11 @@ func Resolve(flags Settings, env func(string) string, file File, identity string
 	out.Hyperlinks = rs.boolean(KeyHyperlinks, flags.Hyperlinks, prof.Hyperlinks, def.Hyperlinks, false)
 	out.AmbiguousWide = rs.boolean(KeyAmbiguousWide, flags.AmbiguousWide, prof.AmbiguousWide, def.AmbiguousWide, false)
 
-	switch {
+	switch failedEnv := env(envName(KeyFailed)); {
 	case flags.Failed != nil:
 		out.Failed, out.Source[KeyFailed] = flags.Failed, "flag"
+	case failedEnv != "":
+		out.Failed, out.Source[KeyFailed] = splitList(failedEnv), "env "+envName(KeyFailed)
 	case prof.Failed != nil:
 		out.Failed, out.Source[KeyFailed] = prof.Failed, "profile "+identity
 	case def.Failed != nil:

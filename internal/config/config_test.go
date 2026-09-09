@@ -89,16 +89,49 @@ func TestResolveBooleanForms(t *testing.T) {
 	}
 }
 
-func TestResolveRejectsUnparseableEnv(t *testing.T) {
-	got := Resolve(Settings{}, envMap(map[string]string{"MMAID_WIDTH": "wide", "MMAID_TRUECOLOR": "maybe"}), File{}, "")
+func TestResolveFallsThroughAnUnparseableEnv(t *testing.T) {
+	file := File{
+		Default:  Settings{Width: i(50)},
+		Profiles: map[string]Settings{"WezTerm": {Truecolor: b(false)}},
+	}
+	env := envMap(map[string]string{"MMAID_WIDTH": "wide", "MMAID_TRUECOLOR": "maybe"})
+
+	got := Resolve(Settings{}, env, file, "WezTerm")
+	if got.Width != 50 || got.Source[KeyWidth] != "default" {
+		t.Errorf("width = %d from %q, want 50 from default", got.Width, got.Source[KeyWidth])
+	}
+	if got.Truecolor || got.Source[KeyTruecolor] != "profile WezTerm" {
+		t.Errorf("truecolor = %v from %q, want false from the profile", got.Truecolor, got.Source[KeyTruecolor])
+	}
+	if len(got.Warnings) != 2 {
+		t.Errorf("warnings = %v, want two", got.Warnings)
+	}
+
+	// With no layer below it, the built-in default still answers.
+	got = Resolve(Settings{}, env, File{}, "")
 	if got.Width != 0 || got.Source[KeyWidth] != "builtin" {
 		t.Errorf("width = %d from %q, want 0 from builtin", got.Width, got.Source[KeyWidth])
 	}
 	if !got.Truecolor {
-		t.Error("unparseable MMAID_TRUECOLOR should leave the builtin in place")
+		t.Error("with nothing below it the builtin should stand")
 	}
-	if len(got.Warnings) != 2 {
-		t.Errorf("warnings = %v, want two", got.Warnings)
+}
+
+func TestResolveFailedFromEnv(t *testing.T) {
+	file := File{Profiles: map[string]Settings{"WezTerm": {Failed: []string{"octants"}}}}
+	env := envMap(map[string]string{"MMAID_FAILED": "box-heavy, sextants ,"})
+
+	got := Resolve(Settings{}, env, file, "WezTerm")
+	if strings.Join(got.Failed, "|") != "box-heavy|sextants" {
+		t.Errorf("failed = %v, want the environment's list", got.Failed)
+	}
+	if got.Source[KeyFailed] != "env MMAID_FAILED" {
+		t.Errorf("failed source = %q", got.Source[KeyFailed])
+	}
+
+	got = Resolve(Settings{Failed: []string{"braille"}}, env, file, "WezTerm")
+	if got.Source[KeyFailed] != "flag" {
+		t.Errorf("a flag should outrank MMAID_FAILED, got %q", got.Source[KeyFailed])
 	}
 }
 
@@ -184,6 +217,32 @@ func TestLoadMissingFileIsEmpty(t *testing.T) {
 	}
 }
 
+func TestLoadTreatsAWrongPathKindAsAbsent(t *testing.T) {
+	dir := t.TempDir()
+
+	// config.json is a directory.
+	asDir := filepath.Join(dir, "config.json")
+	if err := os.Mkdir(asDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if f, err := Load(asDir); err != nil || f.Default.Theme != nil {
+		t.Errorf("a directory in the file's place gave %+v, %v", f, err)
+	}
+
+	// mmaid is a regular file, so the path runs through it.
+	asFile := filepath.Join(dir, "mmaid")
+	if err := os.WriteFile(asFile, []byte("not a directory"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if f, err := Load(filepath.Join(asFile, "config.json")); err != nil || f.Default.Theme != nil {
+		t.Errorf("a file in the directory's place gave %+v, %v", f, err)
+	}
+
+	if f, err := Load(""); err != nil || f.Default.Theme != nil {
+		t.Errorf("an empty path gave %+v, %v", f, err)
+	}
+}
+
 func TestLoadMalformedNamesThePath(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
 	if err := os.WriteFile(path, []byte("{not json"), 0o644); err != nil {
@@ -235,12 +294,16 @@ func TestPathHonoursXDG(t *testing.T) {
 		t.Errorf("Path() = %q, want %q", got, want)
 	}
 	t.Setenv("XDG_CONFIG_HOME", "")
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Skip("no home directory")
-	}
-	if got, want := Path(), filepath.Join(home, ".config", "mmaid", "config.json"); got != want {
+	t.Setenv("HOME", "/home/someone")
+	if got, want := Path(), filepath.Join("/home/someone", ".config", "mmaid", "config.json"); got != want {
 		t.Errorf("Path() = %q, want %q", got, want)
+	}
+
+	// With nowhere to look there is no file, rather than one under the
+	// working directory.
+	t.Setenv("HOME", "")
+	if got := Path(); got != "" {
+		t.Errorf("Path() = %q, want empty with no HOME", got)
 	}
 }
 
