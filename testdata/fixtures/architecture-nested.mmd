@@ -1,0 +1,13 @@
+architecture-beta
+    group public(cloud)[Public API]
+    group private(cloud)[Private API] in public
+    group data(database)[Data] in public
+
+    service gateway(internet)[Gateway] in public
+    service auth(server)[Auth] in private
+    service worker(server)[Worker] in private
+    service store(database)[Store] in data
+
+    gateway:R --> L:auth
+    auth:B --> T:worker
+    auth{group}:R --> L:store

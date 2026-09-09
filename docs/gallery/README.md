@@ -6,6 +6,50 @@ rebuilds it after re-recording the references. A fixture's first line may
 carry a `%% mmaid:` directive naming the flags it renders with; the default
 is `-t default -w 120`.
 
+## architecture
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+architecture-beta
+    group api(cloud)[API]
+
+    service db(database)[Database] in api
+    service server(server)[Server] in api
+    junction split in api
+    service disk1(disk)[Storage] in api
+    service disk2(disk)[Storage] in api
+
+    db:L -- R:server
+    db:B -- T:split
+    split:L -- R:disk1
+    split:R -- L:disk2
+```
+
+![architecture](architecture.png)
+
+## architecture-nested
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+architecture-beta
+    group public(cloud)[Public API]
+    group private(cloud)[Private API] in public
+    group data(database)[Data] in public
+
+    service gateway(internet)[Gateway] in public
+    service auth(server)[Auth] in private
+    service worker(server)[Worker] in private
+    service store(database)[Store] in data
+
+    gateway:R --> L:auth
+    auth:B --> T:worker
+    auth{group}:R --> L:store
+```
+
+![architecture-nested](architecture-nested.png)
+
 ## block
 
 Rendered with `-t default -w 120`.
