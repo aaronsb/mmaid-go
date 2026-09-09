@@ -19,6 +19,27 @@ block-beta
 
 ![block](block.png)
 
+## c4
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+C4Context
+    title Internet Banking
+    Enterprise_Boundary(b0, "Bank") {
+        Person(customer, "Banking Customer", "A personal account holder.")
+        Person(staff, "Support Staff", "Answers customer queries.")
+        System(banking, "Internet Banking", "Accounts and payments.")
+    }
+    System_Ext(email, "E-mail System", "Microsoft Exchange.")
+
+    Rel(customer, banking, "Uses")
+    Rel(staff, banking, "Administers")
+    Rel(banking, email, "Sends mail", "SMTP")
+```
+
+![c4](c4.png)
+
 ## class
 
 Rendered with `-t mono`.
@@ -257,6 +278,37 @@ quadrantChart
 
 ![quadrant](quadrant.png)
 
+## requirement
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+requirementDiagram
+    requirement checkout_req {
+    id: 1
+    text: Orders must be payable online.
+    risk: high
+    verifymethod: test
+    }
+
+    functionalRequirement payment_req {
+    id: 1.1
+    text: Card payments must be authorised.
+    risk: high
+    verifymethod: test
+    }
+
+    element checkout_service {
+    type: service
+    docref: docs/checkout.md
+    }
+
+    checkout_req - contains -> payment_req
+    checkout_service - satisfies -> payment_req
+```
+
+![requirement](requirement.png)
+
 ## sequence
 
 Rendered with `-t blueprint`.
@@ -352,6 +404,27 @@ treemap-beta
 ```
 
 ![treemap](treemap.png)
+
+## usecase
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+usecaseDiagram
+    actor Customer("Customer")
+    actor Agent("Support Agent")
+    systemBoundary Storefront
+        Browse("Browse catalogue")
+        Checkout("Place order")
+        Pay("Take payment")
+    end
+    Customer --> Browse
+    Customer --> Checkout
+    Agent --> Checkout
+    Checkout ..> : include Pay
+```
+
+![usecase](usecase.png)
 
 ## wide-label
 
