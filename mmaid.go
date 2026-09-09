@@ -19,6 +19,7 @@ type config struct {
 	paddingY     int
 	roundedEdges bool
 	theme        string // "" = no color, "default", "terra", etc.
+	hyperlinks   bool
 }
 
 func defaultConfig() config {
@@ -54,6 +55,12 @@ func WithSharpEdges() Option {
 // Available themes: default, terra, neon, mono, amber, phosphor.
 func WithTheme(name string) Option {
 	return func(c *config) { c.theme = name }
+}
+
+// WithHyperlinks wraps the label of every node carrying a `click ID "url"` line
+// in an OSC 8 hyperlink. It applies to themed output.
+func WithHyperlinks() Option {
+	return func(c *config) { c.hyperlinks = true }
 }
 
 // frontmatterRe matches YAML frontmatter at the start of a document.
@@ -174,6 +181,10 @@ func Render(source string, opts ...Option) (result string) {
 	default:
 		g := parser.ParseFlowchart(source)
 		canvas = renderer.RenderGraphCanvas(g, cfg.useASCII, cfg.paddingX, cfg.paddingY, cfg.roundedEdges, diagram.UsableWidth())
+		if cfg.hyperlinks {
+			renderer.SetLinks(nodeLinks(g))
+			defer renderer.SetLinks(nil)
+		}
 	}
 
 	if canvas == nil {
@@ -186,6 +197,17 @@ func Render(source string, opts ...Option) (result string) {
 		return canvas.ToColorString(theme)
 	}
 	return canvas.ToString()
+}
+
+// nodeLinks maps the label of each linked node to its URL.
+func nodeLinks(g *graph.Graph) map[string]string {
+	links := make(map[string]string)
+	for _, node := range g.Nodes {
+		if node.Link != "" {
+			links[node.Label] = node.Link
+		}
+	}
+	return links
 }
 
 func getThemePtr(name string) *renderer.Theme {
