@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/aaronsb/mmaid-go/internal/graph"
+	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
 
 // drawLabel centers multi-line text inside a shape region.
@@ -26,7 +27,7 @@ func drawLabel(c *Canvas, x, y, width, height int, label string, style string) {
 	startRow := y + (height-len(lines))/2
 	for i, line := range lines {
 		row := startRow + i
-		col := x + (width-len(line))/2
+		col := x + (width-textwidth.String(line))/2
 		if row >= 0 && row < c.Height {
 			c.PutText(row, col, line, labelStyle)
 		}

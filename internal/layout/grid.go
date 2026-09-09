@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/aaronsb/mmaid-go/internal/graph"
+	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
 
 const (
@@ -689,7 +690,7 @@ func WordWrap(text string, maxWidth int) []string {
 	currentLine := words[0]
 
 	for _, word := range words[1:] {
-		if len(currentLine)+1+len(word) <= maxWidth {
+		if textwidth.String(currentLine)+1+textwidth.String(word) <= maxWidth {
 			currentLine += " " + word
 		} else {
 			lines = append(lines, currentLine)
@@ -721,7 +722,7 @@ func computeSizes(
 		// Word-wrap lines that exceed max width
 		var wrappedLines []string
 		for _, line := range lines {
-			if len(line) <= MaxLabelWidth {
+			if textwidth.String(line) <= MaxLabelWidth {
 				wrappedLines = append(wrappedLines, line)
 			} else {
 				wrappedLines = append(wrappedLines, WordWrap(line, MaxLabelWidth)...)
@@ -735,8 +736,8 @@ func computeSizes(
 
 		textWidth := 0
 		for _, l := range wrappedLines {
-			if len(l) > textWidth {
-				textWidth = len(l)
+			if w := textwidth.String(l); w > textWidth {
+				textWidth = w
 			}
 		}
 		textHeight := len(wrappedLines)
@@ -845,7 +846,7 @@ func expandGapsForEdgeLabels(g *graph.Graph, layout *GridLayout) {
 		if edge.Label == "" {
 			continue
 		}
-		labelLen := len(edge.Label)
+		labelLen := textwidth.String(edge.Label)
 
 		srcP := layout.Placements[edge.Source]
 		tgtP := layout.Placements[edge.Target]
@@ -1317,7 +1318,7 @@ func computeSubgraphBounds(g *graph.Graph, layout *GridLayout) {
 		}
 
 		contentWidth := (maxX - minX) + SGBorderPad*2
-		labelWidth := len(sg.Label) + 4
+		labelWidth := textwidth.String(sg.Label) + 4
 		finalWidth := contentWidth
 		if labelWidth > finalWidth {
 			finalWidth = labelWidth
