@@ -31,6 +31,7 @@ type radarAxis struct {
 type radarCurve struct {
 	id     string
 	label  string
+	body   string // the brace list, read once every axis is known
 	values []float64
 }
 
@@ -118,7 +119,7 @@ func parseRadar(source string) *radarChart {
 				if label == "" {
 					label = d[1]
 				}
-				rc.curves = append(rc.curves, radarCurve{id: d[1], label: label, values: parseRadarValues(d[3], rc.axes)})
+				rc.curves = append(rc.curves, radarCurve{id: d[1], label: label, body: d[3]})
 			}
 			continue
 		}
@@ -126,6 +127,11 @@ func parseRadar(source string) *radarChart {
 			rc.setOption(strings.ToLower(m[1]), strings.TrimSpace(m[2]))
 			continue
 		}
+	}
+	// A keyed list names axes, so it is read once every `axis` line has been:
+	// a `curve` written above its axes resolves the same as one written below.
+	for i := range rc.curves {
+		rc.curves[i].values = parseRadarValues(rc.curves[i].body, rc.axes)
 	}
 	return rc
 }
@@ -152,9 +158,10 @@ func (rc *radarChart) setOption(key, value string) {
 	}
 }
 
-// parseRadarValues reads a curve's brace list in either form. A keyed list
-// names axes, so it needs the axes declared before it; a positional one runs
-// in axis order.
+// parseRadarValues reads a curve's brace list in either form: a keyed list
+// against the axis ids, a positional one in axis order. An axis the keyed list
+// does not name gets NaN, which the render reads as the low bound — the same
+// place a positional list too short for the axes puts it.
 func parseRadarValues(body string, axes []radarAxis) []float64 {
 	items := splitTopLevel(body, ',')
 	keyed := false
@@ -180,6 +187,9 @@ func parseRadarValues(body string, axes []radarAxis) []float64 {
 		index[a.id] = i
 	}
 	out := make([]float64, len(axes))
+	for i := range out {
+		out[i] = math.NaN()
+	}
 	for _, it := range items {
 		m := reRadarKeyedItem.FindStringSubmatch(it)
 		if m == nil {
@@ -200,24 +210,67 @@ func radarMarkers(cs renderer.CharSet) []rune {
 	return []rune{cs.Dot, cs.CircleEndpoint, cs.Diamond, cs.Bullseye, cs.Hexagon, cs.CrossEndpoint}
 }
 
-// bounds returns the value range the radius is scaled over.
+// bounds returns the value range the radius is scaled over, and it always
+// returns a finite range wider than nothing.
+//
+// A declared range that is not one — `max 0` under a `min` of 0, `min 5` with
+// `max 5`, or either written as NaN or Inf, all of which `ParseFloat` accepts
+// — makes `(v-lo)/span` NaN, and `int(math.Round(NaN))` is `math.MinInt64`.
+// A coordinate that size reaches the rasteriser as a span of 9e18 cells, which
+// fills memory before `Render`'s recover can see anything. The declared range
+// is therefore used only when it is usable, and the range over the finite
+// values stands in when it is not.
 func (rc *radarChart) bounds() (lo, hi float64) {
-	lo, hi = 0, math.Inf(-1)
-	if rc.hasMin {
+	lo = 0
+	if rc.hasMin && finite(rc.min) {
 		lo = rc.min
 	}
-	if rc.hasMax {
+	if rc.hasMax && finite(rc.max) && rc.max > lo {
 		return lo, rc.max
 	}
+	declared := rc.hasMax || (rc.hasMin && !finite(rc.min))
+
+	hi = math.Inf(-1)
+	dropped := false
 	for _, cv := range rc.curves {
 		for _, v := range cv.values {
-			hi = math.Max(hi, v)
+			switch {
+			case math.IsNaN(v):
+				// A keyed list leaves NaN where it named no axis; that is the
+				// low bound, not a value out of range.
+			case !finite(v):
+				dropped = true
+			default:
+				hi = math.Max(hi, v)
+			}
 		}
 	}
 	if math.IsInf(hi, -1) || hi <= lo {
 		hi = lo + 1
 	}
+	if declared || dropped {
+		warnf("radar: %s; scaling over %g to %g instead", radarBoundsCause(rc, dropped), lo, hi)
+	}
 	return lo, hi
+}
+
+// radarBoundsCause names what made the declared range unusable.
+func radarBoundsCause(rc *radarChart, dropped bool) string {
+	switch {
+	case rc.hasMax && !finite(rc.max):
+		return "max is not a finite number"
+	case rc.hasMin && !finite(rc.min):
+		return "min is not a finite number"
+	case rc.hasMax:
+		return "max is not above min"
+	case dropped:
+		return "a curve value is not a finite number"
+	}
+	return "the declared range is unusable"
+}
+
+func finite(v float64) bool {
+	return !math.IsNaN(v) && !math.IsInf(v, 0)
 }
 
 // RenderRadar parses and renders a Mermaid radar diagram.
@@ -269,6 +322,7 @@ func RenderRadar(source string, cs renderer.CharSet, useColor bool, theme *rende
 
 	c := renderer.NewCanvas(canvasWidth, canvasHeight)
 	c.SetCharSet(cs)
+	plot := canvasRect(c)
 
 	if rc.title != "" {
 		titleCol := max((canvasWidth-textwidth.String(rc.title))/2, 0)
@@ -283,7 +337,7 @@ func RenderRadar(source string, cs renderer.CharSet, useColor bool, theme *rende
 		frac := float64(t) / float64(rc.ticks)
 		ring := pen
 		ring.style, ring.rounded, ring.weight = "edge", true, glyph.Dashed
-		drawCellPath(c, cellPath(rc.ringVertices(cr, cc, rx, ry, frac), true, false), true, ring)
+		drawCellPath(c, cellPath(rc.ringVertices(cr, cc, rx, ry, frac), true, false, plot), true, ring)
 	}
 
 	// Spokes, drawn from the centre out so the rim cell's only arm points
@@ -292,7 +346,7 @@ func RenderRadar(source string, cs renderer.CharSet, useColor bool, theme *rende
 		rr, rcol := radarPoint(cr, cc, rx, ry, i, len(rc.axes), 1)
 		spoke := pen
 		spoke.style, spoke.weight = "edge", glyph.Dashed
-		drawCellPath(c, cellPath([][2]int{{cr, cc}, {rr, rcol}}, false, false), false, spoke)
+		drawCellPath(c, cellPath([][2]int{{cr, cc}, {rr, rcol}}, false, false, plot), false, spoke)
 	}
 
 	lo, hi := rc.bounds()
@@ -307,7 +361,7 @@ func RenderRadar(source string, cs renderer.CharSet, useColor bool, theme *rende
 		var vertices [][2]int
 		for i := range rc.axes {
 			v := lo
-			if i < len(cv.values) {
+			if i < len(cv.values) && finite(cv.values[i]) {
 				v = cv.values[i]
 			}
 			frac := math.Min(math.Max((v-lo)/span, 0), 1)
@@ -316,7 +370,7 @@ func RenderRadar(source string, cs renderer.CharSet, useColor bool, theme *rende
 		}
 		curve := pen
 		curve.style = style
-		drawCellPath(c, cellPath(vertices, true, true), true, curve)
+		drawCellPath(c, cellPath(vertices, true, true, plot), true, curve)
 		for _, v := range vertices {
 			c.Put(v[0], v[1], markers[ci%len(markers)], style)
 		}
@@ -324,7 +378,7 @@ func RenderRadar(source string, cs renderer.CharSet, useColor bool, theme *rende
 
 	rc.drawAxisLabels(c, cr, cc, rx, ry)
 	if rc.showLegend && len(rc.curves) > 0 {
-		rc.drawLegend(c, titleRows, labelPad+plotW+legendGap, legendW, plotRows, colors, markers, useColor)
+		rc.drawLegend(c, titleRows, labelPad+plotW+labelPad+legendGap, legendW, plotRows, colors, markers, useColor)
 	}
 	return c
 }
@@ -378,22 +432,7 @@ func (rc *radarChart) drawLegend(c *renderer.Canvas, titleRows, left, width, plo
 	height := len(rc.curves) + 2
 	top := max(titleRows+(plotRows-len(rc.curves))/2-1, titleRows)
 
-	c.Put(top, left, '┌', "node")
-	c.DrawHorizontal(top, left, left+width-1, glyph.Light, "node")
-	c.Put(top, left+width-1, '┐', "node")
-	for row := top + 1; row < top+height-1; row++ {
-		c.Put(row, left, '│', "node")
-		c.Put(row, left+width-1, '│', "node")
-	}
-	c.Put(top+height-1, left, '└', "node")
-	c.DrawHorizontal(top+height-1, left, left+width-1, glyph.Light, "node")
-	c.Put(top+height-1, left+width-1, '┘', "node")
-
-	for row := top; row < top+height; row++ {
-		for col := left; col < left+width; col++ {
-			c.SetFill(row, col, "subgraph_fill")
-		}
-	}
+	drawLegendBox(c, top, left, height, width, "node")
 
 	for i, cv := range rc.curves {
 		row := top + 1 + i

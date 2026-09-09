@@ -1,6 +1,7 @@
 package diagram
 
 import (
+	"math"
 	"slices"
 	"strings"
 	"testing"
@@ -1444,5 +1445,83 @@ func TestCynefinItemOutsideADomainIsDropped(t *testing.T) {
 	cf := parseCynefin("cynefin-beta\n  \"Homeless item\"\n  complex\n    \"Placed\"")
 	if len(cf.items["complex"]) != 1 || cf.items["complex"][0] != "Placed" {
 		t.Errorf("items = %+v", cf.items)
+	}
+}
+
+// ── Chart family: review regressions ────────────────────────────────────────
+
+// assertBounded fails when a canvas is larger than any terminal figure should
+// be. A coordinate derived from NaN is math.MinInt64, and the rasteriser that
+// receives one used to fill memory before anything could recover; a frame this
+// size is the symptom that reaches a test before the process dies.
+func assertBounded(t *testing.T, c *renderer.Canvas) {
+	t.Helper()
+	if c.Width <= 0 || c.Height <= 0 || c.Width > 1000 || c.Height > 1000 {
+		t.Fatalf("frame is %dx%d, which is not a figure", c.Width, c.Height)
+	}
+}
+
+func TestRadarDegenerateRangesStillRender(t *testing.T) {
+	for _, tc := range []struct{ name, src string }{
+		{"max below min", "radar-beta\n  axis a, b, c\n  curve x{0, 1, 2}\n  max 0"},
+		{"max equal to min", "radar-beta\n  axis a, b, c\n  curve x{0, 1, 2}\n  min 5\n  max 5"},
+		{"min not a number", "radar-beta\n  axis a, b, c\n  curve x{0, 1, 2}\n  min NaN"},
+		{"value not finite", "radar-beta\n  axis a, b, c\n  curve x{Inf, 2, 3}"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := RenderRadar(tc.src, renderer.UNICODE, false, nil)
+			assertBounded(t, c)
+			assertCanvasNotEmpty(t, c)
+			lo, hi := parseRadar(tc.src).bounds()
+			if !finite(lo) || !finite(hi) || hi <= lo {
+				t.Errorf("bounds = %v..%v, want a finite range wider than nothing", lo, hi)
+			}
+		})
+	}
+}
+
+func TestRadarKeyedCurveBeforeItsAxes(t *testing.T) {
+	rc := parseRadar("radar-beta\n  curve x{ c: 30, a: 10 }\n  axis a, b, c")
+	got := rc.curves[0].values
+	if len(got) != 3 || got[0] != 10 || got[2] != 30 {
+		t.Fatalf("values = %v, want 10 at a and 30 at c", got)
+	}
+	if !math.IsNaN(got[1]) {
+		t.Errorf("unnamed axis = %v, want NaN so the render reads it as the low bound", got[1])
+	}
+}
+
+func TestRadarLegendClearsTheAxisLabelMargin(t *testing.T) {
+	// The right-hand axis label and the legend both live beyond the rim; the
+	// legend has to start past the label, not on it.
+	c := RenderRadar("radar-beta\n  axis speed[\"Speed\"], cost[\"Cost\"], reliability[\"Reliability\"]\n  axis support[\"Support\"], features[\"Features\"]\n  curve a[\"Vendor A\"]{85, 60, 90, 70, 75}\n  max 100", renderer.UNICODE, false, nil)
+	assertCanvasContains(t, c, "Cost")
+	assertCanvasContains(t, c, "Reliability")
+}
+
+func TestTruncateMarkSaysWhereItCut(t *testing.T) {
+	m := marksFor(renderer.UNICODE)
+	if got := truncateMark("emergent practice", 30, m); got != "emergent practice" {
+		t.Errorf("text that fits = %q, want it whole", got)
+	}
+	if got := truncateMark("emergent practice", 10, m); got != "emergent…" {
+		t.Errorf("cut = %q, want the mark and no trailing space", got)
+	}
+	if got := truncateMark("emergent", 1, marksFor(renderer.ASCII)); got != "e" {
+		t.Errorf("cut too narrow for the mark = %q", got)
+	}
+}
+
+func TestCellPathClipsToItsRectangle(t *testing.T) {
+	// The vertex is what a NaN-derived coordinate looks like by the time it
+	// reaches the rasteriser.
+	path := cellPath([][2]int{{0, 0}, {math.MinInt64, math.MinInt64}}, false, false, cellRect{0, 0, 9, 9})
+	if len(path) > 100 {
+		t.Fatalf("path is %d cells, want it clipped to the rectangle", len(path))
+	}
+	for _, p := range path {
+		if p[0] < 0 || p[0] > 9 || p[1] < 0 || p[1] > 9 {
+			t.Fatalf("cell %v is outside the rectangle", p)
+		}
 	}
 }

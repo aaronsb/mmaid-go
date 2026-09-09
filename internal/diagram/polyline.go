@@ -17,6 +17,26 @@ import (
 //
 // Either way every arm meets an arm pointing back or a literal, which is what
 // ADR-101's lint asks of one.
+//
+// `cellPath` clips its vertices to a rectangle before rasterising. A caller
+// that derives a coordinate from a NaN hands over `math.MinInt64`, and a span
+// that wide fills memory one cell at a time before anything can recover from
+// it: the rasteriser does not trust a coordinate it is given.
+
+// cellRect is an inclusive rectangle of cells.
+type cellRect struct {
+	top, left, bottom, right int
+}
+
+// clip returns the point moved inside the rectangle.
+func (r cellRect) clip(p [2]int) [2]int {
+	return [2]int{min(max(p[0], r.top), r.bottom), min(max(p[1], r.left), r.right)}
+}
+
+// canvasRect is the whole of a canvas.
+func canvasRect(c *renderer.Canvas) cellRect {
+	return cellRect{0, 0, c.Height - 1, c.Width - 1}
+}
 
 // orthoPath rasterises a straight run as cells that touch on a side only,
 // stepping along the major axis and taking each minor-axis step in the
@@ -24,8 +44,8 @@ import (
 func orthoPath(r1, c1, r2, c2 int) [][2]int {
 	dr, dc := r2-r1, c2-c1
 	out := [][2]int{{r1, c1}}
-	if abs(dc) >= abs(dr) {
-		n := abs(dc)
+	if absInt(dc) >= absInt(dr) {
+		n := absInt(dc)
 		if n == 0 {
 			return out
 		}
@@ -40,7 +60,7 @@ func orthoPath(r1, c1, r2, c2 int) [][2]int {
 		}
 		return out
 	}
-	n := abs(dr)
+	n := absInt(dr)
 	sr, prev := sign(dr), c1
 	for i := 1; i <= n; i++ {
 		c := c1 + roundDiv(dc*i, n)
@@ -56,7 +76,7 @@ func orthoPath(r1, c1, r2, c2 int) [][2]int {
 // diagPath rasterises a straight run as cells that may touch at a corner,
 // Bresenham's.
 func diagPath(r1, c1, r2, c2 int) [][2]int {
-	dr, dc := abs(r2-r1), abs(c2-c1)
+	dr, dc := absInt(r2-r1), absInt(c2-c1)
 	sr, sc := sign(r2-r1), sign(c2-c1)
 	err := dc - dr
 	r, c := r1, c1
@@ -81,7 +101,7 @@ func diagPath(r1, c1, r2, c2 int) [][2]int {
 // nearDiagonal reports whether a run is close enough to the cell diagonal to
 // read better as chamfers than as a staircase.
 func nearDiagonal(dr, dc int) bool {
-	dr, dc = abs(dr), abs(dc)
+	dr, dc = absInt(dr), absInt(dc)
 	return dr > 0 && dc > 0 && 4*dr >= 3*dc && 4*dc >= 3*dr
 }
 
@@ -89,13 +109,16 @@ func nearDiagonal(dr, dc int) bool {
 // join leaves behind. A closed path returns to its first vertex. With
 // diagonals false every segment is orthogonal, which suits a densely sampled
 // curve whose segments are too short to have a direction of their own.
-func cellPath(vertices [][2]int, closed, diagonals bool) [][2]int {
-	if len(vertices) < 2 {
-		return append([][2]int(nil), vertices...)
+func cellPath(vertices [][2]int, closed, diagonals bool, clip cellRect) [][2]int {
+	ends := make([][2]int, 0, len(vertices)+1)
+	for _, v := range vertices {
+		ends = append(ends, clip.clip(v))
 	}
-	ends := vertices
+	if len(ends) < 2 {
+		return ends
+	}
 	if closed {
-		ends = append(append([][2]int(nil), vertices...), vertices[0])
+		ends = append(ends, ends[0])
 	}
 	var out [][2]int
 	for i := 0; i+1 < len(ends); i++ {
@@ -197,13 +220,6 @@ func drawCellPath(c *renderer.Canvas, path [][2]int, closed bool, pen pathPen) {
 	}
 }
 
-func abs(v int) int {
-	if v < 0 {
-		return -v
-	}
-	return v
-}
-
 func sign(v int) int {
 	switch {
 	case v > 0:
@@ -220,7 +236,7 @@ func roundDiv(a, b int) int {
 		return 0
 	}
 	if (a < 0) != (b < 0) {
-		return -((abs(a)*2 + abs(b)) / (2 * abs(b)))
+		return -((absInt(a)*2 + absInt(b)) / (2 * absInt(b)))
 	}
-	return (abs(a)*2 + abs(b)) / (2 * abs(b))
+	return (absInt(a)*2 + absInt(b)) / (2 * absInt(b))
 }
