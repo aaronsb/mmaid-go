@@ -1,0 +1,14 @@
+graph LR
+    subgraph Input
+        A --> B
+    end
+    subgraph Process
+        C --> D
+    end
+    subgraph Output
+        E --> F
+    end
+    B --> C
+    D --> E
+    A --> D
+    C --> F

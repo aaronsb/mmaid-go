@@ -538,6 +538,50 @@ graph LR
 
 ![subgraph-cross](subgraph-cross.png)
 
+## subgraph-nested
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+graph TB
+    Start --> A
+    subgraph Outer
+        A --> B
+        subgraph Inner
+            direction LR
+            C --> D
+        end
+        B --> C
+        D --> E
+    end
+    E --> Stop
+```
+
+![subgraph-nested](subgraph-nested.png)
+
+## subgraph-siblings
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+graph LR
+    subgraph Input
+        A --> B
+    end
+    subgraph Process
+        C --> D
+    end
+    subgraph Output
+        E --> F
+    end
+    B --> C
+    D --> E
+    A --> D
+    C --> F
+```
+
+![subgraph-siblings](subgraph-siblings.png)
+
 ## timeline
 
 Rendered with `-t default -w 120`.
