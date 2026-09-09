@@ -53,7 +53,7 @@ func RenderGraphCanvas(g *graph.Graph, cs CharSet, paddingX, paddingY int, round
 
 	// Route edges
 	ellipsis := routing.Ellipsis
-	if useASCII {
+	if cs.ASCII {
 		ellipsis = "..."
 	}
 	routed := routing.RouteEdgesWith(g, l, ellipsis, os.Stderr)
