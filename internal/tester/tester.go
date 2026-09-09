@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/aaronsb/mmaid-go/internal/config"
@@ -36,14 +38,6 @@ type Failure struct {
 	Cause  Cause
 }
 
-// Fallback is the family the renderer draws instead.
-func (f Failure) Fallback() glyph.Family {
-	if fb, ok := glyph.Fallback[f.Family]; ok {
-		return fb
-	}
-	return glyph.ASCIIFamily
-}
-
 // Font suggests a font that covers the family.
 func Font(f glyph.Family) string {
 	switch f {
@@ -58,6 +52,12 @@ func Font(f glyph.Family) string {
 // Timeout is how long a probe waits for the terminal's answer.
 const Timeout = 200 * time.Millisecond
 
+// Samples is the sheet the tester shows: every family in its own runes,
+// whatever set the configuration names, so each line tests one family.
+func Samples() []renderer.Sample {
+	return renderer.GlyphSamples(glyph.DefaultSet())
+}
+
 // Result is what the probes found.
 type Result struct {
 	// Identity is the profile key: TERM_PROGRAM, else TERM.
@@ -65,7 +65,10 @@ type Result struct {
 	// Terminal is the name the DA1 probe detected, or "".
 	Terminal  string
 	Truecolor bool
-	Failed    []Failure
+	// AmbiguousWide says the box-light sample advanced two columns per
+	// rune. It is meaningful only when Probed.
+	AmbiguousWide bool
+	Failed        []Failure
 	// Probed says the terminal answered the queries; when false, every
 	// family is asked.
 	Probed bool
@@ -86,45 +89,97 @@ func FromEnv() Result {
 }
 
 // Probe runs the terminal probes over in and out, which must both be
-// terminals. Raw mode is restored on every return, a panic included. Where
-// raw mode is unsupported or the terminal does not answer, the result is
-// FromEnv with Probed false.
-func Probe(in, out *os.File, samples []renderer.Sample) Result {
-	if !term.IsTerminal(int(in.Fd())) || !term.IsTerminal(int(out.Fd())) {
-		return FromEnv()
+// terminals. Raw mode is restored on every return, a panic or a signal
+// included, and the error returned is Restore's. Where raw mode is
+// unsupported the result is FromEnv with Probed false.
+func Probe(in, out *os.File, samples []renderer.Sample) (Result, error) {
+	fd := int(in.Fd())
+	if !term.IsTerminal(fd) || !term.IsTerminal(int(out.Fd())) {
+		return FromEnv(), nil
 	}
-	state, err := term.MakeRaw(int(in.Fd()), Timeout)
+	state, err := term.MakeRaw(fd, Timeout)
 	if err != nil {
-		return FromEnv()
+		return FromEnv(), nil
 	}
-	defer term.Restore(int(in.Fd()), state)
 
-	q := &Querier{In: in, Out: out}
+	// A signal from outside would exit without running the deferred
+	// Restore; ISIG is off, so the keyboard cannot send one.
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
+	done := make(chan struct{})
+	go func() {
+		select {
+		case sig := <-sigs:
+			if err := term.Restore(fd, state); err != nil {
+				fmt.Fprintf(os.Stderr, "mmaid: restoring the terminal: %v\n", err)
+			}
+			fmt.Fprintf(os.Stderr, "mmaid: %v\n", sig)
+			os.Exit(130)
+		case <-done:
+		}
+	}()
+	defer func() {
+		close(done)
+		signal.Stop(sigs)
+	}()
+
+	res := run(&Querier{In: in, Out: out}, samples)
+	return res, term.Restore(fd, state)
+}
+
+// run is Probe without the terminal handling: identity, truecolor, DA1,
+// then one cursor report per family. It drains late replies before it
+// returns so they do not reach the asked phase.
+func run(q *Querier, samples []renderer.Sample) Result {
 	res := FromEnv()
+	defer Drain(q.In)
+
 	res.Terminal = config.DetectTerminal(func(request string) (string, error) {
 		return q.Query(request, 'c')
 	})
 
 	if _, err := CursorColumn(q.Query); err != nil {
-		res.Probed = false
 		return res
 	}
 	res.Probed = true
-	for _, s := range samples {
+	for i, s := range samples {
 		if s.Family == glyph.ASCIIFamily {
 			continue
 		}
-		failed, err := AdvanceFails(q, s)
+		advance, err := AdvanceOf(q, s)
 		if err != nil {
 			res.Probed = false
 			res.Failed = nil
+			res.AmbiguousWide = false
 			return res
 		}
-		if failed {
+		// The first sample, box-light, is all ambiguous-width runes: an
+		// advance of twice its width is the terminal's ambiguous setting,
+		// not a failure, and every later sample is judged by it.
+		if i == 0 && s.Wide != s.Narrow && advance == s.Wide {
+			res.AmbiguousWide = true
+		}
+		expected := s.Narrow
+		if res.AmbiguousWide {
+			expected = s.Wide
+		}
+		if advance != expected {
 			res.Failed = append(res.Failed, Failure{Family: s.Family, Cause: Advance})
 		}
 	}
 	return res
+}
+
+// Drain reads and discards input until a read returns nothing, which raw
+// mode does once a timeout window passes with no bytes.
+func Drain(r io.Reader) {
+	buf := make([]byte, 64)
+	for {
+		n, err := r.Read(buf)
+		if n == 0 || err != nil {
+			return
+		}
+	}
 }
 
 // Querier writes a request to the terminal and reads its answer.
@@ -189,28 +244,37 @@ func parseCPR(reply string) (int, error) {
 	return col, nil
 }
 
-// AdvanceFails writes the sample at the start of a line, measures how far the
-// cursor moved, and reports whether that differs from the sample's width.
-// The line is erased afterwards.
-func AdvanceFails(q *Querier, s renderer.Sample) (bool, error) {
+// AdvanceOf writes the sample at the start of a line and returns how many
+// columns the cursor moved. The line is erased afterwards.
+func AdvanceOf(q *Querier, s renderer.Sample) (int, error) {
 	if err := q.Write("\r"); err != nil {
-		return false, err
+		return 0, err
 	}
 	before, err := CursorColumn(q.Query)
 	if err != nil {
-		return false, err
+		return 0, err
 	}
 	if err := q.Write(s.Text); err != nil {
-		return false, err
+		return 0, err
 	}
 	after, err := CursorColumn(q.Query)
 	if err != nil {
-		return false, err
+		return 0, err
 	}
 	if err := q.Write("\r\x1b[2K"); err != nil {
+		return 0, err
+	}
+	return after - before, nil
+}
+
+// AdvanceFails reports whether the sample moved the cursor by other than
+// its width.
+func AdvanceFails(q *Querier, s renderer.Sample) (bool, error) {
+	advance, err := AdvanceOf(q, s)
+	if err != nil {
 		return false, err
 	}
-	return AdvanceMismatch(before, after, s.Width), nil
+	return AdvanceMismatch(0, advance, s.Width), nil
 }
 
 // AdvanceMismatch compares the columns before and after writing a sample
@@ -220,10 +284,11 @@ func AdvanceMismatch(before, after, width int) bool {
 }
 
 // Ask prints the numbered sheet, one line per family, and reads the numbers
-// of the lines that look wrong. A family the probe already failed keeps the
-// probe's cause; any other the user names fails with Shape. The probe's
-// failures are returned whether or not the user repeats them.
-func Ask(in io.Reader, out io.Writer, samples []renderer.Sample, probed []Failure) ([]Failure, error) {
+// of the lines that look wrong from in, the one reader the tester holds on
+// stdin. A family the probe already failed keeps the probe's cause; any
+// other the user names fails with Shape. The probe's failures are returned
+// whether or not the user repeats them.
+func Ask(in *bufio.Reader, out io.Writer, samples []renderer.Sample, probed []Failure) ([]Failure, error) {
 	byFamily := make(map[glyph.Family]Failure, len(probed))
 	for _, f := range probed {
 		byFamily[f.Family] = f
@@ -245,7 +310,7 @@ func Ask(in io.Reader, out io.Writer, samples []renderer.Sample, probed []Failur
 	}
 	fmt.Fprint(out, "Which lines look wrong? (numbers separated by spaces, Enter for none): ")
 
-	line, err := bufio.NewReader(in).ReadString('\n')
+	line, err := in.ReadString('\n')
 	if err != nil && err != io.EOF {
 		return nil, err
 	}
@@ -261,16 +326,44 @@ func Ask(in io.Reader, out io.Writer, samples []renderer.Sample, probed []Failur
 		chosen[samples[n-1].Family] = true
 	}
 
-	var out2 []Failure
+	var failures []Failure
 	for _, s := range samples {
 		switch f, probedFail := byFamily[s.Family]; {
 		case probedFail:
-			out2 = append(out2, f)
+			failures = append(failures, f)
 		case chosen[s.Family] && s.Family != glyph.ASCIIFamily:
-			out2 = append(out2, Failure{Family: s.Family, Cause: Shape})
+			failures = append(failures, Failure{Family: s.Family, Cause: Shape})
 		}
 	}
-	return out2, nil
+	return failures, nil
+}
+
+// Confirm prints a yes/no prompt and reads one line from in; only y or yes
+// answers true.
+func Confirm(in *bufio.Reader, out io.Writer, prompt string) bool {
+	fmt.Fprint(out, prompt, " [y/N]: ")
+	line, _ := in.ReadString('\n')
+	switch strings.ToLower(strings.TrimSpace(line)) {
+	case "y", "yes":
+		return true
+	}
+	return false
+}
+
+// Remedies maps each failed family to what the renderer draws instead once
+// every failure is applied, so a family whose fallback also failed names
+// the family past it.
+func Remedies(failures []Failure) map[glyph.Family]glyph.Family {
+	families := make([]glyph.Family, 0, len(failures))
+	for _, f := range failures {
+		families = append(families, f.Family)
+	}
+	resolved := glyph.Resolve(glyph.DefaultSet(), families)
+	out := make(map[glyph.Family]glyph.Family, len(failures))
+	for _, f := range failures {
+		out[f.Family] = resolved.Binding(f.Family)
+	}
+	return out
 }
 
 // Report writes one line per failure: the family, the cause, the fallback
@@ -280,28 +373,35 @@ func Report(out io.Writer, failures []Failure) {
 		fmt.Fprintln(out, "No family failed.")
 		return
 	}
+	remedies := Remedies(failures)
 	for _, f := range failures {
 		fmt.Fprintf(out, "%-13s %-8s falls back to %s; %s covers it\n",
-			f.Family, f.Cause, f.Fallback(), Font(f.Family))
+			f.Family, f.Cause, remedies[f.Family], Font(f.Family))
 	}
 }
 
 // Merge sets truecolor and failed on the identity's profile, records the
-// detected terminal when there is one, and leaves the other keys alone. It
-// reports whether the profile existed.
-func Merge(file *config.File, identity, terminal string, truecolor bool, failures []Failure) (existed bool) {
+// detected terminal when there is one and ambiguous_wide when it was probed,
+// and leaves the other keys alone. It reports whether the profile existed.
+func Merge(file *config.File, res Result, failures []Failure) (existed bool) {
 	if file.Profiles == nil {
 		file.Profiles = map[string]config.Settings{}
 	}
-	prof, existed := file.Profiles[identity]
-	if terminal != "" {
+	prof, existed := file.Profiles[res.Identity]
+	if res.Terminal != "" {
+		terminal := res.Terminal
 		prof.Terminal = &terminal
 	}
+	if res.Probed {
+		wide := res.AmbiguousWide
+		prof.AmbiguousWide = &wide
+	}
+	truecolor := res.Truecolor
 	prof.Truecolor = &truecolor
 	prof.Failed = nil
 	for _, f := range failures {
 		prof.Failed = append(prof.Failed, string(f.Family))
 	}
-	file.Profiles[identity] = prof
+	file.Profiles[res.Identity] = prof
 	return existed
 }

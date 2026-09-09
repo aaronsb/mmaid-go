@@ -1,6 +1,7 @@
 // Package term puts a terminal into raw mode for the tester's probes and
-// restores it. Linux and macOS go through ioctl in the syscall package; every
-// other GOOS reports raw mode as unsupported and the tester asks instead.
+// restores it. Linux, macOS and the BSDs go through ioctl in the syscall
+// package; every other GOOS reports raw mode as unsupported and the tester
+// asks instead.
 package term
 
 import (
@@ -22,7 +23,8 @@ func MakeRaw(fd int, timeout time.Duration) (*State, error) {
 	return makeRaw(fd, timeout)
 }
 
-// Restore puts fd back as MakeRaw found it.
+// Restore puts fd back as MakeRaw found it, discarding any input still
+// queued.
 func Restore(fd int, s *State) error {
 	if s == nil {
 		return nil

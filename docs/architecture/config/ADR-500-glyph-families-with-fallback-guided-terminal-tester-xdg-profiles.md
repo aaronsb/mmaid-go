@@ -74,7 +74,10 @@ Probed, with a 200 ms timeout on each query:
 - advance width per family: print the family's sample with the cursor
   at a known column, request a cursor position report (`ESC [ 6 n`),
   and compare. A family whose sample advances by a different count than
-  its ADR-401 width is marked failed with the cause `advance`.
+  its ADR-401 width is marked failed with the cause `advance`;
+- ambiguous width, from the box-light sample's advance: twice its width
+  sets `ambiguous_wide` and fails nothing, and the other samples are then
+  judged against their ambiguous-wide widths.
 
 Raw mode for the probes uses `ioctl` through the `syscall` package on
 Linux and macOS. On Windows and on a non-tty, the probes are skipped and
@@ -167,10 +170,10 @@ clearing the screen between renders, polling at 250 ms.
 - The CLI grows a `config` subcommand beside its flags.
 - Theme colours are unchanged by this ADR; base16 scheme files are a
   separate decision.
-- A failure reaches up its chain: a family whose fallback failed is drawn
-  from the failed family's own fallback, so a failed `blocks` sends braille,
-  sextants, octants and legacy-fills to ASCII, and a failed `box-light` sends
-  every box family there.
+- Only a family marked failed moves. Its chain walk skips failed links, so
+  `braille` and `blocks` both failed draws braille's roles in ASCII; an
+  unmarked family stays itself even when its fallback failed, so `blocks`
+  failed alone leaves the braille circle in place.
 - The `legacy` set binds the fills role to `legacy-fills`: bars and shades
   from the U+1FB9x fills, and the pie's half-cell circle from the U+1FB8E
   and U+1FB8F medium-shade halves, so it dithers. Everything else is the

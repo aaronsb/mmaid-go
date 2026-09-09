@@ -10,7 +10,6 @@ import (
 
 	"github.com/aaronsb/mmaid-go/internal/config"
 	"github.com/aaronsb/mmaid-go/internal/glyph"
-	"github.com/aaronsb/mmaid-go/internal/renderer"
 	"github.com/aaronsb/mmaid-go/internal/tester"
 )
 
@@ -127,20 +126,27 @@ func runConfigInit(args []string) {
 		os.Exit(1)
 	}
 
-	res, path, err := resolveSettings()
+	_, path, err := resolveSettings()
 	if err != nil {
 		fail(err)
 	}
 	if path == "" {
 		fail(fmt.Errorf("nowhere to write: neither XDG_CONFIG_HOME nor HOME is set"))
 	}
-	// The sheet shows the set as it draws with nothing failed, so a re-run
-	// tests the families rather than their fallbacks.
-	samples := renderer.GlyphSamples(glyphSet(res.Glyphs))
+	// Every family in its own runes, whatever set the configuration names.
+	samples := tester.Samples()
+
+	// One reader on stdin: the probes read the file directly in raw mode
+	// and every cooked-mode prompt reads through this.
+	stdin := bufio.NewReader(os.Stdin)
 
 	probe := tester.FromEnv()
 	if !*noProbe {
-		probe = tester.Probe(os.Stdin, os.Stdout, samples)
+		var restoreErr error
+		probe, restoreErr = tester.Probe(os.Stdin, os.Stdout, samples)
+		if restoreErr != nil {
+			fmt.Fprintf(os.Stderr, "%smmaid:%s restoring the terminal: %v\n", ansiBold+ansiCyan, ansiReset, restoreErr)
+		}
 	}
 	if probe.Identity == "" {
 		fail(fmt.Errorf("no terminal identity: neither TERM_PROGRAM nor TERM is set"))
@@ -159,13 +165,13 @@ func runConfigInit(args []string) {
 	case *noProbe:
 		fmt.Println("probes     skipped (--no-probe)")
 	case probe.Probed:
-		fmt.Printf("probes     advance width checked for %d families\n", len(samples)-1)
+		fmt.Printf("probes     advance width checked for %d families; ambiguous_wide %t\n", len(samples)-1, probe.AmbiguousWide)
 	default:
 		fmt.Println("probes     skipped (not a terminal, or it did not answer)")
 	}
 	fmt.Println()
 
-	failures, err := tester.Ask(os.Stdin, os.Stdout, samples, probe.Failed)
+	failures, err := tester.Ask(stdin, os.Stdout, samples, probe.Failed)
 	if err != nil {
 		fail(err)
 	}
@@ -177,14 +183,13 @@ func runConfigInit(args []string) {
 		fail(err)
 	}
 	if _, exists := file.Profiles[probe.Identity]; exists && !*force {
-		fmt.Printf("Profile %q exists in %s. Replace its truecolor and failed keys? [y/N]: ", probe.Identity, path)
-		answer, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-		if a := strings.ToLower(strings.TrimSpace(answer)); a != "y" && a != "yes" {
+		prompt := fmt.Sprintf("Profile %q exists in %s. Replace its truecolor, ambiguous_wide and failed keys?", probe.Identity, path)
+		if !tester.Confirm(stdin, os.Stdout, prompt) {
 			fmt.Println("left as it was")
 			return
 		}
 	}
-	tester.Merge(&file, probe.Identity, probe.Terminal, probe.Truecolor, failures)
+	tester.Merge(&file, probe, failures)
 	if err := config.Save(path, file); err != nil {
 		fail(err)
 	}

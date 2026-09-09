@@ -187,10 +187,10 @@ func LookupSet(name string) (Set, bool) {
 // DefaultSet is the set used when none is named.
 func DefaultSet() Set { return Sets["unicode"] }
 
-// Resolve rebinds every role whose family failed. A failure reaches up its
-// chain: a family whose fallback failed is drawn from the failed family's
-// own fallback, so failing blocks sends braille, sextants, octants and
-// legacy-fills to ASCII. Nothing else in the set changes.
+// Resolve rebinds every role whose family failed to the first family down
+// its fallback chain that did not. A family that was not marked failed stays
+// where it is, whatever happened to its fallback. Nothing else in the set
+// changes.
 func Resolve(set Set, failed []Family) Set {
 	bad := make(map[Family]bool, len(failed))
 	for _, f := range failed {
@@ -198,14 +198,13 @@ func Resolve(set Set, failed []Family) Set {
 	}
 	delete(bad, ASCIIFamily)
 	resolve := func(f Family) Family {
-		out := f
+		if !bad[f] {
+			return f
+		}
 		for cur := f; ; {
 			next, ok := Fallback[cur]
-			if !ok {
-				return out
-			}
-			if bad[cur] {
-				out = next
+			if !ok || !bad[next] {
+				return next
 			}
 			cur = next
 		}

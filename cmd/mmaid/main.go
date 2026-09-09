@@ -42,12 +42,6 @@ const (
 )
 
 func main() {
-	// The config subcommand takes no flags and is dispatched before flag.Parse.
-	if len(os.Args) > 1 && os.Args[1] == "config" {
-		runConfig(os.Args[2:])
-		return
-	}
-
 	// GNU-style: both short (-a) and long (--ascii) forms
 	var (
 		ascii       bool
@@ -107,6 +101,11 @@ func main() {
 	flag.Usage = func() { printUsage() }
 	flag.Parse()
 
+	// The config subcommand is dispatched once the settings are applied, so
+	// it measures text the way a render would; flag.Parse stops at its name
+	// and leaves it and its own flags in flag.Args.
+	isConfig := flag.Arg(0) == "config"
+
 	if cellsPath != "" && (markdown || insert != "") {
 		fmt.Fprintf(os.Stderr, "%smmaid:%s --cells cannot be combined with --markdown or --insert\n", ansiBold+ansiCyan, ansiReset)
 		os.Exit(1)
@@ -136,16 +135,21 @@ func main() {
 	// Resolution order: flag, MMAID_*, the terminal's profile, the file's
 	// default section, the built-in default (ADR-500). A file that cannot be
 	// read is a warning: it must not stand between the user and a render.
+	// The config subcommand reports the file's problems itself.
 	res, _, err := resolveSettings()
-	if err != nil {
+	if err != nil && !isConfig {
 		fmt.Fprintf(os.Stderr, "%smmaid:%s config: %v\n", ansiBold+ansiCyan, ansiReset, err)
 	}
-	for _, w := range res.Warnings {
-		fmt.Fprintf(os.Stderr, "%smmaid:%s config: %s\n", ansiBold+ansiCyan, ansiReset, w)
+	if !isConfig {
+		for _, w := range res.Warnings {
+			fmt.Fprintf(os.Stderr, "%smmaid:%s config: %s\n", ansiBold+ansiCyan, ansiReset, w)
+		}
 	}
 	theme = res.Theme
 	glyphs = glyphSet(res.Glyphs).Name
-	warnUnknownFamilies(res.Failed)
+	if !isConfig {
+		warnUnknownFamilies(res.Failed)
+	}
 	paddingX, paddingY = res.PaddingX, res.PaddingY
 	sharpEdges = res.SharpEdges
 
@@ -161,6 +165,11 @@ func main() {
 	}
 	renderer.SetTruecolor(res.Truecolor)
 	textwidth.SetAmbiguousWide(res.AmbiguousWide)
+
+	if isConfig {
+		runConfig(flag.Args()[1:])
+		return
+	}
 
 	if glyphSample {
 		w, closeOut := openOutput(output)

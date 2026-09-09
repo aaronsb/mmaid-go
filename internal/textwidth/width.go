@@ -49,8 +49,29 @@ func SetAmbiguousWide(wide bool) {
 	ambigCfg.mu.Unlock()
 }
 
-// Rune returns the number of terminal columns a rune occupies.
+// Rune returns the number of terminal columns a rune occupies under the
+// current ambiguous-width setting.
 func Rune(r rune) int {
+	return RuneWith(r, AmbiguousWide())
+}
+
+// String returns the number of terminal columns a string occupies under the
+// current ambiguous-width setting.
+func String(s string) int {
+	return StringWith(s, AmbiguousWide())
+}
+
+// StringWith is String with the ambiguous-width setting given explicitly.
+func StringWith(s string, ambiguousWide bool) int {
+	w := 0
+	for _, r := range s {
+		w += RuneWith(r, ambiguousWide)
+	}
+	return w
+}
+
+// RuneWith is Rune with the ambiguous-width setting given explicitly.
+func RuneWith(r rune, ambiguousWide bool) int {
 	if r == 0 {
 		return 0
 	}
@@ -66,19 +87,10 @@ func Rune(r rune) int {
 	if inTable(wide, r) {
 		return 2
 	}
-	if AmbiguousWide() && inTable(ambiguous, r) {
+	if ambiguousWide && inTable(ambiguous, r) {
 		return 2
 	}
 	return 1
-}
-
-// String returns the number of terminal columns a string occupies.
-func String(s string) int {
-	w := 0
-	for _, r := range s {
-		w += Rune(r)
-	}
-	return w
 }
 
 // Truncate cuts s to at most max columns, never splitting a wide rune.

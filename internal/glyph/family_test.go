@@ -42,11 +42,14 @@ func TestResolveFailedHeavyLeavesLightAlone(t *testing.T) {
 	}
 }
 
-func TestResolveFailedBlocksCascades(t *testing.T) {
+func TestResolveMovesOnlyTheFailedFamily(t *testing.T) {
 	got := Resolve(DefaultSet(), []Family{Blocks})
-	for _, role := range []Family{Blocks, Braille, Sextants, Octants, LegacyFills} {
-		if b := got.Binding(role); b != ASCIIFamily {
-			t.Errorf("%s resolved to %s, want ascii", role, b)
+	if got.Fills != ASCIIFamily {
+		t.Errorf("blocks resolved to %s, want ascii", got.Fills)
+	}
+	for _, role := range []Family{Braille, Sextants, Octants, LegacyFills} {
+		if b := got.Binding(role); b != role {
+			t.Errorf("%s moved to %s; an unmarked family stays", role, b)
 		}
 	}
 	if got.Light != BoxLight || got.Arrows != Arrows {
@@ -54,10 +57,17 @@ func TestResolveFailedBlocksCascades(t *testing.T) {
 	}
 }
 
-func TestResolveWalksTheChainPastAFailedFallback(t *testing.T) {
+func TestResolveSkipsFailedLinks(t *testing.T) {
 	got := Resolve(DefaultSet(), []Family{Octants, Sextants})
 	if got.Octants != Blocks {
 		t.Errorf("octants resolved to %s, want blocks", got.Octants)
+	}
+	got = Resolve(DefaultSet(), []Family{Braille, Blocks})
+	if got.Dots != ASCIIFamily || got.Fills != ASCIIFamily {
+		t.Errorf("braille %s blocks %s, want ascii for both", got.Dots, got.Fills)
+	}
+	if got.Sextants != Sextants {
+		t.Errorf("sextants moved to %s", got.Sextants)
 	}
 }
 
@@ -66,11 +76,8 @@ func TestResolveFailedLightDropsDashedToASCII(t *testing.T) {
 	if got.Light != ASCIIFamily || got.Dashed != ASCIIFamily {
 		t.Errorf("light %s dashed %s, want ascii for both", got.Light, got.Dashed)
 	}
-	if got.Corners != ASCIIFamily {
-		t.Errorf("rounded corners fall through their failed fallback, got %s", got.Corners)
-	}
-	if got.Heavy != ASCIIFamily || got.Double != ASCIIFamily {
-		t.Error("the box families all pass through box-light and fail with it")
+	if got.Corners != BoxRounded || got.Heavy != BoxHeavy || got.Double != BoxDouble {
+		t.Errorf("the other box roles moved: corners %s heavy %s double %s", got.Corners, got.Heavy, got.Double)
 	}
 	if got.Arrows != Arrows || got.Fills != Blocks {
 		t.Error("arrows or fills changed")

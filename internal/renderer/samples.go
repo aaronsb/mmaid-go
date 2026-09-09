@@ -15,7 +15,9 @@ type Sample struct {
 	Family    glyph.Family
 	Text      string
 	Reference string
-	Width     int // display width of Text by ADR-401's table
+	Width     int // display width of Text under the current ambiguous-width setting
+	Narrow    int // display width with ambiguous runes one column wide
+	Wide      int // display width with ambiguous runes two columns wide
 }
 
 // figures holds one figure per family. The box families draw one figure,
@@ -77,6 +79,8 @@ func GlyphSamples(set glyph.Set) []Sample {
 			Text:      text,
 			Reference: ref,
 			Width:     textwidth.String(text),
+			Narrow:    textwidth.StringWith(text, false),
+			Wide:      textwidth.StringWith(text, true),
 		})
 	}
 	return out

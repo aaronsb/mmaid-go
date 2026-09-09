@@ -1,4 +1,4 @@
-//go:build linux || darwin
+//go:build linux || darwin || freebsd || netbsd || openbsd || dragonfly
 
 package term
 
@@ -41,6 +41,11 @@ func makeRaw(fd int, timeout time.Duration) (*State, error) {
 	return &State{termios: old}, nil
 }
 
+// restore discards input still queued from the probes, so a late reply
+// does not reach the cooked-mode prompt, then puts the settings back.
 func restore(fd int, s *State) error {
+	if err := flushInput(fd); err != nil {
+		return err
+	}
 	return ioctl(fd, setTermios, &s.termios)
 }

@@ -44,8 +44,12 @@ func TestFailedBlocksDegradesFillsToASCII(t *testing.T) {
 	if cs.Fills.Dark != '#' || cs.Fills.Medium != '=' || cs.Fills.Light != '-' {
 		t.Errorf("fills = %q %q %q", cs.Fills.Dark, cs.Fills.Medium, cs.Fills.Light)
 	}
-	if cs.Braille {
-		t.Error("braille should cascade to ascii through blocks")
+	if !cs.Braille {
+		t.Error("braille was not marked failed and stays")
+	}
+	both := CharSetFor(glyph.Resolve(glyph.DefaultSet(), []glyph.Family{glyph.Blocks, glyph.Braille}))
+	if both.Braille {
+		t.Error("braille failed with its fallback resolves past it to ascii")
 	}
 	if cs.Tables[glyph.Light] != glyph.Unicode[glyph.Light] || cs.ArrowRight != '►' {
 		t.Error("boxes or arrows changed")
