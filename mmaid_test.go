@@ -100,7 +100,7 @@ func TestFlowchartSingleNode(t *testing.T) {
 func TestFlowchartDiamond(t *testing.T) {
 	out := Render("graph LR\n  A{Decision}")
 	assertContains(t, out, "Decision")
-	assertContains(t, out, "⟋") // chamfered diamond corners
+	assertContains(t, out, "╱") // chamfered diamond corners
 }
 
 func TestFlowchartRounded(t *testing.T) {

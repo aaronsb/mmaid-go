@@ -3,77 +3,25 @@ package renderer
 import (
 	"strings"
 
+	"github.com/aaronsb/mmaid-go/internal/glyph"
 	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
 
-// Continuation occupies the second cell of a wide rune. It is never emitted.
+// Continuation occupies the second cell of a wide rune. It is a literal the
+// resolver skips and never carries arms; it is never emitted.
 const Continuation rune = -1
 
-// boxChars is the set of all box-drawing characters that participate in
-// junction merging.
-var boxChars map[rune]bool
-
-// junctionTable maps (existing, new) rune pairs to their merged result.
-var junctionTable map[[2]rune]rune
-
-func init() {
-	boxChars = make(map[rune]bool)
-	for _, r := range "─│┌┐└┘├┤┬┴┼━┃╋┄┆╭╮╰╯═║╔╗╚╝◆◇◯" {
-		boxChars[r] = true
-	}
-
-	type triple struct{ a, b, c rune }
-
-	pairs := []triple{
-		{'─', '│', '┼'}, {'│', '─', '┼'},
-		{'─', '┌', '┬'}, {'─', '┐', '┬'}, {'─', '└', '┴'}, {'─', '┘', '┴'},
-		{'┌', '─', '┬'}, {'┐', '─', '┬'}, {'└', '─', '┴'}, {'┘', '─', '┴'},
-		{'│', '┌', '├'}, {'│', '└', '├'}, {'│', '┐', '┤'}, {'│', '┘', '┤'},
-		{'┌', '│', '├'}, {'└', '│', '├'}, {'┐', '│', '┤'}, {'┘', '│', '┤'},
-		{'├', '─', '┼'}, {'┤', '─', '┼'}, {'┬', '│', '┼'}, {'┴', '│', '┼'},
-		{'─', '├', '┼'}, {'─', '┤', '┼'}, {'│', '┬', '┼'}, {'│', '┴', '┼'},
-		{'├', '┐', '┼'}, {'├', '┘', '┼'}, {'┤', '┌', '┼'}, {'┤', '└', '┼'},
-		{'┬', '└', '┼'}, {'┬', '┘', '┼'}, {'┴', '┌', '┼'}, {'┴', '┐', '┼'},
-		{'├', '┤', '┼'}, {'┤', '├', '┼'}, {'┬', '┴', '┼'}, {'┴', '┬', '┼'},
-		{'┌', '┘', '┼'}, {'┘', '┌', '┼'}, {'┐', '└', '┼'}, {'└', '┐', '┼'},
-		{'┌', '┐', '┬'}, {'┐', '┌', '┬'}, {'└', '┘', '┴'}, {'┘', '└', '┴'},
-		{'┌', '└', '├'}, {'└', '┌', '├'}, {'┐', '┘', '┤'}, {'┘', '┐', '┤'},
-		{'━', '┃', '╋'}, {'┃', '━', '╋'},
-		{'┄', '┆', '┼'}, {'┆', '┄', '┼'},
-		{'─', '┃', '┼'}, {'┃', '─', '┼'}, {'━', '│', '┼'}, {'│', '━', '┼'},
-		{'─', '╭', '┬'}, {'─', '╮', '┬'}, {'─', '╰', '┴'}, {'─', '╯', '┴'},
-		{'╭', '─', '┬'}, {'╮', '─', '┬'}, {'╰', '─', '┴'}, {'╯', '─', '┴'},
-		{'│', '╭', '├'}, {'│', '╰', '├'}, {'│', '╮', '┤'}, {'│', '╯', '┤'},
-		{'╭', '│', '├'}, {'╰', '│', '├'}, {'╮', '│', '┤'}, {'╯', '│', '┤'},
-		{'╭', '╯', '┼'}, {'╯', '╭', '┼'}, {'╮', '╰', '┼'}, {'╰', '╮', '┼'},
-		{'╭', '╮', '┬'}, {'╮', '╭', '┬'}, {'╰', '╯', '┴'}, {'╯', '╰', '┴'},
-		{'╭', '╰', '├'}, {'╰', '╭', '├'}, {'╮', '╯', '┤'}, {'╯', '╮', '┤'},
-		{'├', '╮', '┼'}, {'├', '╯', '┼'}, {'┤', '╭', '┼'}, {'┤', '╰', '┼'},
-		{'┬', '╰', '┼'}, {'┬', '╯', '┼'}, {'┴', '╭', '┼'}, {'┴', '╮', '┼'},
-		{'═', '│', '┼'}, {'│', '═', '┼'}, {'║', '─', '┼'}, {'─', '║', '┼'},
-		{'╔', '─', '┬'}, {'╗', '─', '┬'}, {'╚', '─', '┴'}, {'╝', '─', '┴'},
-		{'╔', '│', '├'}, {'╚', '│', '├'}, {'╗', '│', '┤'}, {'╝', '│', '┤'},
-		{'║', '┌', '├'}, {'║', '└', '├'}, {'║', '┐', '┤'}, {'║', '┘', '┤'},
-		{'═', '┌', '┬'}, {'═', '┐', '┬'}, {'═', '└', '┴'}, {'═', '┘', '┴'},
-	}
-
-	// Shape markers override any box-drawing character.
-	allBox := "─│┌┐└┘├┤┬┴┼━┃╋┄┆╭╮╰╯═║╔╗╚╝"
-	markers := []rune{'◆', '◇', '◯'}
-	for _, marker := range markers {
-		for _, bc := range allBox {
-			pairs = append(pairs, triple{marker, bc, marker})
-			pairs = append(pairs, triple{bc, marker, marker})
-		}
-	}
-
-	junctionTable = make(map[[2]rune]rune, len(pairs))
-	for _, p := range pairs {
-		junctionTable[[2]rune{p.a, p.b}] = p.c
-	}
+// lineCell is the line layer of one cell: which sides a line leaves through,
+// its weight, and whether a two-arm corner draws rounded.
+type lineCell struct {
+	arms    glyph.Arms
+	weight  glyph.Weight
+	rounded bool
 }
 
-// Canvas is a 2D character grid with optional per-cell style annotations.
+// Canvas is a 2D character grid with a line layer beside it. Lines are drawn
+// as arms and resolve to glyphs in a final pass; anything written with Put is
+// a literal and wins over the arms in its cell.
 // Indexing is row-major: grid[row][col].
 type Canvas struct {
 	Width     int
@@ -81,40 +29,69 @@ type Canvas struct {
 	grid      [][]rune
 	styleGrid [][]string
 	fillGrid  [][]string // background fill layer (composed with styleGrid in ToColorString)
+	lines     [][]lineCell
+	literal   [][]bool
+	cs        CharSet
 }
 
 // NewCanvas creates a Canvas of the given width and height, filled with spaces.
+// Lines resolve through UNICODE until SetCharSet says otherwise.
 func NewCanvas(width, height int) *Canvas {
-	grid := make([][]rune, height)
-	styleGrid := make([][]string, height)
-	fillGrid := make([][]string, height)
-	for r := range height {
-		row := make([]rune, width)
-		srow := make([]string, width)
-		frow := make([]string, width)
-		for c := range width {
-			row[c] = ' '
-			srow[c] = "default"
-		}
-		grid[r] = row
-		styleGrid[r] = srow
-		fillGrid[r] = frow
+	c := &Canvas{cs: UNICODE}
+	c.grid = make([][]rune, 0, height)
+	c.styleGrid = make([][]string, 0, height)
+	c.fillGrid = make([][]string, 0, height)
+	c.lines = make([][]lineCell, 0, height)
+	c.literal = make([][]bool, 0, height)
+	for range height {
+		c.appendRow(width)
 	}
-	return &Canvas{
-		Width:     width,
-		Height:    height,
-		grid:      grid,
-		styleGrid: styleGrid,
-		fillGrid:  fillGrid,
-	}
+	c.Width = width
+	c.Height = height
+	return c
 }
 
-// Get returns the rune at (row, col). Out-of-bounds returns a space.
+func (c *Canvas) appendRow(width int) {
+	row := make([]rune, width)
+	srow := make([]string, width)
+	for i := range width {
+		row[i] = ' '
+		srow[i] = "default"
+	}
+	c.grid = append(c.grid, row)
+	c.styleGrid = append(c.styleGrid, srow)
+	c.fillGrid = append(c.fillGrid, make([]string, width))
+	c.lines = append(c.lines, make([]lineCell, width))
+	c.literal = append(c.literal, make([]bool, width))
+}
+
+// SetCharSet selects the tables the line layer resolves through.
+func (c *Canvas) SetCharSet(cs CharSet) {
+	c.cs = cs
+}
+
+func (c *Canvas) inBounds(row, col int) bool {
+	return row >= 0 && row < c.Height && col >= 0 && col < c.Width
+}
+
+// Get returns the glyph at (row, col) as it will render: a literal, or the
+// resolved line glyph. Out-of-bounds returns a space.
 func (c *Canvas) Get(row, col int) rune {
-	if row < 0 || row >= c.Height || col < 0 || col >= c.Width {
+	if !c.inBounds(row, col) {
 		return ' '
 	}
+	if lc := c.lines[row][col]; lc.arms != 0 && !c.literal[row][col] {
+		return c.cs.Glyph(lc.arms, lc.weight, lc.rounded)
+	}
 	return c.grid[row][col]
+}
+
+// Arms returns the arm bits at (row, col).
+func (c *Canvas) Arms(row, col int) glyph.Arms {
+	if !c.inBounds(row, col) {
+		return 0
+	}
+	return c.lines[row][col].arms
 }
 
 // clearRightHalf blanks a continuation cell orphaned by a write at (row, col).
@@ -122,6 +99,7 @@ func (c *Canvas) clearRightHalf(row, col int) {
 	if col+1 < c.Width && c.grid[row][col+1] == Continuation {
 		c.grid[row][col+1] = ' '
 		c.styleGrid[row][col+1] = "default"
+		c.literal[row][col+1] = false
 	}
 }
 
@@ -131,43 +109,86 @@ func (c *Canvas) clearLeftHalf(row, col int) {
 	if c.grid[row][col] == Continuation && col > 0 {
 		c.grid[row][col-1] = ' '
 		c.styleGrid[row][col-1] = "default"
+		c.literal[row][col-1] = false
 	}
 }
 
-// Put places a character on the canvas, optionally merging box-drawing junctions.
-// Spaces are silently ignored. Out-of-bounds writes are silently ignored.
-func (c *Canvas) Put(row, col int, ch rune, merge bool, style string) {
-	if row < 0 || row >= c.Height || col < 0 || col >= c.Width {
-		return
-	}
-	if ch == ' ' {
+// Put writes a literal glyph. A literal wins over any arms in its cell.
+// Spaces and out-of-bounds writes are silently ignored.
+func (c *Canvas) Put(row, col int, ch rune, style string) {
+	if !c.inBounds(row, col) || ch == ' ' {
 		return
 	}
 	c.clearRightHalf(row, col)
 	if ch != Continuation {
 		c.clearLeftHalf(row, col)
 	}
-	existing := c.grid[row][col]
-	if existing == Continuation {
-		existing = ' '
-	}
-	if existing == ' ' {
-		c.grid[row][col] = ch
-	} else if merge && boxChars[existing] && boxChars[ch] {
-		if merged, ok := junctionTable[[2]rune{existing, ch}]; ok {
-			c.grid[row][col] = merged
-		} else {
-			c.grid[row][col] = ch
-		}
-	} else {
-		c.grid[row][col] = ch
-	}
+	c.grid[row][col] = ch
+	c.literal[row][col] = true
 	if style != "" {
 		c.styleGrid[row][col] = style
 	}
 }
 
-// PutText places a string starting at (row, col) without junction merging.
+// PutBox writes a box-drawing rune as the arms it draws, so it merges with
+// other lines through the cell; any other rune is a literal.
+func (c *Canvas) PutBox(row, col int, ch rune, style string) {
+	if a, w, rounded, ok := glyph.Of(ch); ok {
+		c.Arm(row, col, a, w, rounded, style)
+		return
+	}
+	c.Put(row, col, ch, style)
+}
+
+// Arm ORs arm bits into a cell. The first arm into an empty cell sets its
+// style and weight; later arms keep the style and merge to the heavier
+// weight, dashed yielding to any solid stroke. A literal already in the cell
+// keeps its style, as it keeps its glyph. Rounded is set when any
+// contributor asks.
+func (c *Canvas) Arm(row, col int, a glyph.Arms, w glyph.Weight, rounded bool, style string) {
+	if !c.inBounds(row, col) || a == 0 || c.grid[row][col] == Continuation {
+		return
+	}
+	lc := &c.lines[row][col]
+	if lc.arms == 0 {
+		lc.weight = w
+		if style != "" && !c.literal[row][col] {
+			c.styleGrid[row][col] = style
+		}
+	} else if glyph.Heavier(w, lc.weight) {
+		lc.weight = w
+	}
+	lc.arms |= a
+	lc.rounded = lc.rounded || rounded
+}
+
+// Segment draws a straight line between two cells. Endpoint cells get only
+// the arm pointing inward; interior cells get both along-axis arms. A
+// diagonal or a single cell draws nothing.
+func (c *Canvas) Segment(r1, c1, r2, c2 int, w glyph.Weight, rounded bool, style string) {
+	switch {
+	case r1 == r2 && c1 != c2:
+		if c1 > c2 {
+			c1, c2 = c2, c1
+		}
+		c.Arm(r1, c1, glyph.E, w, rounded, style)
+		for col := c1 + 1; col < c2; col++ {
+			c.Arm(r1, col, glyph.Horizontal, w, rounded, style)
+		}
+		c.Arm(r1, c2, glyph.W, w, rounded, style)
+	case c1 == c2 && r1 != r2:
+		if r1 > r2 {
+			r1, r2 = r2, r1
+		}
+		c.Arm(r1, c1, glyph.S, w, rounded, style)
+		for row := r1 + 1; row < r2; row++ {
+			c.Arm(row, c1, glyph.Vertical, w, rounded, style)
+		}
+		c.Arm(r2, c1, glyph.N, w, rounded, style)
+	}
+}
+
+// PutText places a string starting at (row, col).
 func (c *Canvas) PutText(row, col int, text string, style string) {
 	offset := 0
 	for _, ch := range text {
@@ -186,9 +207,9 @@ func (c *Canvas) putWide(row, col int, ch rune, style string) int {
 	if w == 2 && row >= 0 && row < c.Height && col == c.Width-1 {
 		c.Resize(c.Width+1, c.Height)
 	}
-	c.Put(row, col, ch, false, style)
+	c.Put(row, col, ch, style)
 	if w == 2 {
-		c.Put(row, col+1, Continuation, false, style)
+		c.Put(row, col+1, Continuation, style)
 	}
 	return w
 }
@@ -210,23 +231,25 @@ type StyledSegment struct {
 	Style string
 }
 
-// ClearCell sets a cell back to a space with default style. Clearing either
-// half of a wide rune clears both.
+// ClearCell sets a cell back to a space with default style and no arms.
+// Clearing either half of a wide rune clears both.
 func (c *Canvas) ClearCell(row, col int) {
-	if row < 0 || row >= c.Height || col < 0 || col >= c.Width {
+	if !c.inBounds(row, col) {
 		return
 	}
 	c.clearRightHalf(row, col)
 	c.clearLeftHalf(row, col)
 	c.grid[row][col] = ' '
 	c.styleGrid[row][col] = "default"
+	c.lines[row][col] = lineCell{}
+	c.literal[row][col] = false
 }
 
 // SetFill sets a background fill style at (row, col).
 // This is a separate layer that composes with the cell's content style in ToColorString.
 // Content drawn on top keeps its foreground; the fill provides the background.
 func (c *Canvas) SetFill(row, col int, fill string) {
-	if row < 0 || row >= c.Height || col < 0 || col >= c.Width {
+	if !c.inBounds(row, col) {
 		return
 	}
 	c.fillGrid[row][col] = fill
@@ -234,7 +257,7 @@ func (c *Canvas) SetFill(row, col int, fill string) {
 
 // GetFill returns the fill style at (row, col).
 func (c *Canvas) GetFill(row, col int) string {
-	if row < 0 || row >= c.Height || col < 0 || col >= c.Width {
+	if !c.inBounds(row, col) {
 		return ""
 	}
 	return c.fillGrid[row][col]
@@ -242,7 +265,7 @@ func (c *Canvas) GetFill(row, col int) string {
 
 // SetStyle sets the style key at (row, col) without changing the character.
 func (c *Canvas) SetStyle(row, col int, style string) {
-	if row < 0 || row >= c.Height || col < 0 || col >= c.Width {
+	if !c.inBounds(row, col) {
 		return
 	}
 	if style != "" {
@@ -252,32 +275,30 @@ func (c *Canvas) SetStyle(row, col int, style string) {
 
 // GetStyle returns the style key at (row, col).
 func (c *Canvas) GetStyle(row, col int) string {
-	if row < 0 || row >= c.Height || col < 0 || col >= c.Width {
+	if !c.inBounds(row, col) {
 		return "default"
 	}
 	return c.styleGrid[row][col]
 }
 
-// DrawHorizontal draws a horizontal line from colStart to colEnd (inclusive).
-func (c *Canvas) DrawHorizontal(row, colStart, colEnd int, ch rune, style string) {
-	cMin, cMax := colStart, colEnd
-	if cMin > cMax {
-		cMin, cMax = cMax, cMin
+// DrawHorizontal draws a horizontal segment from colStart to colEnd
+// (inclusive). A single cell gets both horizontal arms.
+func (c *Canvas) DrawHorizontal(row, colStart, colEnd int, w glyph.Weight, style string) {
+	if colStart == colEnd {
+		c.Arm(row, colStart, glyph.Horizontal, w, false, style)
+		return
 	}
-	for col := cMin; col <= cMax; col++ {
-		c.Put(row, col, ch, true, style)
-	}
+	c.Segment(row, colStart, row, colEnd, w, false, style)
 }
 
-// DrawVertical draws a vertical line from rowStart to rowEnd (inclusive).
-func (c *Canvas) DrawVertical(col, rowStart, rowEnd int, ch rune, style string) {
-	rMin, rMax := rowStart, rowEnd
-	if rMin > rMax {
-		rMin, rMax = rMax, rMin
+// DrawVertical draws a vertical segment from rowStart to rowEnd (inclusive).
+// A single cell gets both vertical arms.
+func (c *Canvas) DrawVertical(col, rowStart, rowEnd int, w glyph.Weight, style string) {
+	if rowStart == rowEnd {
+		c.Arm(rowStart, col, glyph.Vertical, w, false, style)
+		return
 	}
-	for row := rMin; row <= rMax; row++ {
-		c.Put(row, col, ch, true, style)
-	}
+	c.Segment(rowStart, col, rowEnd, col, w, false, style)
 }
 
 // Resize expands the canvas to at least the given dimensions.
@@ -287,33 +308,39 @@ func (c *Canvas) Resize(newWidth, newHeight int) {
 	}
 	w := max(c.Width, newWidth)
 	h := max(c.Height, newHeight)
-	// Extend existing rows
 	for r := range c.Height {
 		for range w - c.Width {
 			c.grid[r] = append(c.grid[r], ' ')
 			c.styleGrid[r] = append(c.styleGrid[r], "default")
 			c.fillGrid[r] = append(c.fillGrid[r], "")
+			c.lines[r] = append(c.lines[r], lineCell{})
+			c.literal[r] = append(c.literal[r], false)
 		}
 	}
-	// Add new rows
 	for range h - c.Height {
-		row := make([]rune, w)
-		srow := make([]string, w)
-		frow := make([]string, w)
-		for i := range w {
-			row[i] = ' '
-			srow[i] = "default"
-		}
-		c.grid = append(c.grid, row)
-		c.styleGrid = append(c.styleGrid, srow)
-		c.fillGrid = append(c.fillGrid, frow)
+		c.appendRow(w)
 	}
 	c.Width = w
 	c.Height = h
 }
 
+// Resolve writes one glyph from cs into every armed cell that holds no
+// literal. It is idempotent and runs before every serialization.
+func (c *Canvas) Resolve(cs CharSet) {
+	for r := range c.Height {
+		for col := range c.Width {
+			lc := c.lines[r][col]
+			if lc.arms == 0 || c.literal[r][col] {
+				continue
+			}
+			c.grid[r][col] = cs.Glyph(lc.arms, lc.weight, lc.rounded)
+		}
+	}
+}
+
 // ToString renders the canvas to a string, trimming trailing whitespace.
 func (c *Canvas) ToString() string {
+	c.Resolve(c.cs)
 	lines := make([]string, c.Height)
 	for y := range c.Height {
 		var b strings.Builder
@@ -332,50 +359,56 @@ func (c *Canvas) ToString() string {
 	return strings.Join(lines, "\n")
 }
 
-// flipVerticalMap maps runes to their vertically flipped counterparts.
+// flipVerticalMap maps literal runes to their vertically flipped counterparts.
+// Lines flip through their arm bits.
 var flipVerticalMap = map[rune]rune{
-	'┌': '└', '┐': '┘', '└': '┌', '┘': '┐',
-	'├': '├', '┤': '┤', '┬': '┴', '┴': '┬',
 	'▼': '▲', '▲': '▼',
-	'╭': '╰', '╮': '╯', '╰': '╭', '╯': '╮',
+	'▽': '△', '△': '▽',
 	'v': '^', '^': 'v',
-	'╔': '╚', '╗': '╝', '╚': '╔', '╝': '╗',
+	'╱': '╲', '╲': '╱',
+	'/': '\\', '\\': '/',
 }
 
-// flipHorizontalMap maps runes to their horizontally flipped counterparts.
+// flipHorizontalMap maps literal runes to their horizontally flipped counterparts.
 var flipHorizontalMap = map[rune]rune{
-	'┌': '┐', '┐': '┌', '└': '┘', '┘': '└',
-	'├': '┤', '┤': '├', '┬': '┬', '┴': '┴',
 	'►': '◄', '◄': '►',
-	'╭': '╮', '╮': '╭', '╰': '╯', '╯': '╰',
+	'▷': '◁', '◁': '▷',
 	'>': '<', '<': '>',
-	'╔': '╗', '╗': '╔', '╚': '╝', '╝': '╚',
+	'╱': '╲', '╲': '╱',
+	'/': '\\', '\\': '/',
+	'(': ')', ')': '(',
 }
 
-// FlipVertical flips the canvas vertically (rows reversed, chars remapped).
+// FlipVertical flips the canvas vertically: rows reversed, north and south
+// arms swapped, literals remapped.
 func (c *Canvas) FlipVertical() {
-	// Reverse rows
 	for i, j := 0, c.Height-1; i < j; i, j = i+1, j-1 {
 		c.grid[i], c.grid[j] = c.grid[j], c.grid[i]
 		c.styleGrid[i], c.styleGrid[j] = c.styleGrid[j], c.styleGrid[i]
+		c.fillGrid[i], c.fillGrid[j] = c.fillGrid[j], c.fillGrid[i]
+		c.lines[i], c.lines[j] = c.lines[j], c.lines[i]
+		c.literal[i], c.literal[j] = c.literal[j], c.literal[i]
 	}
-	// Remap characters
 	for r := range c.Height {
 		for col := range c.Width {
-			if mapped, ok := flipVerticalMap[c.grid[r][col]]; ok {
+			c.lines[r][col].arms = swapArms(c.lines[r][col].arms, glyph.N, glyph.S)
+			if mapped, ok := flipVerticalMap[c.grid[r][col]]; ok && c.literal[r][col] {
 				c.grid[r][col] = mapped
 			}
 		}
 	}
 }
 
-// FlipHorizontal flips the canvas horizontally (columns reversed, chars remapped).
+// FlipHorizontal flips the canvas horizontally: columns reversed, east and
+// west arms swapped, literals remapped.
 func (c *Canvas) FlipHorizontal() {
 	for r := range c.Height {
-		// Reverse columns in this row
 		for i, j := 0, c.Width-1; i < j; i, j = i+1, j-1 {
 			c.grid[r][i], c.grid[r][j] = c.grid[r][j], c.grid[r][i]
 			c.styleGrid[r][i], c.styleGrid[r][j] = c.styleGrid[r][j], c.styleGrid[r][i]
+			c.fillGrid[r][i], c.fillGrid[r][j] = c.fillGrid[r][j], c.fillGrid[r][i]
+			c.lines[r][i], c.lines[r][j] = c.lines[r][j], c.lines[r][i]
+			c.literal[r][i], c.literal[r][j] = c.literal[r][j], c.literal[r][i]
 		}
 		// Reversal puts each continuation cell before its wide rune
 		for col := 0; col < c.Width-1; col++ {
@@ -384,13 +417,25 @@ func (c *Canvas) FlipHorizontal() {
 				c.styleGrid[r][col], c.styleGrid[r][col+1] = c.styleGrid[r][col+1], c.styleGrid[r][col]
 			}
 		}
-		// Remap characters
 		for col := range c.Width {
-			if mapped, ok := flipHorizontalMap[c.grid[r][col]]; ok {
+			c.lines[r][col].arms = swapArms(c.lines[r][col].arms, glyph.E, glyph.W)
+			if mapped, ok := flipHorizontalMap[c.grid[r][col]]; ok && c.literal[r][col] {
 				c.grid[r][col] = mapped
 			}
 		}
 	}
+}
+
+// swapArms exchanges the two given arm bits in a.
+func swapArms(a, x, y glyph.Arms) glyph.Arms {
+	out := a &^ (x | y)
+	if a&x != 0 {
+		out |= y
+	}
+	if a&y != 0 {
+		out |= x
+	}
+	return out
 }
 
 // StyledPair holds a rune and its associated style string.
@@ -401,6 +446,7 @@ type StyledPair struct {
 
 // ToStyledPairs returns the canvas content as a 2D slice of StyledPairs.
 func (c *Canvas) ToStyledPairs() [][]StyledPair {
+	c.Resolve(c.cs)
 	result := make([][]StyledPair, c.Height)
 	for y := range c.Height {
 		row := make([]StyledPair, 0, c.Width)

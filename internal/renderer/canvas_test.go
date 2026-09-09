@@ -3,6 +3,8 @@ package renderer
 import (
 	"strings"
 	"testing"
+
+	"github.com/aaronsb/mmaid-go/internal/glyph"
 )
 
 func TestNewCanvas(t *testing.T) {
@@ -22,7 +24,7 @@ func TestNewCanvas(t *testing.T) {
 
 func TestPutAndGet(t *testing.T) {
 	c := NewCanvas(10, 5)
-	c.Put(2, 3, 'X', false, "")
+	c.Put(2, 3, 'X', "")
 	if ch := c.Get(2, 3); ch != 'X' {
 		t.Errorf("expected X, got %c", ch)
 	}
@@ -30,8 +32,8 @@ func TestPutAndGet(t *testing.T) {
 
 func TestPutSkipsSpaces(t *testing.T) {
 	c := NewCanvas(10, 5)
-	c.Put(0, 0, 'A', false, "")
-	c.Put(0, 0, ' ', false, "")
+	c.Put(0, 0, 'A', "")
+	c.Put(0, 0, ' ', "")
 	if ch := c.Get(0, 0); ch != 'A' {
 		t.Errorf("space should not overwrite, got %c", ch)
 	}
@@ -39,37 +41,158 @@ func TestPutSkipsSpaces(t *testing.T) {
 
 func TestPutOutOfBounds(t *testing.T) {
 	c := NewCanvas(5, 5)
-	c.Put(-1, 0, 'X', false, "")
-	c.Put(0, -1, 'X', false, "")
-	c.Put(5, 0, 'X', false, "")
-	c.Put(0, 5, 'X', false, "")
+	c.Put(-1, 0, 'X', "")
+	c.Put(0, -1, 'X', "")
+	c.Put(5, 0, 'X', "")
+	c.Put(0, 5, 'X', "")
+	c.Arm(5, 5, glyph.N, glyph.Light, false, "")
 	// Should not panic
 }
 
-func TestJunctionMerging(t *testing.T) {
+func TestArmsMerge(t *testing.T) {
 	c := NewCanvas(5, 5)
-	c.Put(2, 2, '─', true, "")
-	c.Put(2, 2, '│', true, "")
+	c.Arm(2, 2, glyph.Horizontal, glyph.Light, false, "")
+	c.Arm(2, 2, glyph.Vertical, glyph.Light, false, "")
 	if ch := c.Get(2, 2); ch != '┼' {
-		t.Errorf("expected ┼ from merge, got %c", ch)
+		t.Errorf("expected ┼, got %c", ch)
 	}
 }
 
-func TestJunctionCorners(t *testing.T) {
+func TestPutBoxMerges(t *testing.T) {
 	tests := []struct {
 		a, b, want rune
 	}{
 		{'─', '┌', '┬'},
 		{'│', '┌', '├'},
 		{'┌', '┘', '┼'},
+		{'─', '╮', '┬'},
+		{'╭', '╯', '┼'},
 	}
 	for _, tt := range tests {
 		c := NewCanvas(3, 3)
-		c.Put(1, 1, tt.a, true, "")
-		c.Put(1, 1, tt.b, true, "")
+		c.PutBox(1, 1, tt.a, "")
+		c.PutBox(1, 1, tt.b, "")
 		if got := c.Get(1, 1); got != tt.want {
 			t.Errorf("merge(%c, %c) = %c, want %c", tt.a, tt.b, got, tt.want)
 		}
+	}
+}
+
+func TestPutBoxLiteral(t *testing.T) {
+	c := NewCanvas(3, 3)
+	c.PutBox(1, 1, '►', "")
+	c.PutBox(1, 1, '─', "")
+	if got := c.Get(1, 1); got != '►' {
+		t.Errorf("literal must win, got %c", got)
+	}
+}
+
+func TestLiteralWinsEitherOrder(t *testing.T) {
+	c := NewCanvas(3, 3)
+	c.Arm(1, 1, glyph.Horizontal, glyph.Light, false, "")
+	c.Put(1, 1, 'X', "")
+	if got := c.Get(1, 1); got != 'X' {
+		t.Errorf("literal after arms: got %c", got)
+	}
+	c = NewCanvas(3, 3)
+	c.Put(1, 1, 'X', "")
+	c.Arm(1, 1, glyph.Horizontal, glyph.Light, false, "")
+	if got := c.Get(1, 1); got != 'X' {
+		t.Errorf("literal before arms: got %c", got)
+	}
+	if got := c.ToString(); got != "\n X" {
+		t.Errorf("ToString = %q", got)
+	}
+}
+
+func TestSegmentEndpointsInwardOnly(t *testing.T) {
+	c := NewCanvas(6, 3)
+	c.Segment(1, 1, 1, 4, glyph.Light, false, "")
+	if got := c.ToString(); got != "\n ╶──╴" {
+		t.Errorf("ToString = %q", got)
+	}
+	c = NewCanvas(3, 5)
+	c.Segment(1, 1, 3, 1, glyph.Light, false, "")
+	if got := c.ToString(); got != "\n ╷\n │\n ╵" {
+		t.Errorf("ToString = %q", got)
+	}
+}
+
+func TestSegmentsMakeCorners(t *testing.T) {
+	c := NewCanvas(5, 4)
+	c.Segment(0, 0, 0, 4, glyph.Light, false, "")
+	c.Segment(3, 0, 3, 4, glyph.Light, false, "")
+	c.Segment(0, 0, 3, 0, glyph.Light, false, "")
+	c.Segment(0, 4, 3, 4, glyph.Light, false, "")
+	want := "┌───┐\n│   │\n│   │\n└───┘"
+	if got := c.ToString(); got != want {
+		t.Errorf("ToString =\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestRoundedAppliesToCornersOnly(t *testing.T) {
+	c := NewCanvas(5, 3)
+	c.Segment(1, 0, 1, 2, glyph.Light, true, "")
+	c.Segment(1, 2, 2, 2, glyph.Light, true, "")
+	if got := c.Get(1, 2); got != '╮' {
+		t.Errorf("bend = %c, want ╮", got)
+	}
+	c.Segment(1, 2, 1, 4, glyph.Light, false, "")
+	if got := c.Get(1, 2); got != '┬' {
+		t.Errorf("three arms = %c, want ┬", got)
+	}
+}
+
+func TestWeightMerge(t *testing.T) {
+	c := NewCanvas(3, 3)
+	c.Arm(1, 1, glyph.Horizontal, glyph.Dashed, false, "")
+	if got := c.Get(1, 1); got != '┄' {
+		t.Errorf("dashed = %c", got)
+	}
+	c.Arm(1, 1, glyph.Vertical, glyph.Light, false, "")
+	if got := c.Get(1, 1); got != '┼' {
+		t.Errorf("dashed yields to light: %c", got)
+	}
+	c.Arm(1, 1, glyph.N, glyph.Heavy, false, "")
+	if got := c.Get(1, 1); got != '╋' {
+		t.Errorf("heavy wins: %c", got)
+	}
+}
+
+func TestFirstArmSetsStyle(t *testing.T) {
+	c := NewCanvas(3, 3)
+	c.Arm(1, 1, glyph.Horizontal, glyph.Light, false, "node")
+	c.Arm(1, 1, glyph.S, glyph.Light, false, "edge")
+	if s := c.GetStyle(1, 1); s != "node" {
+		t.Errorf("style = %s, want node", s)
+	}
+	c.Put(1, 1, 'X', "label")
+	if s := c.GetStyle(1, 1); s != "label" {
+		t.Errorf("Put always sets style, got %s", s)
+	}
+}
+
+func TestResolveASCII(t *testing.T) {
+	c := NewCanvas(5, 4)
+	c.SetCharSet(ASCII)
+	c.Segment(0, 0, 0, 4, glyph.Light, true, "")
+	c.Segment(3, 0, 3, 4, glyph.Light, true, "")
+	c.Segment(0, 0, 3, 0, glyph.Light, true, "")
+	c.Segment(0, 4, 3, 4, glyph.Light, true, "")
+	c.Segment(0, 2, 3, 2, glyph.Dashed, true, "")
+	want := "+-+-+\n| | |\n| | |\n+-+-+"
+	if got := c.ToString(); got != want {
+		t.Errorf("ToString =\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestResolveIdempotent(t *testing.T) {
+	c := NewCanvas(3, 1)
+	c.Segment(0, 0, 0, 2, glyph.Light, false, "")
+	first := c.ToString()
+	c.Arm(0, 1, glyph.S, glyph.Light, false, "")
+	if second := c.ToString(); second == first || second != "╶┬╴" {
+		t.Errorf("second resolve = %q", second)
 	}
 }
 
@@ -85,18 +208,22 @@ func TestPutText(t *testing.T) {
 
 func TestDrawHorizontal(t *testing.T) {
 	c := NewCanvas(10, 3)
-	c.DrawHorizontal(1, 2, 7, '─', "")
-	for col := 2; col <= 7; col++ {
+	c.DrawHorizontal(1, 2, 7, glyph.Light, "")
+	for col := 3; col <= 6; col++ {
 		if ch := c.Get(1, col); ch != '─' {
 			t.Errorf("col %d: expected ─, got %c", col, ch)
 		}
+	}
+	c.DrawHorizontal(0, 4, 4, glyph.Light, "")
+	if ch := c.Get(0, 4); ch != '─' {
+		t.Errorf("single cell: expected ─, got %c", ch)
 	}
 }
 
 func TestDrawVertical(t *testing.T) {
 	c := NewCanvas(5, 10)
-	c.DrawVertical(2, 1, 6, '│', "")
-	for row := 1; row <= 6; row++ {
+	c.DrawVertical(2, 1, 6, glyph.Light, "")
+	for row := 2; row <= 5; row++ {
 		if ch := c.Get(row, 2); ch != '│' {
 			t.Errorf("row %d: expected │, got %c", row, ch)
 		}
@@ -105,8 +232,8 @@ func TestDrawVertical(t *testing.T) {
 
 func TestToString(t *testing.T) {
 	c := NewCanvas(5, 3)
-	c.Put(0, 0, 'A', false, "")
-	c.Put(1, 1, 'B', false, "")
+	c.Put(0, 0, 'A', "")
+	c.Put(1, 1, 'B', "")
 	s := c.ToString()
 	lines := strings.Split(s, "\n")
 	if len(lines) != 2 {
@@ -122,13 +249,21 @@ func TestToString(t *testing.T) {
 
 func TestResize(t *testing.T) {
 	c := NewCanvas(5, 5)
-	c.Put(2, 2, 'X', false, "")
+	c.Put(2, 2, 'X', "")
+	c.Arm(3, 3, glyph.Horizontal, glyph.Light, false, "")
 	c.Resize(10, 10)
 	if c.Width != 10 || c.Height != 10 {
 		t.Errorf("expected 10x10 after resize, got %dx%d", c.Width, c.Height)
 	}
 	if ch := c.Get(2, 2); ch != 'X' {
 		t.Errorf("content lost after resize")
+	}
+	if ch := c.Get(3, 3); ch != '─' {
+		t.Errorf("arms lost after resize")
+	}
+	c.Arm(9, 9, glyph.Vertical, glyph.Light, false, "")
+	if ch := c.Get(9, 9); ch != '│' {
+		t.Errorf("new cells take arms, got %c", ch)
 	}
 }
 
@@ -142,25 +277,36 @@ func TestResizeNoOp(t *testing.T) {
 
 func TestFlipVertical(t *testing.T) {
 	c := NewCanvas(3, 3)
-	c.Put(0, 1, '▼', false, "")
+	c.Put(0, 1, '▼', "")
+	c.Segment(0, 0, 2, 0, glyph.Light, false, "")
+	c.Segment(2, 0, 2, 2, glyph.Light, false, "")
 	c.FlipVertical()
 	if ch := c.Get(2, 1); ch != '▲' {
 		t.Errorf("expected ▲ after flip, got %c", ch)
+	}
+	if ch := c.Get(0, 0); ch != '┌' {
+		t.Errorf("corner after flip = %c, want ┌", ch)
 	}
 }
 
 func TestFlipHorizontal(t *testing.T) {
 	c := NewCanvas(5, 3)
-	c.Put(1, 0, '►', false, "")
+	c.Put(1, 0, '►', "")
+	c.Segment(0, 0, 0, 4, glyph.Light, true, "")
+	c.Segment(0, 4, 2, 4, glyph.Light, true, "")
 	c.FlipHorizontal()
 	if ch := c.Get(1, 4); ch != '◄' {
 		t.Errorf("expected ◄ after flip, got %c", ch)
+	}
+	if ch := c.Get(0, 0); ch != '╭' {
+		t.Errorf("corner after flip = %c, want ╭", ch)
 	}
 }
 
 func TestClearCell(t *testing.T) {
 	c := NewCanvas(5, 5)
-	c.Put(2, 2, 'X', false, "test")
+	c.Put(2, 2, 'X', "test")
+	c.Arm(2, 2, glyph.Horizontal, glyph.Light, false, "")
 	c.ClearCell(2, 2)
 	if ch := c.Get(2, 2); ch != ' ' {
 		t.Errorf("expected space after clear, got %c", ch)
@@ -168,11 +314,14 @@ func TestClearCell(t *testing.T) {
 	if s := c.GetStyle(2, 2); s != "default" {
 		t.Errorf("expected default style after clear, got %s", s)
 	}
+	if a := c.Arms(2, 2); a != 0 {
+		t.Errorf("expected no arms after clear, got %04b", a)
+	}
 }
 
 func TestStyle(t *testing.T) {
 	c := NewCanvas(5, 5)
-	c.Put(1, 1, 'A', false, "myStyle")
+	c.Put(1, 1, 'A', "myStyle")
 	if s := c.GetStyle(1, 1); s != "myStyle" {
 		t.Errorf("expected myStyle, got %s", s)
 	}
@@ -198,7 +347,7 @@ func TestPutTextWideRune(t *testing.T) {
 func TestPutOverContinuationClearsWideRune(t *testing.T) {
 	c := NewCanvas(10, 1)
 	c.PutText(0, 0, "日", "")
-	c.Put(0, 1, 'x', false, "")
+	c.Put(0, 1, 'x', "")
 	if ch := c.Get(0, 0); ch != ' ' {
 		t.Errorf("col 0 = %q, want space", ch)
 	}
@@ -210,7 +359,7 @@ func TestPutOverContinuationClearsWideRune(t *testing.T) {
 func TestPutOverWideRuneClearsContinuation(t *testing.T) {
 	c := NewCanvas(10, 1)
 	c.PutText(0, 0, "日", "")
-	c.Put(0, 0, 'x', false, "")
+	c.Put(0, 0, 'x', "")
 	if ch := c.Get(0, 1); ch != ' ' {
 		t.Errorf("col 1 = %q, want space", ch)
 	}
@@ -224,7 +373,7 @@ func TestClearCellClearsBothHalves(t *testing.T) {
 		c := NewCanvas(10, 1)
 		c.PutText(0, 0, "日本", "")
 		c.ClearCell(0, half)
-		c.Put(0, 4, 'x', false, "")
+		c.Put(0, 4, 'x', "")
 		if got := c.ToString(); got != "  本x" {
 			t.Errorf("clearing column %d gave %q, want %q", half, got, "  本x")
 		}
@@ -233,7 +382,7 @@ func TestClearCellClearsBothHalves(t *testing.T) {
 		c := NewCanvas(10, 1)
 		c.PutText(0, 0, "日本", "")
 		c.ClearCell(0, half)
-		c.Put(0, 4, 'x', false, "")
+		c.Put(0, 4, 'x', "")
 		if got := c.ToString(); got != "日  x" {
 			t.Errorf("clearing column %d gave %q, want %q", half, got, "日  x")
 		}
@@ -242,7 +391,7 @@ func TestClearCellClearsBothHalves(t *testing.T) {
 
 func TestPutTextSkipsZeroWidthRunes(t *testing.T) {
 	c := NewCanvas(10, 1)
-	c.Put(0, 5, '│', false, "")
+	c.Put(0, 5, '│', "")
 	c.PutText(0, 0, "Café", "") // e followed by a combining acute
 	if got := c.ToString(); got != "Cafe │" {
 		t.Errorf("ToString = %q, want %q", got, "Cafe │")
@@ -264,7 +413,7 @@ func TestPutTextResizesForAWideRuneInTheLastColumn(t *testing.T) {
 	if ch := c.Get(0, 3); ch != Continuation {
 		t.Errorf("col 3 = %q, want continuation", ch)
 	}
-	c.Put(0, 3, 'x', false, "")
+	c.Put(0, 3, 'x', "")
 	if got := c.ToString(); got != "   x" {
 		t.Errorf("ToString = %q, want %q", got, "   x")
 	}

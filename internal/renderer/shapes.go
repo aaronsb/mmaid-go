@@ -3,6 +3,7 @@ package renderer
 import (
 	"strings"
 
+	"github.com/aaronsb/mmaid-go/internal/glyph"
 	"github.com/aaronsb/mmaid-go/internal/graph"
 	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
@@ -45,52 +46,43 @@ func fillInterior(c *Canvas, x, y, width, height int, style string) {
 
 // isUnicode returns true if the charset is using Unicode box-drawing characters.
 func isUnicode(cs CharSet) bool {
-	return cs.Horizontal == '─'
+	return cs.Rune(glyph.Horizontal, glyph.Light) == '─'
 }
 
-// drawBox draws a standard rectangular border with the given corner runes.
-func drawBox(c *Canvas, x, y, width, height int, tl, tr, bl, br rune, cs CharSet, style string) {
-	// Top border
-	c.Put(y, x, tl, true, style)
-	for col := x + 1; col < x+width-1; col++ {
-		c.Put(y, col, cs.Horizontal, true, style)
-	}
-	c.Put(y, x+width-1, tr, true, style)
+// drawBorder draws a rectangle as four segments; the corners come from the
+// arms that meet there.
+func drawBorder(c *Canvas, x, y, width, height int, rounded bool, style string) {
+	x2, y2 := x+width-1, y+height-1
+	c.Segment(y, x, y, x2, glyph.Light, rounded, style)
+	c.Segment(y2, x, y2, x2, glyph.Light, rounded, style)
+	c.Segment(y, x, y2, x, glyph.Light, rounded, style)
+	c.Segment(y, x2, y2, x2, glyph.Light, rounded, style)
+}
 
-	// Bottom border
-	c.Put(y+height-1, x, bl, true, style)
-	for col := x + 1; col < x+width-1; col++ {
-		c.Put(y+height-1, col, cs.Horizontal, true, style)
-	}
-	c.Put(y+height-1, x+width-1, br, true, style)
-
-	// Side borders and interior fill (for background-color themes)
-	for row := y + 1; row < y+height-1; row++ {
-		c.Put(row, x, cs.Vertical, true, style)
-		c.Put(row, x+width-1, cs.Vertical, true, style)
-		// Fill interior spaces with the style so background colors render
-		for col := x + 1; col < x+width-1; col++ {
-			c.SetStyle(row, col, style)
-		}
-	}
+// drawCorners writes four literal runes over the corners of a border.
+func drawCorners(c *Canvas, x, y, width, height int, tl, tr, bl, br rune, style string) {
+	c.Put(y, x, tl, style)
+	c.Put(y, x+width-1, tr, style)
+	c.Put(y+height-1, x, bl, style)
+	c.Put(y+height-1, x+width-1, br, style)
 }
 
 // shapeIndicator places a small shape-type symbol inside the upper-left corner.
 func shapeIndicator(c *Canvas, x, y int, indicator rune, style string) {
-	c.Put(y+1, x+1, indicator, false, style)
+	c.Put(y+1, x+1, indicator, style)
 }
 
 // DrawRectangle draws a standard box with corners, horizontal/vertical borders,
 // and a centered label.
 func DrawRectangle(c *Canvas, x, y, width, height int, label string, cs CharSet, style string) {
-	drawBox(c, x, y, width, height, cs.TopLeft, cs.TopRight, cs.BottomLeft, cs.BottomRight, cs, style)
+	drawBorder(c, x, y, width, height, false, style)
 	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
 }
 
 // DrawRounded draws a box with rounded corners and a centered label.
 func DrawRounded(c *Canvas, x, y, width, height int, label string, cs CharSet, style string) {
-	drawBox(c, x, y, width, height, cs.RoundTopLeft, cs.RoundTopRight, cs.RoundBottomLeft, cs.RoundBottomRight, cs, style)
+	drawBorder(c, x, y, width, height, true, style)
 	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
 	shapeIndicator(c, x, y, '◦', style) // rounded
@@ -98,24 +90,10 @@ func DrawRounded(c *Canvas, x, y, width, height int, label string, cs CharSet, s
 
 // DrawStadium draws a stadium shape: rounded top/bottom with parentheses on sides.
 func DrawStadium(c *Canvas, x, y, width, height int, label string, cs CharSet, style string) {
-	// Top border
-	c.Put(y, x, cs.RoundTopLeft, true, style)
-	for col := x + 1; col < x+width-1; col++ {
-		c.Put(y, col, cs.Horizontal, true, style)
-	}
-	c.Put(y, x+width-1, cs.RoundTopRight, true, style)
-
-	// Bottom border
-	c.Put(y+height-1, x, cs.RoundBottomLeft, true, style)
-	for col := x + 1; col < x+width-1; col++ {
-		c.Put(y+height-1, col, cs.Horizontal, true, style)
-	}
-	c.Put(y+height-1, x+width-1, cs.RoundBottomRight, true, style)
-
-	// Side borders with parentheses
+	drawBorder(c, x, y, width, height, true, style)
 	for row := y + 1; row < y+height-1; row++ {
-		c.Put(row, x, '(', false, style)
-		c.Put(row, x+width-1, ')', false, style)
+		c.Put(row, x, '(', style)
+		c.Put(row, x+width-1, ')', style)
 	}
 
 	fillInterior(c, x, y, width, height, style)
@@ -123,53 +101,26 @@ func DrawStadium(c *Canvas, x, y, width, height int, label string, cs CharSet, s
 	shapeIndicator(c, x, y, '⊂', style) // stadium
 }
 
-// DrawSubroutine draws a rectangle with inner vertical lines at x+1 and x+width-2.
+// DrawSubroutine draws a rectangle with inner vertical lines at x+1 and
+// x+width-2, tee'd into the top and bottom borders.
 func DrawSubroutine(c *Canvas, x, y, width, height int, label string, cs CharSet, style string) {
-	drawBox(c, x, y, width, height, cs.TopLeft, cs.TopRight, cs.BottomLeft, cs.BottomRight, cs, style)
-
-	// Inner vertical lines
-	for row := y + 1; row < y+height-1; row++ {
-		c.Put(row, x+1, cs.Vertical, true, style)
-		c.Put(row, x+width-2, cs.Vertical, true, style)
-	}
+	drawBorder(c, x, y, width, height, false, style)
+	c.Segment(y, x+1, y+height-1, x+1, glyph.Light, false, style)
+	c.Segment(y, x+width-2, y+height-1, x+width-2, glyph.Light, false, style)
 
 	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
 	shapeIndicator(c, x, y+1, '‖', style) // subroutine (offset since inner borders at x+1)
 }
 
-// DrawDiamond draws a diamond shape with chamfered /\ corners.
+// DrawDiamond draws a diamond shape with chamfered corners.
 func DrawDiamond(c *Canvas, x, y, width, height int, label string, cs CharSet, style string) {
-	chamferTL := '⟋'
-	chamferTR := '⟍'
-	chamferBL := '⟍'
-	chamferBR := '⟋'
-	if !isUnicode(cs) {
-		chamferTL = '/'
-		chamferTR = '\\'
-		chamferBL = '\\'
-		chamferBR = '/'
+	drawBorder(c, x, y, width, height, false, style)
+	if isUnicode(cs) {
+		drawCorners(c, x, y, width, height, '╱', '╲', '╲', '╱', style)
+	} else {
+		drawCorners(c, x, y, width, height, '/', '\\', '\\', '/', style)
 	}
-
-	// Top row: /──────\
-	c.Put(y, x, chamferTL, false, style)
-	for col := x + 1; col < x+width-1; col++ {
-		c.Put(y, col, cs.Horizontal, true, style)
-	}
-	c.Put(y, x+width-1, chamferTR, false, style)
-
-	// Side borders
-	for row := y + 1; row < y+height-1; row++ {
-		c.Put(row, x, cs.Vertical, true, style)
-		c.Put(row, x+width-1, cs.Vertical, true, style)
-	}
-
-	// Bottom row: \──────/
-	c.Put(y+height-1, x, chamferBL, false, style)
-	for col := x + 1; col < x+width-1; col++ {
-		c.Put(y+height-1, col, cs.Horizontal, true, style)
-	}
-	c.Put(y+height-1, x+width-1, chamferBR, false, style)
 
 	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
@@ -178,29 +129,12 @@ func DrawDiamond(c *Canvas, x, y, width, height int, label string, cs CharSet, s
 
 // DrawHexagon draws a hexagon shape with / \ top corners and \ / bottom corners.
 func DrawHexagon(c *Canvas, x, y, width, height int, label string, cs CharSet, style string) {
-	// Top border
-	c.Put(y, x, '/', false, style)
-	for col := x + 1; col < x+width-1; col++ {
-		c.Put(y, col, cs.Horizontal, true, style)
-	}
-	c.Put(y, x+width-1, '\\', false, style)
-
-	// Bottom border
-	c.Put(y+height-1, x, '\\', false, style)
-	for col := x + 1; col < x+width-1; col++ {
-		c.Put(y+height-1, col, cs.Horizontal, true, style)
-	}
-	c.Put(y+height-1, x+width-1, '/', false, style)
-
-	// Side borders
-	for row := y + 1; row < y+height-1; row++ {
-		c.Put(row, x, cs.Vertical, true, style)
-		c.Put(row, x+width-1, cs.Vertical, true, style)
-	}
+	drawBorder(c, x, y, width, height, false, style)
+	drawCorners(c, x, y, width, height, '/', '\\', '\\', '/', style)
 
 	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
-	shapeIndicator(c, x, y, '⬡', style) // hexagon
+	shapeIndicator(c, x, y, '⎔', style) // hexagon
 }
 
 // DrawCircle draws a rounded box with circle markers at the top and bottom center.
@@ -213,12 +147,9 @@ func DrawCircle(c *Canvas, x, y, width, height int, label string, cs CharSet, st
 		marker = 'O'
 	}
 
-	// Draw rounded box
-	drawBox(c, x, y, width, height, cs.RoundTopLeft, cs.RoundTopRight, cs.RoundBottomLeft, cs.RoundBottomRight, cs, style)
-
-	// Place markers at top/bottom center
-	c.Put(y, cx, marker, false, style)
-	c.Put(y+height-1, cx, marker, false, style)
+	drawBorder(c, x, y, width, height, true, style)
+	c.Put(y, cx, marker, style)
+	c.Put(y+height-1, cx, marker, style)
 
 	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
@@ -227,12 +158,9 @@ func DrawCircle(c *Canvas, x, y, width, height int, label string, cs CharSet, st
 
 // DrawDoubleCircle draws a rounded box with an inner border.
 func DrawDoubleCircle(c *Canvas, x, y, width, height int, label string, cs CharSet, style string) {
-	// Outer rounded box
-	drawBox(c, x, y, width, height, cs.RoundTopLeft, cs.RoundTopRight, cs.RoundBottomLeft, cs.RoundBottomRight, cs, style)
-
-	// Inner border (inset by 1)
+	drawBorder(c, x, y, width, height, true, style)
 	if width > 2 && height > 2 {
-		drawBox(c, x+1, y+1, width-2, height-2, cs.RoundTopLeft, cs.RoundTopRight, cs.RoundBottomLeft, cs.RoundBottomRight, cs, style)
+		drawBorder(c, x+1, y+1, width-2, height-2, true, style)
 	}
 
 	fillInterior(c, x, y, width, height, style)
@@ -244,66 +172,30 @@ func DrawDoubleCircle(c *Canvas, x, y, width, height int, label string, cs CharS
 func DrawAsymmetric(c *Canvas, x, y, width, height int, label string, cs CharSet, style string) {
 	cy := y + height/2
 
+	drawBorder(c, x, y, width, height, false, style)
+
 	// Left side: \ above center, > at center, / below center
 	for row := y; row < y+height; row++ {
 		if row < cy {
-			c.Put(row, x, '\\', false, style)
+			c.Put(row, x, '\\', style)
 		} else if row == cy {
-			c.Put(row, x, '>', false, style)
+			c.Put(row, x, '>', style)
 		} else {
-			c.Put(row, x, '/', false, style)
+			c.Put(row, x, '/', style)
 		}
-	}
-
-	// Right side is straight
-	c.Put(y, x+width-1, cs.TopRight, true, style)
-	c.Put(y+height-1, x+width-1, cs.BottomRight, true, style)
-	for row := y + 1; row < y+height-1; row++ {
-		c.Put(row, x+width-1, cs.Vertical, true, style)
-	}
-
-	// Top and bottom borders
-	for col := x + 1; col < x+width-1; col++ {
-		c.Put(y, col, cs.Horizontal, true, style)
-		c.Put(y+height-1, col, cs.Horizontal, true, style)
 	}
 
 	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
 }
 
-// DrawCylinder draws a cylinder shape with top ellipse (two horizontal lines),
-// body, and bottom ellipse.
+// DrawCylinder draws a cylinder: a rounded box whose top ellipse closes on
+// the second row.
 func DrawCylinder(c *Canvas, x, y, width, height int, label string, cs CharSet, style string) {
-	// Top ellipse: two horizontal lines
-	// First line of top
-	c.Put(y, x, cs.RoundTopLeft, true, style)
-	for col := x + 1; col < x+width-1; col++ {
-		c.Put(y, col, cs.Horizontal, true, style)
-	}
-	c.Put(y, x+width-1, cs.RoundTopRight, true, style)
-
-	// Second line of top ellipse
+	drawBorder(c, x, y, width, height, true, style)
 	if height > 2 {
-		c.Put(y+1, x, cs.RoundBottomLeft, true, style)
-		for col := x + 1; col < x+width-1; col++ {
-			c.Put(y+1, col, cs.Horizontal, true, style)
-		}
-		c.Put(y+1, x+width-1, cs.RoundBottomRight, true, style)
+		c.Segment(y+1, x, y+1, x+width-1, glyph.Light, true, style)
 	}
-
-	// Body (side borders)
-	for row := y + 2; row < y+height-1; row++ {
-		c.Put(row, x, cs.Vertical, true, style)
-		c.Put(row, x+width-1, cs.Vertical, true, style)
-	}
-
-	// Bottom ellipse
-	c.Put(y+height-1, x, cs.RoundBottomLeft, true, style)
-	for col := x + 1; col < x+width-1; col++ {
-		c.Put(y+height-1, col, cs.Horizontal, true, style)
-	}
-	c.Put(y+height-1, x+width-1, cs.RoundBottomRight, true, style)
 
 	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
@@ -311,25 +203,8 @@ func DrawCylinder(c *Canvas, x, y, width, height int, label string, cs CharSet, 
 
 // DrawTrapezoid draws a trapezoid: / top-left, \ top-right, \ bottom-left, / bottom-right.
 func DrawTrapezoid(c *Canvas, x, y, width, height int, label string, cs CharSet, style string) {
-	// Top border
-	c.Put(y, x, '/', false, style)
-	for col := x + 1; col < x+width-1; col++ {
-		c.Put(y, col, cs.Horizontal, true, style)
-	}
-	c.Put(y, x+width-1, '\\', false, style)
-
-	// Bottom border
-	c.Put(y+height-1, x, '\\', false, style)
-	for col := x + 1; col < x+width-1; col++ {
-		c.Put(y+height-1, col, cs.Horizontal, true, style)
-	}
-	c.Put(y+height-1, x+width-1, '/', false, style)
-
-	// Side borders
-	for row := y + 1; row < y+height-1; row++ {
-		c.Put(row, x, cs.Vertical, true, style)
-		c.Put(row, x+width-1, cs.Vertical, true, style)
-	}
+	drawBorder(c, x, y, width, height, false, style)
+	drawCorners(c, x, y, width, height, '/', '\\', '\\', '/', style)
 
 	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
@@ -338,25 +213,8 @@ func DrawTrapezoid(c *Canvas, x, y, width, height int, label string, cs CharSet,
 // DrawTrapezoidAlt draws an inverted trapezoid: \ top-left, / top-right,
 // / bottom-left, \ bottom-right.
 func DrawTrapezoidAlt(c *Canvas, x, y, width, height int, label string, cs CharSet, style string) {
-	// Top border
-	c.Put(y, x, '\\', false, style)
-	for col := x + 1; col < x+width-1; col++ {
-		c.Put(y, col, cs.Horizontal, true, style)
-	}
-	c.Put(y, x+width-1, '/', false, style)
-
-	// Bottom border
-	c.Put(y+height-1, x, '/', false, style)
-	for col := x + 1; col < x+width-1; col++ {
-		c.Put(y+height-1, col, cs.Horizontal, true, style)
-	}
-	c.Put(y+height-1, x+width-1, '\\', false, style)
-
-	// Side borders
-	for row := y + 1; row < y+height-1; row++ {
-		c.Put(row, x, cs.Vertical, true, style)
-		c.Put(row, x+width-1, cs.Vertical, true, style)
-	}
+	drawBorder(c, x, y, width, height, false, style)
+	drawCorners(c, x, y, width, height, '\\', '/', '/', '\\', style)
 
 	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
@@ -364,25 +222,8 @@ func DrawTrapezoidAlt(c *Canvas, x, y, width, height int, label string, cs CharS
 
 // DrawParallelogram draws a parallelogram with / on all four corners.
 func DrawParallelogram(c *Canvas, x, y, width, height int, label string, cs CharSet, style string) {
-	// Top border
-	c.Put(y, x, '/', false, style)
-	for col := x + 1; col < x+width-1; col++ {
-		c.Put(y, col, cs.Horizontal, true, style)
-	}
-	c.Put(y, x+width-1, '/', false, style)
-
-	// Bottom border
-	c.Put(y+height-1, x, '/', false, style)
-	for col := x + 1; col < x+width-1; col++ {
-		c.Put(y+height-1, col, cs.Horizontal, true, style)
-	}
-	c.Put(y+height-1, x+width-1, '/', false, style)
-
-	// Side borders
-	for row := y + 1; row < y+height-1; row++ {
-		c.Put(row, x, cs.Vertical, true, style)
-		c.Put(row, x+width-1, cs.Vertical, true, style)
-	}
+	drawBorder(c, x, y, width, height, false, style)
+	drawCorners(c, x, y, width, height, '/', '/', '/', '/', style)
 
 	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
@@ -390,25 +231,8 @@ func DrawParallelogram(c *Canvas, x, y, width, height int, label string, cs Char
 
 // DrawParallelogramAlt draws a parallelogram with \ on all four corners.
 func DrawParallelogramAlt(c *Canvas, x, y, width, height int, label string, cs CharSet, style string) {
-	// Top border
-	c.Put(y, x, '\\', false, style)
-	for col := x + 1; col < x+width-1; col++ {
-		c.Put(y, col, cs.Horizontal, true, style)
-	}
-	c.Put(y, x+width-1, '\\', false, style)
-
-	// Bottom border
-	c.Put(y+height-1, x, '\\', false, style)
-	for col := x + 1; col < x+width-1; col++ {
-		c.Put(y+height-1, col, cs.Horizontal, true, style)
-	}
-	c.Put(y+height-1, x+width-1, '\\', false, style)
-
-	// Side borders
-	for row := y + 1; row < y+height-1; row++ {
-		c.Put(row, x, cs.Vertical, true, style)
-		c.Put(row, x+width-1, cs.Vertical, true, style)
-	}
+	drawBorder(c, x, y, width, height, false, style)
+	drawCorners(c, x, y, width, height, '\\', '\\', '\\', '\\', style)
 
 	fillInterior(c, x, y, width, height, style)
 	drawLabel(c, x, y, width, height, label, style)
@@ -424,7 +248,7 @@ func DrawStartState(c *Canvas, x, y, width, height int, label string, cs CharSet
 	} else {
 		marker = '*'
 	}
-	c.Put(cy, cx, marker, false, style)
+	c.Put(cy, cx, marker, style)
 }
 
 // DrawEndState draws a bullseye marker at the center of the region.
@@ -437,7 +261,7 @@ func DrawEndState(c *Canvas, x, y, width, height int, label string, cs CharSet, 
 	} else {
 		marker = '@'
 	}
-	c.Put(cy, cx, marker, false, style)
+	c.Put(cy, cx, marker, style)
 }
 
 // DrawForkJoin fills the entire area with thick horizontal lines.
@@ -450,28 +274,28 @@ func DrawForkJoin(c *Canvas, x, y, width, height int, label string, cs CharSet, 
 	}
 	for row := y; row < y+height; row++ {
 		for col := x; col < x+width; col++ {
-			c.Put(row, col, ch, false, style)
+			c.Put(row, col, ch, style)
 		}
 	}
 }
 
 // ShapeRenderers maps each NodeShape constant to its renderer function.
 var ShapeRenderers = map[graph.NodeShape]func(*Canvas, int, int, int, int, string, CharSet, string){
-	graph.ShapeRectangle:      DrawRectangle,
-	graph.ShapeRounded:        DrawRounded,
-	graph.ShapeStadium:        DrawStadium,
-	graph.ShapeSubroutine:     DrawSubroutine,
-	graph.ShapeDiamond:        DrawDiamond,
-	graph.ShapeHexagon:        DrawHexagon,
-	graph.ShapeCircle:         DrawCircle,
-	graph.ShapeDoubleCircle:   DrawDoubleCircle,
-	graph.ShapeAsymmetric:     DrawAsymmetric,
-	graph.ShapeCylinder:       DrawCylinder,
-	graph.ShapeParallelogram:  DrawParallelogram,
+	graph.ShapeRectangle:        DrawRectangle,
+	graph.ShapeRounded:          DrawRounded,
+	graph.ShapeStadium:          DrawStadium,
+	graph.ShapeSubroutine:       DrawSubroutine,
+	graph.ShapeDiamond:          DrawDiamond,
+	graph.ShapeHexagon:          DrawHexagon,
+	graph.ShapeCircle:           DrawCircle,
+	graph.ShapeDoubleCircle:     DrawDoubleCircle,
+	graph.ShapeAsymmetric:       DrawAsymmetric,
+	graph.ShapeCylinder:         DrawCylinder,
+	graph.ShapeParallelogram:    DrawParallelogram,
 	graph.ShapeParallelogramAlt: DrawParallelogramAlt,
-	graph.ShapeTrapezoid:      DrawTrapezoid,
-	graph.ShapeTrapezoidAlt:   DrawTrapezoidAlt,
-	graph.ShapeStartState:     DrawStartState,
-	graph.ShapeEndState:       DrawEndState,
-	graph.ShapeForkJoin:       DrawForkJoin,
+	graph.ShapeTrapezoid:        DrawTrapezoid,
+	graph.ShapeTrapezoidAlt:     DrawTrapezoidAlt,
+	graph.ShapeStartState:       DrawStartState,
+	graph.ShapeEndState:         DrawEndState,
+	graph.ShapeForkJoin:         DrawForkJoin,
 }

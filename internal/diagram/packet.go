@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/aaronsb/mmaid-go/internal/glyph"
 	"github.com/aaronsb/mmaid-go/internal/renderer"
 	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
@@ -99,13 +100,13 @@ func RenderPacket(source string, useASCII bool, theme *renderer.Theme) *renderer
 	rowBits := pd.rowBits
 	colsPerRow := rowBits * packetBitsPerCol
 
-	var hz, vt, tl, tr, bl, br, tj, bj rune
+	var vt, tl, tr, bl, br, tj, bj rune
 	if useASCII {
-		hz, vt = '-', '|'
+		vt = '|'
 		tl, tr, bl, br = '+', '+', '+', '+'
 		tj, bj = '+', '+'
 	} else {
-		hz, vt = '─', '│'
+		vt = '│'
 		tl, tr, bl, br = '╭', '╮', '╰', '╯'
 		tj, bj = '┬', '┴'
 	}
@@ -160,6 +161,9 @@ func RenderPacket(source string, useASCII bool, theme *renderer.Theme) *renderer
 	totalW := margin + colsPerRow + 1
 
 	c := renderer.NewCanvas(totalW+4, totalH+10) // extra height reserved for legend
+	if useASCII {
+		c.SetCharSet(renderer.ASCII)
+	}
 	useRegion := theme != nil && theme.HasDepthColors()
 	if useRegion {
 		for r := 0; r < c.Height; r++ {
@@ -229,23 +233,23 @@ func RenderPacket(source string, useASCII bool, theme *renderer.Theme) *renderer
 		}
 
 		// Top border with field separators.
-		c.Put(yTop, margin, tl, false, "node")
-		c.DrawHorizontal(yTop, margin+1, margin+colsPerRow-1, hz, "node")
-		c.Put(yTop, margin+colsPerRow, tr, false, "node")
+		c.Put(yTop, margin, tl, "node")
+		c.DrawHorizontal(yTop, margin, margin+colsPerRow, glyph.Light, "node")
+		c.Put(yTop, margin+colsPerRow, tr, "node")
 		for _, rf := range rowFields {
 			if rf.colStart > 0 {
-				c.Put(yTop, margin+rf.colStart*packetBitsPerCol, tj, false, "node")
+				c.Put(yTop, margin+rf.colStart*packetBitsPerCol, tj, "node")
 			}
 		}
 
 		// Content rows: side and separator verticals.
 		for py := range paddingY {
 			yr := yTop + 1 + py
-			c.Put(yr, margin, vt, false, "node")
-			c.Put(yr, margin+colsPerRow, vt, false, "node")
+			c.Put(yr, margin, vt, "node")
+			c.Put(yr, margin+colsPerRow, vt, "node")
 			for _, rf := range rowFields {
 				if rf.colStart > 0 {
-					c.Put(yr, margin+rf.colStart*packetBitsPerCol, vt, false, "node")
+					c.Put(yr, margin+rf.colStart*packetBitsPerCol, vt, "node")
 				}
 			}
 		}
@@ -268,12 +272,12 @@ func RenderPacket(source string, useASCII bool, theme *renderer.Theme) *renderer
 		}
 
 		// Bottom border with field separators.
-		c.Put(yBottom, margin, bl, false, "node")
-		c.DrawHorizontal(yBottom, margin+1, margin+colsPerRow-1, hz, "node")
-		c.Put(yBottom, margin+colsPerRow, br, false, "node")
+		c.Put(yBottom, margin, bl, "node")
+		c.DrawHorizontal(yBottom, margin, margin+colsPerRow, glyph.Light, "node")
+		c.Put(yBottom, margin+colsPerRow, br, "node")
 		for _, rf := range rowFields {
 			if rf.colStart > 0 {
-				c.Put(yBottom, margin+rf.colStart*packetBitsPerCol, bj, false, "node")
+				c.Put(yBottom, margin+rf.colStart*packetBitsPerCol, bj, "node")
 			}
 		}
 	}

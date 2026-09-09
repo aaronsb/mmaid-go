@@ -56,14 +56,14 @@ func hexBgColor(hex string) string {
 // Palette of distinct hues for top-level sections.
 // Each is a dark base RGB that lightens per depth.
 var regionPalette = [][3]int{
-	{26, 58, 92},   // deep blue
-	{26, 82, 52},   // deep green
-	{82, 36, 82},   // deep purple
-	{82, 56, 26},   // deep amber
-	{26, 72, 82},   // deep teal
-	{82, 26, 42},   // deep rose
-	{52, 72, 26},   // deep olive
-	{62, 42, 82},   // deep violet
+	{26, 58, 92}, // deep blue
+	{26, 82, 52}, // deep green
+	{82, 36, 82}, // deep purple
+	{82, 56, 26}, // deep amber
+	{26, 72, 82}, // deep teal
+	{82, 26, 42}, // deep rose
+	{52, 72, 26}, // deep olive
+	{62, 42, 82}, // deep violet
 }
 
 // RegionStyle returns an ANSI fg+bg string for a region identified by
@@ -288,15 +288,15 @@ func buildTheme(name string, node, edge, arrow, subgraph, label, edgeLabel, sgLa
 // Themes is the set of available color themes.
 var Themes = map[string]Theme{
 	"default": buildTheme("default",
-		"cyan",             // node
-		"dim white",        // edge
-		"bold yellow",      // arrow
-		"dim cyan",         // subgraph
-		"bold white",       // label
-		"italic dim",       // edge_label
-		"bold cyan",        // subgraph_label
-		"",                 // default
-		"",                 // subgraph_fill
+		"cyan",        // node
+		"dim white",   // edge
+		"bold yellow", // arrow
+		"dim cyan",    // subgraph
+		"bold white",  // label
+		"italic dim",  // edge_label
+		"bold cyan",   // subgraph_label
+		"",            // default
+		"",            // subgraph_fill
 	),
 	"terra": buildThemeMono("terra",
 		"bold #D4845A", "#8B7E6A", "bold #E8A87C", "#A07858",
@@ -318,26 +318,26 @@ var Themes = map[string]Theme{
 		0xFF, 0xB0, 0x00, // amber
 	),
 	"blueprint": buildThemeWithDepth("blueprint",
-		"bold #FFFFFF on #1A3A5C",   // node
-		"#6699CC",                   // edge
-		"bold #FFD700",              // arrow
-		"#4488AA on #14304A",        // subgraph (border+bg)
-		"bold #FFFFFF on #1A3A5C",   // label
-		"italic #88BBDD",            // edge_label
-		"bold #88CCFF",              // subgraph_label
-		"",                          // default
-		"on #14304A",                // subgraph_fill: slightly darker blue
+		"bold #FFFFFF on #1A3A5C", // node
+		"#6699CC",                 // edge
+		"bold #FFD700",            // arrow
+		"#4488AA on #14304A",      // subgraph (border+bg)
+		"bold #FFFFFF on #1A3A5C", // label
+		"italic #88BBDD",          // edge_label
+		"bold #88CCFF",            // subgraph_label
+		"",                        // default
+		"on #14304A",              // subgraph_fill: slightly darker blue
 	),
 	"slate": buildThemeWithDepth("slate",
-		"bold #E0E0E0 on #2D2D2D",   // node
-		"#808080",                   // edge
-		"bold #FF6B35",              // arrow
-		"#666666 on #222222",        // subgraph (border+bg)
-		"bold #FFFFFF on #2D2D2D",   // label
-		"italic #999999",            // edge_label
-		"bold #BBBBBB",              // subgraph_label
-		"",                          // default
-		"on #222222",                // subgraph_fill: slightly darker gray
+		"bold #E0E0E0 on #2D2D2D", // node
+		"#808080",                 // edge
+		"bold #FF6B35",            // arrow
+		"#666666 on #222222",      // subgraph (border+bg)
+		"bold #FFFFFF on #2D2D2D", // label
+		"italic #999999",          // edge_label
+		"bold #BBBBBB",            // subgraph_label
+		"",                        // default
+		"on #222222",              // subgraph_fill: slightly darker gray
 	),
 	"phosphor": buildThemeMono("phosphor",
 		"bold #33FF33", "#1A8C1A", "bold #66FF66", "#228B22",
@@ -345,37 +345,37 @@ var Themes = map[string]Theme{
 		0x33, 0xFF, 0x33, // green phosphor
 	),
 	"sunset": buildThemeWithDepth("sunset",
-		"bold #FFFFFF on #5C1A2A",   // node: deep rose
-		"#CC6677",                   // edge: dusty pink
-		"bold #FFD700",              // arrow: gold
-		"#AA4455 on #4A1422",        // subgraph
-		"bold #FFFFFF on #5C1A2A",   // label
-		"italic #DD8899",            // edge_label
-		"bold #FF8899",              // subgraph_label
-		"",                          // default
-		"on #4A1422",                // subgraph_fill: darker rose
+		"bold #FFFFFF on #5C1A2A", // node: deep rose
+		"#CC6677",                 // edge: dusty pink
+		"bold #FFD700",            // arrow: gold
+		"#AA4455 on #4A1422",      // subgraph
+		"bold #FFFFFF on #5C1A2A", // label
+		"italic #DD8899",          // edge_label
+		"bold #FF8899",            // subgraph_label
+		"",                        // default
+		"on #4A1422",              // subgraph_fill: darker rose
 	),
 	"gruvbox": buildThemeWithDepth("gruvbox",
-		"bold #EBDBB2 on #3C3836",   // node: gruvbox fg on bg1
-		"#928374",                   // edge: gray
-		"bold #FABD2F",              // arrow: yellow
-		"#7C6F64 on #282828",        // subgraph
-		"bold #EBDBB2 on #3C3836",   // label
-		"italic #A89984",            // edge_label
-		"bold #D5C4A1",              // subgraph_label
-		"",                          // default
-		"on #282828",                // subgraph_fill: gruvbox bg0
+		"bold #EBDBB2 on #3C3836", // node: gruvbox fg on bg1
+		"#928374",                 // edge: gray
+		"bold #FABD2F",            // arrow: yellow
+		"#7C6F64 on #282828",      // subgraph
+		"bold #EBDBB2 on #3C3836", // label
+		"italic #A89984",          // edge_label
+		"bold #D5C4A1",            // subgraph_label
+		"",                        // default
+		"on #282828",              // subgraph_fill: gruvbox bg0
 	),
 	"monokai": buildThemeWithDepth("monokai",
-		"bold #F8F8F2 on #3E3D32",   // node: monokai fg on subtle bg
-		"#75715E",                   // edge: comment gray
-		"bold #F92672",              // arrow: monokai pink
-		"#75715E on #272822",        // subgraph
-		"bold #F8F8F2 on #3E3D32",   // label
-		"italic #A6E22E",            // edge_label: green
-		"bold #66D9EF",              // subgraph_label: cyan
-		"",                          // default
-		"on #272822",                // subgraph_fill: monokai bg
+		"bold #F8F8F2 on #3E3D32", // node: monokai fg on subtle bg
+		"#75715E",                 // edge: comment gray
+		"bold #F92672",            // arrow: monokai pink
+		"#75715E on #272822",      // subgraph
+		"bold #F8F8F2 on #3E3D32", // label
+		"italic #A6E22E",          // edge_label: green
+		"bold #66D9EF",            // subgraph_label: cyan
+		"",                        // default
+		"on #272822",              // subgraph_fill: monokai bg
 	),
 }
 
@@ -390,19 +390,20 @@ func GetTheme(name string) Theme {
 // ToColorString renders the canvas using ANSI colors based on the theme.
 // Each cell's style key is mapped to the theme's ANSI sequence.
 func (c *Canvas) ToColorString(theme Theme) string {
+	c.Resolve(c.cs)
 	styleMap := map[string]string{
-		"node":            theme.Node,
-		"edge":            theme.Edge,
-		"arrow":           theme.Arrow,
-		"subgraph":        theme.Subgraph,
-		"label":           theme.Label,
-		"edge_label":      theme.EdgeLabel,
-		"subgraph_label":  theme.SubgraphLabel,
-		"default":         theme.Default,
-		"bold_label":      theme.BoldLabel,
-		"italic_label":    theme.ItalicLabel,
-		"note":            theme.Note,
-		"subgraph_fill":   theme.SubgraphFill,
+		"node":           theme.Node,
+		"edge":           theme.Edge,
+		"arrow":          theme.Arrow,
+		"subgraph":       theme.Subgraph,
+		"label":          theme.Label,
+		"edge_label":     theme.EdgeLabel,
+		"subgraph_label": theme.SubgraphLabel,
+		"default":        theme.Default,
+		"bold_label":     theme.BoldLabel,
+		"italic_label":   theme.ItalicLabel,
+		"note":           theme.Note,
+		"subgraph_fill":  theme.SubgraphFill,
 	}
 
 	rst := reset()

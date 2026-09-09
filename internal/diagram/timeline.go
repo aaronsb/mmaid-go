@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/aaronsb/mmaid-go/internal/glyph"
 	"github.com/aaronsb/mmaid-go/internal/renderer"
 	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
@@ -144,6 +145,9 @@ func renderTimelineHorizontal(td *timelineData, useASCII bool, theme *renderer.T
 	canvasHeight := periodRow + 2
 
 	c := renderer.NewCanvas(canvasWidth, canvasHeight)
+	if useASCII {
+		c.SetCharSet(renderer.ASCII)
+	}
 	useRegion := theme != nil && theme.HasDepthColors()
 
 	if useRegion {
@@ -164,13 +168,13 @@ func renderTimelineHorizontal(td *timelineData, useASCII bool, theme *renderer.T
 
 	// Draw axis line
 	for x := 0; x < canvasWidth; x++ {
-		c.Put(axisRow, x, ch.hLine, false, "edge")
+		c.Put(axisRow, x, ch.hLine, "edge")
 	}
 
 	for i, e := range td.events {
 		centerX := i*colWidth + colWidth/2
 
-		c.Put(axisRow, centerX, ch.dot, false, "arrow")
+		c.Put(axisRow, centerX, ch.dot, "arrow")
 
 		periodStyle := "label"
 		if useRegion {
@@ -198,17 +202,17 @@ func renderTimelineHorizontal(td *timelineData, useASCII bool, theme *renderer.T
 				labelStyle = "_ansi:" + theme.RegionLabelStyle(i, 1)
 			}
 
-			c.Put(boxTop, boxX, ch.tl, false, borderStyle)
-			c.DrawHorizontal(boxTop, boxX+1, boxX+boxW-1, ch.hLine, borderStyle)
-			c.Put(boxTop, boxX+boxW, ch.tr, false, borderStyle)
+			c.Put(boxTop, boxX, ch.tl, borderStyle)
+			c.DrawHorizontal(boxTop, boxX, boxX+boxW, glyph.Light, borderStyle)
+			c.Put(boxTop, boxX+boxW, ch.tr, borderStyle)
 
-			c.Put(boxTop+1, boxX, ch.vLine, false, borderStyle)
+			c.Put(boxTop+1, boxX, ch.vLine, borderStyle)
 			c.PutText(boxTop+1, boxX+1, " "+item+" ", labelStyle)
-			c.Put(boxTop+1, boxX+boxW, ch.vLine, false, borderStyle)
+			c.Put(boxTop+1, boxX+boxW, ch.vLine, borderStyle)
 
-			c.Put(boxTop+2, boxX, ch.bl, false, borderStyle)
-			c.DrawHorizontal(boxTop+2, boxX+1, boxX+boxW-1, ch.hLine, borderStyle)
-			c.Put(boxTop+2, boxX+boxW, ch.br, false, borderStyle)
+			c.Put(boxTop+2, boxX, ch.bl, borderStyle)
+			c.DrawHorizontal(boxTop+2, boxX, boxX+boxW, glyph.Light, borderStyle)
+			c.Put(boxTop+2, boxX+boxW, ch.br, borderStyle)
 
 			if useRegion {
 				fillStyle := "_ansi:" + theme.RegionStyle(i, 1)
@@ -225,7 +229,7 @@ func renderTimelineHorizontal(td *timelineData, useASCII bool, theme *renderer.T
 			}
 
 			if boxBottom < axisRow-1 {
-				c.Put(axisRow-1, centerX, ch.vLine, false, "edge")
+				c.Put(axisRow-1, centerX, ch.vLine, "edge")
 			}
 		}
 	}
@@ -278,6 +282,9 @@ func renderTimelineVertical(td *timelineData, useASCII bool, theme *renderer.The
 	totalRows++ // trailing space
 
 	c := renderer.NewCanvas(canvasWidth, totalRows)
+	if useASCII {
+		c.SetCharSet(renderer.ASCII)
+	}
 
 	if useRegion {
 		for r := 0; r < totalRows; r++ {
@@ -297,7 +304,7 @@ func renderTimelineVertical(td *timelineData, useASCII bool, theme *renderer.The
 
 	// Draw vertical axis line
 	for r := titleRows; r < totalRows-1; r++ {
-		c.Put(r, axisCol, ch.vLine, false, "edge")
+		c.Put(r, axisCol, ch.vLine, "edge")
 	}
 
 	// Draw each event
@@ -314,7 +321,7 @@ func renderTimelineVertical(td *timelineData, useASCII bool, theme *renderer.The
 
 		// Dot on axis at the vertical center of this event's boxes
 		dotRow := row + eventHeight/2
-		c.Put(dotRow, axisCol, ch.dot, false, "arrow")
+		c.Put(dotRow, axisCol, ch.dot, "arrow")
 
 		// Period label to the left of the axis, right-aligned
 		periodStyle := "label"
@@ -340,17 +347,17 @@ func renderTimelineVertical(td *timelineData, useASCII bool, theme *renderer.The
 				labelStyle = "_ansi:" + theme.RegionLabelStyle(i, 1)
 			}
 
-			c.Put(boxTop, boxX, ch.tl, false, borderStyle)
-			c.DrawHorizontal(boxTop, boxX+1, boxX+boxW-1, ch.hLine, borderStyle)
-			c.Put(boxTop, boxX+boxW, ch.tr, false, borderStyle)
+			c.Put(boxTop, boxX, ch.tl, borderStyle)
+			c.DrawHorizontal(boxTop, boxX, boxX+boxW, glyph.Light, borderStyle)
+			c.Put(boxTop, boxX+boxW, ch.tr, borderStyle)
 
-			c.Put(boxTop+1, boxX, ch.vLine, false, borderStyle)
+			c.Put(boxTop+1, boxX, ch.vLine, borderStyle)
 			c.PutText(boxTop+1, boxX+1, " "+item+" ", labelStyle)
-			c.Put(boxTop+1, boxX+boxW, ch.vLine, false, borderStyle)
+			c.Put(boxTop+1, boxX+boxW, ch.vLine, borderStyle)
 
-			c.Put(boxTop+2, boxX, ch.bl, false, borderStyle)
-			c.DrawHorizontal(boxTop+2, boxX+1, boxX+boxW-1, ch.hLine, borderStyle)
-			c.Put(boxTop+2, boxX+boxW, ch.br, false, borderStyle)
+			c.Put(boxTop+2, boxX, ch.bl, borderStyle)
+			c.DrawHorizontal(boxTop+2, boxX, boxX+boxW, glyph.Light, borderStyle)
+			c.Put(boxTop+2, boxX+boxW, ch.br, borderStyle)
 
 			if useRegion {
 				fillStyle := "_ansi:" + theme.RegionStyle(i, 1)
@@ -368,7 +375,7 @@ func renderTimelineVertical(td *timelineData, useASCII bool, theme *renderer.The
 
 			// Horizontal connector from axis to box
 			for cx := axisCol + 1; cx < boxX; cx++ {
-				c.Put(boxTop+1, cx, ch.hLine, false, "edge")
+				c.Put(boxTop+1, cx, ch.hLine, "edge")
 			}
 		}
 

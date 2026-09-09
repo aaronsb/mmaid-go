@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/aaronsb/mmaid-go/internal/glyph"
 	"github.com/aaronsb/mmaid-go/internal/renderer"
 	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
@@ -157,6 +158,9 @@ func RenderXYChart(source string, useASCII bool, theme *renderer.Theme) *rendere
 	canvasHeight := titleRows + plotH + 4
 
 	c := renderer.NewCanvas(canvasWidth, canvasHeight)
+	if useASCII {
+		c.SetCharSet(renderer.ASCII)
+	}
 
 	// Wallpaper: base background behind entire diagram
 	if theme != nil && theme.HasDepthColors() {
@@ -190,12 +194,12 @@ func RenderXYChart(source string, useASCII bool, theme *renderer.Theme) *rendere
 
 	// Y axis
 	for r := plotY; r <= plotBottom; r++ {
-		c.Put(r, plotX-1, vLine, false, "edge")
+		c.Put(r, plotX-1, vLine, "edge")
 	}
 
 	// X axis
 	for col := plotX; col < plotX+plotW; col++ {
-		c.Put(plotBottom, col, hLine, false, "edge")
+		c.Put(plotBottom, col, hLine, "edge")
 	}
 
 	// Fill plot area background
@@ -261,7 +265,7 @@ func RenderXYChart(source string, useASCII bool, theme *renderer.Theme) *rendere
 		}
 		for row := plotBottom - barH; row < plotBottom; row++ {
 			for dx := 0; dx < barW; dx++ {
-				c.Put(row, barX+dx, barCh, false, barStyle)
+				c.Put(row, barX+dx, barCh, barStyle)
 			}
 		}
 	}
@@ -284,17 +288,18 @@ func RenderXYChart(source string, useASCII bool, theme *renderer.Theme) *rendere
 				ly = plotY
 			}
 
-			c.Put(ly, lx, lineDot, false, lineStyle)
+			c.Put(ly, lx, lineDot, lineStyle)
 
-			// Connect to previous point
+			// Connect to previous point. The runs reach the dot cells, whose
+			// glyphs hide the arms, and pass over any bar in the way.
 			if prevX >= 0 {
 				if prevY == ly {
-					c.DrawHorizontal(ly, prevX+1, lx-1, hLine, connStyle)
+					xyConnect(c, ly, prevX, ly, lx, barCh, connStyle)
 				} else {
 					midCol := (prevX + lx) / 2
-					c.DrawHorizontal(prevY, prevX+1, midCol, hLine, connStyle)
-					c.DrawVertical(midCol, prevY, ly, vLine, connStyle)
-					c.DrawHorizontal(ly, midCol, lx-1, hLine, connStyle)
+					xyConnect(c, prevY, prevX, prevY, midCol, barCh, connStyle)
+					xyConnect(c, prevY, midCol, ly, midCol, barCh, connStyle)
+					xyConnect(c, ly, midCol, ly, lx, barCh, connStyle)
 				}
 			}
 
@@ -326,4 +331,21 @@ func formatNum(v float64) string {
 		return strconv.Itoa(int(v))
 	}
 	return strconv.FormatFloat(v, 'f', 1, 64)
+}
+
+// xyConnect draws one straight run of a line series. A bar cell on the way
+// is cleared first so the line shows over it, as the dots do.
+func xyConnect(c *renderer.Canvas, r1, c1, r2, c2 int, barCh rune, style string) {
+	for r := min(r1, r2); r <= max(r1, r2); r++ {
+		for col := min(c1, c2); col <= max(c1, c2); col++ {
+			if c.Get(r, col) == barCh {
+				c.ClearCell(r, col)
+			}
+		}
+	}
+	if r1 == r2 {
+		c.DrawHorizontal(r1, c1, c2, glyph.Light, style)
+	} else {
+		c.DrawVertical(c1, r1, r2, glyph.Light, style)
+	}
 }

@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/aaronsb/mmaid-go/internal/glyph"
 	"github.com/aaronsb/mmaid-go/internal/renderer"
 	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
@@ -641,12 +642,12 @@ func computeLayout(diagram *sequenceDiagram, autonumber bool, flatEvents []inter
 
 func drawActor(canvas *renderer.Canvas, cx, y int, label string, useASCII bool) {
 	style := "node"
-	canvas.Put(y, cx, 'O', false, style)
-	canvas.Put(y+1, cx-1, '/', false, style)
-	canvas.Put(y+1, cx, '|', false, style)
-	canvas.Put(y+1, cx+1, '\\', false, style)
-	canvas.Put(y+2, cx-1, '/', false, style)
-	canvas.Put(y+2, cx+1, '\\', false, style)
+	canvas.Put(y, cx, 'O', style)
+	canvas.Put(y+1, cx-1, '/', style)
+	canvas.Put(y+1, cx, '|', style)
+	canvas.Put(y+1, cx+1, '\\', style)
+	canvas.Put(y+2, cx-1, '/', style)
+	canvas.Put(y+2, cx+1, '\\', style)
 	labelCol := cx - textwidth.String(label)/2
 	canvas.PutText(y+4, labelCol, label, "label")
 }
@@ -662,34 +663,34 @@ func drawQueue(canvas *renderer.Canvas, cx, y, width int, label string, cs rende
 	h := 5
 
 	// Top border
-	canvas.Put(y, bx, cs.TopLeft, true, style)
+	canvas.PutBox(y, bx, cs.Rune(glyph.TopLeft, glyph.Light), style)
 	for c := bx + 1; c < bx+width-1; c++ {
-		canvas.Put(y, c, cs.Horizontal, true, style)
+		canvas.PutBox(y, c, cs.Rune(glyph.Horizontal, glyph.Light), style)
 	}
 	if !useASCII {
-		canvas.Put(y, bx+width-1, cs.RoundTopRight, true, style)
+		canvas.PutBox(y, bx+width-1, cs.Round(glyph.TopRight), style)
 	} else {
-		canvas.Put(y, bx+width-1, cs.TopRight, true, style)
+		canvas.PutBox(y, bx+width-1, cs.Rune(glyph.TopRight, glyph.Light), style)
 	}
 
 	// Bottom border
-	canvas.Put(y+h-1, bx, cs.BottomLeft, true, style)
+	canvas.PutBox(y+h-1, bx, cs.Rune(glyph.BottomLeft, glyph.Light), style)
 	for c := bx + 1; c < bx+width-1; c++ {
-		canvas.Put(y+h-1, c, cs.Horizontal, true, style)
+		canvas.PutBox(y+h-1, c, cs.Rune(glyph.Horizontal, glyph.Light), style)
 	}
 	if !useASCII {
-		canvas.Put(y+h-1, bx+width-1, cs.RoundBottomRight, true, style)
+		canvas.PutBox(y+h-1, bx+width-1, cs.Round(glyph.BottomRight), style)
 	} else {
-		canvas.Put(y+h-1, bx+width-1, cs.BottomRight, true, style)
+		canvas.PutBox(y+h-1, bx+width-1, cs.Rune(glyph.BottomRight, glyph.Light), style)
 	}
 
 	// Side borders
 	for r := y + 1; r < y+h-1; r++ {
-		canvas.Put(r, bx, cs.Vertical, true, style)
+		canvas.PutBox(r, bx, cs.Rune(glyph.Vertical, glyph.Light), style)
 		if !useASCII {
-			canvas.Put(r, bx+width-1, '\u2551', false, style) // ║
+			canvas.Put(r, bx+width-1, '\u2551', style) // ║
 		} else {
-			canvas.Put(r, bx+width-1, cs.Vertical, true, style)
+			canvas.PutBox(r, bx+width-1, cs.Rune(glyph.Vertical, glyph.Light), style)
 		}
 	}
 
@@ -705,26 +706,26 @@ func drawBoundary(canvas *renderer.Canvas, cx, y int, label string, cs renderer.
 	boxRight := cx + 1
 
 	// Top of box
-	canvas.Put(y, boxLeft, cs.TopLeft, true, style)
-	canvas.Put(y, cx, cs.Horizontal, true, style)
-	canvas.Put(y, boxRight, cs.TopRight, true, style)
+	canvas.PutBox(y, boxLeft, cs.Rune(glyph.TopLeft, glyph.Light), style)
+	canvas.PutBox(y, cx, cs.Rune(glyph.Horizontal, glyph.Light), style)
+	canvas.PutBox(y, boxRight, cs.Rune(glyph.TopRight, glyph.Light), style)
 
 	// Middle row: bar extending left + box sides
 	barStart := cx - 3
-	canvas.Put(y+1, barStart, cs.Horizontal, false, style)
-	canvas.Put(y+1, barStart+1, cs.Horizontal, false, style)
+	canvas.Put(y+1, barStart, cs.Rune(glyph.Horizontal, glyph.Light), style)
+	canvas.Put(y+1, barStart+1, cs.Rune(glyph.Horizontal, glyph.Light), style)
 	if !useASCII {
-		canvas.Put(y+1, boxLeft, cs.TeeLeft, true, style)
+		canvas.PutBox(y+1, boxLeft, cs.Rune(glyph.TeeLeft, glyph.Light), style)
 	} else {
-		canvas.Put(y+1, boxLeft, cs.Vertical, true, style)
+		canvas.PutBox(y+1, boxLeft, cs.Rune(glyph.Vertical, glyph.Light), style)
 	}
-	canvas.Put(y+1, cx, ' ', false, style)
-	canvas.Put(y+1, boxRight, cs.Vertical, true, style)
+	canvas.Put(y+1, cx, ' ', style)
+	canvas.PutBox(y+1, boxRight, cs.Rune(glyph.Vertical, glyph.Light), style)
 
 	// Bottom of box
-	canvas.Put(y+2, boxLeft, cs.BottomLeft, true, style)
-	canvas.Put(y+2, cx, cs.Horizontal, true, style)
-	canvas.Put(y+2, boxRight, cs.BottomRight, true, style)
+	canvas.PutBox(y+2, boxLeft, cs.Rune(glyph.BottomLeft, glyph.Light), style)
+	canvas.PutBox(y+2, cx, cs.Rune(glyph.Horizontal, glyph.Light), style)
+	canvas.PutBox(y+2, boxRight, cs.Rune(glyph.BottomRight, glyph.Light), style)
 
 	// Label below
 	labelCol := cx - textwidth.String(label)/2
@@ -735,26 +736,26 @@ func drawControl(canvas *renderer.Canvas, cx, y int, label string, cs renderer.C
 	style := "node"
 	// Arrowhead
 	if useASCII {
-		canvas.Put(y, cx, '<', false, style)
+		canvas.Put(y, cx, '<', style)
 	} else {
-		canvas.Put(y, cx, '\u25C1', false, style) // ◁
+		canvas.Put(y, cx, '\u25C1', style) // ◁
 	}
 
 	// Small rounded box
 	if !useASCII {
-		canvas.Put(y+1, cx-1, cs.RoundTopLeft, true, style)
-		canvas.Put(y+1, cx, cs.Horizontal, true, style)
-		canvas.Put(y+1, cx+1, cs.RoundTopRight, true, style)
-		canvas.Put(y+2, cx-1, cs.RoundBottomLeft, true, style)
-		canvas.Put(y+2, cx, cs.Horizontal, true, style)
-		canvas.Put(y+2, cx+1, cs.RoundBottomRight, true, style)
+		canvas.PutBox(y+1, cx-1, cs.Round(glyph.TopLeft), style)
+		canvas.PutBox(y+1, cx, cs.Rune(glyph.Horizontal, glyph.Light), style)
+		canvas.PutBox(y+1, cx+1, cs.Round(glyph.TopRight), style)
+		canvas.PutBox(y+2, cx-1, cs.Round(glyph.BottomLeft), style)
+		canvas.PutBox(y+2, cx, cs.Rune(glyph.Horizontal, glyph.Light), style)
+		canvas.PutBox(y+2, cx+1, cs.Round(glyph.BottomRight), style)
 	} else {
-		canvas.Put(y+1, cx-1, cs.TopLeft, true, style)
-		canvas.Put(y+1, cx, cs.Horizontal, true, style)
-		canvas.Put(y+1, cx+1, cs.TopRight, true, style)
-		canvas.Put(y+2, cx-1, cs.BottomLeft, true, style)
-		canvas.Put(y+2, cx, cs.Horizontal, true, style)
-		canvas.Put(y+2, cx+1, cs.BottomRight, true, style)
+		canvas.PutBox(y+1, cx-1, cs.Rune(glyph.TopLeft, glyph.Light), style)
+		canvas.PutBox(y+1, cx, cs.Rune(glyph.Horizontal, glyph.Light), style)
+		canvas.PutBox(y+1, cx+1, cs.Rune(glyph.TopRight, glyph.Light), style)
+		canvas.PutBox(y+2, cx-1, cs.Rune(glyph.BottomLeft, glyph.Light), style)
+		canvas.PutBox(y+2, cx, cs.Rune(glyph.Horizontal, glyph.Light), style)
+		canvas.PutBox(y+2, cx+1, cs.Rune(glyph.BottomRight, glyph.Light), style)
 	}
 
 	// Label below
@@ -766,25 +767,25 @@ func drawEntity(canvas *renderer.Canvas, cx, y int, label string, cs renderer.Ch
 	style := "node"
 	// Small rounded box
 	if !useASCII {
-		canvas.Put(y, cx-1, cs.RoundTopLeft, true, style)
-		canvas.Put(y, cx, cs.Horizontal, true, style)
-		canvas.Put(y, cx+1, cs.RoundTopRight, true, style)
-		canvas.Put(y+1, cx-1, cs.RoundBottomLeft, true, style)
-		canvas.Put(y+1, cx, cs.Horizontal, true, style)
-		canvas.Put(y+1, cx+1, cs.RoundBottomRight, true, style)
+		canvas.PutBox(y, cx-1, cs.Round(glyph.TopLeft), style)
+		canvas.PutBox(y, cx, cs.Rune(glyph.Horizontal, glyph.Light), style)
+		canvas.PutBox(y, cx+1, cs.Round(glyph.TopRight), style)
+		canvas.PutBox(y+1, cx-1, cs.Round(glyph.BottomLeft), style)
+		canvas.PutBox(y+1, cx, cs.Rune(glyph.Horizontal, glyph.Light), style)
+		canvas.PutBox(y+1, cx+1, cs.Round(glyph.BottomRight), style)
 	} else {
-		canvas.Put(y, cx-1, cs.TopLeft, true, style)
-		canvas.Put(y, cx, cs.Horizontal, true, style)
-		canvas.Put(y, cx+1, cs.TopRight, true, style)
-		canvas.Put(y+1, cx-1, cs.BottomLeft, true, style)
-		canvas.Put(y+1, cx, cs.Horizontal, true, style)
-		canvas.Put(y+1, cx+1, cs.BottomRight, true, style)
+		canvas.PutBox(y, cx-1, cs.Rune(glyph.TopLeft, glyph.Light), style)
+		canvas.PutBox(y, cx, cs.Rune(glyph.Horizontal, glyph.Light), style)
+		canvas.PutBox(y, cx+1, cs.Rune(glyph.TopRight, glyph.Light), style)
+		canvas.PutBox(y+1, cx-1, cs.Rune(glyph.BottomLeft, glyph.Light), style)
+		canvas.PutBox(y+1, cx, cs.Rune(glyph.Horizontal, glyph.Light), style)
+		canvas.PutBox(y+1, cx+1, cs.Rune(glyph.BottomRight, glyph.Light), style)
 	}
 
 	// Underline
-	canvas.Put(y+2, cx-1, cs.Horizontal, false, style)
-	canvas.Put(y+2, cx, cs.Horizontal, false, style)
-	canvas.Put(y+2, cx+1, cs.Horizontal, false, style)
+	canvas.Put(y+2, cx-1, cs.Rune(glyph.Horizontal, glyph.Light), style)
+	canvas.Put(y+2, cx, cs.Rune(glyph.Horizontal, glyph.Light), style)
+	canvas.Put(y+2, cx+1, cs.Rune(glyph.Horizontal, glyph.Light), style)
 
 	// Label below
 	labelCol := cx - textwidth.String(label)/2
@@ -798,43 +799,43 @@ func drawCollections(canvas *renderer.Canvas, cx, y, width int, label string, cs
 
 	// Back rectangle (offset +1 right) — just top and right edges visible
 	for c := bx + 2; c < bx+width+1; c++ {
-		canvas.Put(y, c, cs.Horizontal, true, style)
+		canvas.PutBox(y, c, cs.Rune(glyph.Horizontal, glyph.Light), style)
 	}
-	canvas.Put(y, bx+1, cs.TopLeft, true, style)
-	canvas.Put(y, bx+width, cs.TopRight, true, style)
+	canvas.PutBox(y, bx+1, cs.Rune(glyph.TopLeft, glyph.Light), style)
+	canvas.PutBox(y, bx+width, cs.Rune(glyph.TopRight, glyph.Light), style)
 	// Right edge of back rectangle
-	canvas.Put(y+1, bx+width, cs.Vertical, true, style)
+	canvas.PutBox(y+1, bx+width, cs.Rune(glyph.Vertical, glyph.Light), style)
 
 	// Front rectangle
-	canvas.Put(y+1, bx, cs.TopLeft, true, style)
+	canvas.PutBox(y+1, bx, cs.Rune(glyph.TopLeft, glyph.Light), style)
 	for c := bx + 1; c < bx+width-1; c++ {
-		canvas.Put(y+1, c, cs.Horizontal, true, style)
+		canvas.PutBox(y+1, c, cs.Rune(glyph.Horizontal, glyph.Light), style)
 	}
-	canvas.Put(y+1, bx+width-1, cs.TopRight, true, style)
+	canvas.PutBox(y+1, bx+width-1, cs.Rune(glyph.TopRight, glyph.Light), style)
 
 	// Bottom of back rect merges
-	canvas.Put(y+2, bx+width, cs.BottomRight, true, style)
+	canvas.PutBox(y+2, bx+width, cs.Rune(glyph.BottomRight, glyph.Light), style)
 
 	// Side borders of front
 	for r := y + 2; r < y+h-1; r++ {
-		canvas.Put(r, bx, cs.Vertical, true, style)
-		canvas.Put(r, bx+width-1, cs.Vertical, true, style)
+		canvas.PutBox(r, bx, cs.Rune(glyph.Vertical, glyph.Light), style)
+		canvas.PutBox(r, bx+width-1, cs.Rune(glyph.Vertical, glyph.Light), style)
 	}
 
 	// Bottom border of back rect stub
 	if !useASCII {
-		canvas.Put(y+2, bx+width-1, cs.TeeLeft, true, style)
+		canvas.PutBox(y+2, bx+width-1, cs.Rune(glyph.TeeLeft, glyph.Light), style)
 	} else {
-		canvas.Put(y+2, bx+width-1, cs.Vertical, true, style)
+		canvas.PutBox(y+2, bx+width-1, cs.Rune(glyph.Vertical, glyph.Light), style)
 	}
-	canvas.Put(y+2, bx+width, cs.BottomRight, true, style)
+	canvas.PutBox(y+2, bx+width, cs.Rune(glyph.BottomRight, glyph.Light), style)
 
 	// Bottom border of front
-	canvas.Put(y+h-1, bx, cs.BottomLeft, true, style)
+	canvas.PutBox(y+h-1, bx, cs.Rune(glyph.BottomLeft, glyph.Light), style)
 	for c := bx + 1; c < bx+width-1; c++ {
-		canvas.Put(y+h-1, c, cs.Horizontal, true, style)
+		canvas.PutBox(y+h-1, c, cs.Rune(glyph.Horizontal, glyph.Light), style)
 	}
-	canvas.Put(y+h-1, bx+width-1, cs.BottomRight, true, style)
+	canvas.PutBox(y+h-1, bx+width-1, cs.Rune(glyph.BottomRight, glyph.Light), style)
 
 	// Label centered in front rectangle
 	labelCol := bx + (width-textwidth.String(label))/2
@@ -950,16 +951,16 @@ func drawBlockStart(
 	colCenters []int, cs renderer.CharSet, useASCII bool,
 ) {
 	left, right := blockFrameBounds(colCenters, ev.depth)
-	hChar := cs.Horizontal
+	hChar := cs.Rune(glyph.Horizontal, glyph.Light)
 	style := "node"
 
 	// Top border
-	canvas.Put(row, left, cs.TopLeft, false, style)
+	canvas.Put(row, left, cs.Rune(glyph.TopLeft, glyph.Light), style)
 	for c := left + 1; c < minInt(right, canvas.Width); c++ {
-		canvas.Put(row, c, hChar, false, style)
+		canvas.Put(row, c, hChar, style)
 	}
 	if right < canvas.Width {
-		canvas.Put(row, right, cs.TopRight, false, style)
+		canvas.Put(row, right, cs.Rune(glyph.TopRight, glyph.Light), style)
 	}
 
 	// Label row: [kind] label — clear interior first to hide lifeline chars
@@ -969,12 +970,12 @@ func drawBlockStart(
 	}
 	labelCol := left + 1
 	if row+1 < canvas.Height {
-		canvas.Put(row+1, left, cs.Vertical, false, style)
+		canvas.Put(row+1, left, cs.Rune(glyph.Vertical, glyph.Light), style)
 		for c := left + 1; c < minInt(right, canvas.Width); c++ {
 			canvas.ClearCell(row+1, c)
 		}
 		if right < canvas.Width {
-			canvas.Put(row+1, right, cs.Vertical, false, style)
+			canvas.Put(row+1, right, cs.Rune(glyph.Vertical, glyph.Light), style)
 		}
 		canvas.PutText(row+1, labelCol, label, "edge_label")
 	}
@@ -993,12 +994,12 @@ func drawBlockSection(
 	}
 	style := "node"
 
-	canvas.Put(row, left, cs.Vertical, false, style)
+	canvas.Put(row, left, cs.Rune(glyph.Vertical, glyph.Light), style)
 	for c := left + 1; c < minInt(right, canvas.Width); c++ {
-		canvas.Put(row, c, dash, false, style)
+		canvas.Put(row, c, dash, style)
 	}
 	if right < canvas.Width {
-		canvas.Put(row, right, cs.Vertical, false, style)
+		canvas.Put(row, right, cs.Rune(glyph.Vertical, glyph.Light), style)
 	}
 
 	// Section label after left border
@@ -1012,15 +1013,15 @@ func drawBlockEnd(
 	colCenters []int, cs renderer.CharSet, useASCII bool,
 ) {
 	left, right := blockFrameBounds(colCenters, ev.depth)
-	hChar := cs.Horizontal
+	hChar := cs.Rune(glyph.Horizontal, glyph.Light)
 	style := "node"
 
-	canvas.Put(row, left, cs.BottomLeft, false, style)
+	canvas.Put(row, left, cs.Rune(glyph.BottomLeft, glyph.Light), style)
 	for c := left + 1; c < minInt(right, canvas.Width); c++ {
-		canvas.Put(row, c, hChar, false, style)
+		canvas.Put(row, c, hChar, style)
 	}
 	if right < canvas.Width {
-		canvas.Put(row, right, cs.BottomRight, false, style)
+		canvas.Put(row, right, cs.Rune(glyph.BottomRight, glyph.Light), style)
 	}
 }
 
@@ -1116,18 +1117,18 @@ func drawMessage(
 
 	// Draw the line (excluding endpoints which are lifeline chars)
 	for c := left + 1; c < right; c++ {
-		canvas.Put(row, c, hChar, false, "edge")
+		canvas.Put(row, c, hChar, "edge")
 	}
 
 	// Arrowhead at target
 	switch msg.arrowType {
 	case "bidirectional":
 		if useASCII {
-			canvas.Put(row, left, '<', false, "arrow")
-			canvas.Put(row, right, '>', false, "arrow")
+			canvas.Put(row, left, '<', "arrow")
+			canvas.Put(row, right, '>', "arrow")
 		} else {
-			canvas.Put(row, left, '\u25C4', false, "arrow")  // ◄
-			canvas.Put(row, right, '\u25BA', false, "arrow") // ►
+			canvas.Put(row, left, '\u25C4', "arrow")  // ◄
+			canvas.Put(row, right, '\u25BA', "arrow") // ►
 		}
 	case "arrow":
 		if goingRight {
@@ -1137,8 +1138,8 @@ func drawMessage(
 			} else {
 				arrow = '\u25BA' // ►
 			}
-			canvas.Put(row, right, arrow, false, "arrow")
-			canvas.Put(row, left, hChar, false, "edge")
+			canvas.Put(row, right, arrow, "arrow")
+			canvas.Put(row, left, hChar, "edge")
 		} else {
 			var arrow rune
 			if useASCII {
@@ -1146,29 +1147,29 @@ func drawMessage(
 			} else {
 				arrow = '\u25C4' // ◄
 			}
-			canvas.Put(row, left, arrow, false, "arrow")
-			canvas.Put(row, right, hChar, false, "edge")
+			canvas.Put(row, left, arrow, "arrow")
+			canvas.Put(row, right, hChar, "edge")
 		}
 	case "cross":
 		if goingRight {
-			canvas.Put(row, right, 'x', false, "arrow")
-			canvas.Put(row, left, hChar, false, "edge")
+			canvas.Put(row, right, 'x', "arrow")
+			canvas.Put(row, left, hChar, "edge")
 		} else {
-			canvas.Put(row, left, 'x', false, "arrow")
-			canvas.Put(row, right, hChar, false, "edge")
+			canvas.Put(row, left, 'x', "arrow")
+			canvas.Put(row, right, hChar, "edge")
 		}
 	case "async":
 		if goingRight {
-			canvas.Put(row, right, ')', false, "arrow")
-			canvas.Put(row, left, hChar, false, "edge")
+			canvas.Put(row, right, ')', "arrow")
+			canvas.Put(row, left, hChar, "edge")
 		} else {
-			canvas.Put(row, left, '(', false, "arrow")
-			canvas.Put(row, right, hChar, false, "edge")
+			canvas.Put(row, left, '(', "arrow")
+			canvas.Put(row, right, hChar, "edge")
 		}
 	default:
 		// "open" — no arrowhead, just line to endpoints
-		canvas.Put(row, left, hChar, false, "edge")
-		canvas.Put(row, right, hChar, false, "edge")
+		canvas.Put(row, left, hChar, "edge")
+		canvas.Put(row, right, hChar, "edge")
 	}
 
 	// Label above the line
@@ -1207,16 +1208,16 @@ func drawSelfMessage(
 
 	// Top horizontal line going right
 	for c := col + 1; c < col+loopWidth; c++ {
-		canvas.Put(row, c, hChar, false, "edge")
+		canvas.Put(row, c, hChar, "edge")
 	}
 
 	// Vertical line going down
 	rightCol := col + loopWidth - 1
-	canvas.Put(row+1, rightCol, vChar, false, "edge")
+	canvas.Put(row+1, rightCol, vChar, "edge")
 
 	// Bottom horizontal line going left back to lifeline
 	for c := col + 1; c < col+loopWidth; c++ {
-		canvas.Put(row+1, c, hChar, false, "edge")
+		canvas.Put(row+1, c, hChar, "edge")
 	}
 
 	// Arrowhead pointing back at lifeline
@@ -1228,22 +1229,22 @@ func drawSelfMessage(
 		} else {
 			arrow = '\u25C4' // ◄
 		}
-		canvas.Put(row+1, col, arrow, false, "arrow")
+		canvas.Put(row+1, col, arrow, "arrow")
 	case "cross":
-		canvas.Put(row+1, col, 'x', false, "arrow")
+		canvas.Put(row+1, col, 'x', "arrow")
 	case "async":
-		canvas.Put(row+1, col, '(', false, "arrow")
+		canvas.Put(row+1, col, '(', "arrow")
 	default:
-		canvas.Put(row+1, col, hChar, false, "edge")
+		canvas.Put(row+1, col, hChar, "edge")
 	}
 
 	// Corners
 	if !useASCII {
-		canvas.Put(row, rightCol, '\u2510', false, "edge")   // ┐
-		canvas.Put(row+1, rightCol, '\u2518', false, "edge") // ┘
+		canvas.Put(row, rightCol, '\u2510', "edge")   // ┐
+		canvas.Put(row+1, rightCol, '\u2518', "edge") // ┘
 	} else {
-		canvas.Put(row, rightCol, '+', false, "edge")
-		canvas.Put(row+1, rightCol, '+', false, "edge")
+		canvas.Put(row, rightCol, '+', "edge")
+		canvas.Put(row+1, rightCol, '+', "edge")
 	}
 
 	// Label above the top line
@@ -1274,6 +1275,9 @@ func RenderSequence(source string, useASCII bool) *renderer.Canvas {
 	}
 
 	canvas := renderer.NewCanvas(layout.canvasWidth, layout.canvasHeight)
+	if useASCII {
+		canvas.SetCharSet(renderer.ASCII)
+	}
 
 	// Compute activation ranges
 	activationRanges := computeActivationRanges(flatEvents, layout.rowOffsets)
@@ -1314,9 +1318,9 @@ func RenderSequence(source string, useASCII bool) *renderer.Canvas {
 		}
 		for r := lifelineStart; r < minInt(endRow, lifelineEnd+1); r++ {
 			if isActivated(activationRanges, p.id, r) {
-				canvas.Put(r, cx, activeChar, false, "edge")
+				canvas.Put(r, cx, activeChar, "edge")
 			} else {
-				canvas.Put(r, cx, lifelineChar, false, "edge")
+				canvas.Put(r, cx, lifelineChar, "edge")
 			}
 		}
 	}
@@ -1352,9 +1356,9 @@ func RenderSequence(source string, useASCII bool) *renderer.Canvas {
 				}
 				// Draw side borders on top of fill
 				for r := entry.startRow + 1; r < row; r++ {
-					canvas.Put(r, entry.left, cs.Vertical, false, "node")
+					canvas.Put(r, entry.left, cs.Rune(glyph.Vertical, glyph.Light), "node")
 					if entry.right < canvas.Width {
-						canvas.Put(r, entry.right, cs.Vertical, false, "node")
+						canvas.Put(r, entry.right, cs.Rune(glyph.Vertical, glyph.Light), "node")
 					}
 				}
 			}
@@ -1381,7 +1385,7 @@ func RenderSequence(source string, useASCII bool) *renderer.Canvas {
 				} else {
 					xChar = '\u2573' // ╳
 				}
-				canvas.Put(row, cx, xChar, false, "arrow")
+				canvas.Put(row, cx, xChar, "arrow")
 			}
 
 		case *note:

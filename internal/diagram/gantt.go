@@ -278,6 +278,9 @@ func RenderGantt(source string, useASCII bool, theme *renderer.Theme) *renderer.
 	canvasHeight := titleRows + totalRows + 3
 
 	c := renderer.NewCanvas(canvasWidth, canvasHeight)
+	if useASCII {
+		c.SetCharSet(renderer.ASCII)
+	}
 
 	// Wallpaper: base background behind entire diagram
 	if theme != nil && theme.HasDepthColors() {
@@ -319,7 +322,7 @@ func RenderGantt(source string, useASCII bool, theme *renderer.Theme) *renderer.
 
 	// Header line
 	for col := barStartCol; col < barStartCol+barW; col++ {
-		c.Put(row, col, hLine, false, "edge")
+		c.Put(row, col, hLine, "edge")
 	}
 	row++
 
@@ -337,7 +340,7 @@ func RenderGantt(source string, useASCII bool, theme *renderer.Theme) *renderer.
 				sectionStyle = "_ansi:" + theme.RegionTextStyle(sectionIdx, 0)
 			}
 			c.PutText(row, 1, t.section, sectionStyle)
-			c.Put(row, labelW+1, vLine, false, "edge")
+			c.Put(row, labelW+1, vLine, "edge")
 
 			// Color strip only on bar area (right of divider)
 			if useRegion {
@@ -356,7 +359,7 @@ func RenderGantt(source string, useASCII bool, theme *renderer.Theme) *renderer.
 		}
 		padding := labelW - textwidth.String(t.label) - 1
 		c.PutText(row, padding, t.label, labelStyle)
-		c.Put(row, labelW+1, vLine, false, "edge")
+		c.Put(row, labelW+1, vLine, "edge")
 
 		// Row background
 		if useRegion && sectionIdx >= 0 {
@@ -374,7 +377,7 @@ func RenderGantt(source string, useASCII bool, theme *renderer.Theme) *renderer.
 
 		if t.isMilestone {
 			mid := (barStart + barEnd) / 2
-			c.Put(row, mid, milestone, false, "arrow")
+			c.Put(row, mid, milestone, "arrow")
 		} else {
 			if barEnd <= barStart {
 				barEnd = barStart + 1
@@ -383,12 +386,12 @@ func RenderGantt(source string, useASCII bool, theme *renderer.Theme) *renderer.
 				// Colored bar: │ delimiters + ░ fill interior
 				barStyle := "_ansi:" + theme.RegionBarStyle(sectionIdx, 0)
 				borderStyle := "_ansi:" + theme.RegionBorderStyle(sectionIdx, 0)
-				c.Put(row, barStart, vLine, false, borderStyle)
+				c.Put(row, barStart, vLine, borderStyle)
 				if barEnd-1 > barStart {
-					c.Put(row, barEnd-1, vLine, false, borderStyle)
+					c.Put(row, barEnd-1, vLine, borderStyle)
 				}
 				for col := barStart + 1; col < barEnd-1; col++ {
-					c.Put(row, col, '░', false, barStyle)
+					c.Put(row, col, '░', barStyle)
 				}
 			} else {
 				for col := barStart; col < barEnd; col++ {
@@ -396,7 +399,7 @@ func RenderGantt(source string, useASCII bool, theme *renderer.Theme) *renderer.
 					if col == barEnd-1 && barEnd-barStart > 1 {
 						ch = barHalf
 					}
-					c.Put(row, col, ch, false, "node")
+					c.Put(row, col, ch, "node")
 				}
 			}
 		}
@@ -419,7 +422,7 @@ func RenderGantt(source string, useASCII bool, theme *renderer.Theme) *renderer.
 				for r := titleRows + 2; r < row; r++ {
 					existing := c.Get(r, todayCol)
 					if existing == ' ' || existing == '░' {
-						c.Put(r, todayCol, '┆', false, todayStyle)
+						c.Put(r, todayCol, '┆', todayStyle)
 					}
 				}
 				// Label above

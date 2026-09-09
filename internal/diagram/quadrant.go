@@ -121,6 +121,9 @@ func RenderQuadrantChart(source string, useASCII bool, theme *renderer.Theme) *r
 	canvasHeight := titleRows + plotH + 4 // +4 for x-axis labels and axis line
 
 	c := renderer.NewCanvas(canvasWidth, canvasHeight)
+	if useASCII {
+		c.SetCharSet(renderer.ASCII)
+	}
 
 	// Wallpaper: base background behind entire diagram
 	if theme != nil && theme.HasDepthColors() {
@@ -154,37 +157,37 @@ func RenderQuadrantChart(source string, useASCII bool, theme *renderer.Theme) *r
 
 	// Y axis
 	for r := plotStartY; r <= plotEndY; r++ {
-		c.Put(r, plotStartX-1, vLine, false, "edge")
+		c.Put(r, plotStartX-1, vLine, "edge")
 	}
 
 	// X axis (at middle)
 	midY := plotStartY + plotH/2
 	for col := plotStartX; col < plotStartX+plotW; col++ {
-		c.Put(midY, col, hLine, false, "edge")
+		c.Put(midY, col, hLine, "edge")
 	}
 
 	// Center cross
 	midX := plotStartX + plotW/2
-	c.Put(midY, midX, cross, false, "edge")
+	c.Put(midY, midX, cross, "edge")
 
 	// Vertical center line
 	for r := plotStartY; r <= plotEndY; r++ {
 		if r != midY {
-			c.Put(r, midX, '┆', false, "edge")
+			c.Put(r, midX, '┆', "edge")
 		}
 	}
 
 	// Horizontal center line (dashed)
 	for col := plotStartX; col < plotStartX+plotW; col++ {
 		if col != midX && c.Get(midY, col) == hLine {
-			c.Put(midY, col, '┄', false, "edge")
+			c.Put(midY, col, '┄', "edge")
 		}
 	}
 
 	// Bottom x-axis
 	axisRow := plotEndY + 1
 	for col := plotStartX; col < plotStartX+plotW; col++ {
-		c.Put(axisRow, col, hLine, false, "edge")
+		c.Put(axisRow, col, hLine, "edge")
 	}
 
 	// Quadrant labels and fills
@@ -263,7 +266,7 @@ func RenderQuadrantChart(source string, useASCII bool, theme *renderer.Theme) *r
 		px := plotStartX + int(p.x*float64(plotW-1))
 		py := plotEndY - int(p.y*float64(plotH-1))
 		if px >= plotStartX && px < plotStartX+plotW && py >= plotStartY && py <= plotEndY {
-			c.Put(py, px, dot, false, "arrow")
+			c.Put(py, px, dot, "arrow")
 			points = append(points, plotted{px, py, p.label})
 		}
 	}
@@ -275,7 +278,7 @@ func RenderQuadrantChart(source string, useASCII bool, theme *renderer.Theme) *r
 			for i := 0; i < textwidth.String(p.label)+1; i++ {
 				c.ClearCell(p.py, p.px+1+i)
 			}
-			c.Put(p.py, p.px+1, '─', false, "arrow")
+			c.Put(p.py, p.px+1, '─', "arrow")
 			c.PutText(p.py, p.px+2, p.label, "label")
 		} else {
 			labelStart := p.px - textwidth.String(p.label) - 2
@@ -286,7 +289,7 @@ func RenderQuadrantChart(source string, useASCII bool, theme *renderer.Theme) *r
 				c.ClearCell(p.py, labelStart+i)
 			}
 			c.PutText(p.py, labelStart, p.label, "label")
-			c.Put(p.py, p.px-1, '─', false, "arrow")
+			c.Put(p.py, p.px-1, '─', "arrow")
 		}
 	}
 
