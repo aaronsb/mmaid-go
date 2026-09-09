@@ -24,6 +24,18 @@ domains:
     description: Input formats, JSON templates, data pipelines
     folder: ingest
 
+  renderer:
+    range: [400, 499]
+    name: Renderer
+    description: Canvas, glyph selection, character sets, ANSI serialization
+    folder: renderer
+
+  config:
+    range: [500, 599]
+    name: Config
+    description: Terminal capability, profiles, glyph sets, user configuration
+    folder: config
+
 # Valid ADR statuses
 statuses:
   - Draft
