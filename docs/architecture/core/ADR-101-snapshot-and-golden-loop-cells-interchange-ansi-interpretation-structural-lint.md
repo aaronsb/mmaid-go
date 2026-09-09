@@ -151,6 +151,9 @@ fixtures from that file; the chart renderers leave it as each is fixed.
 - Every later ADR in this series lands with fixtures and goldens.
 - The `%% mmaid:` directive is a test-harness convention, not a parser
   feature.
+- `docs/gallery` holds one PNG per fixture and an index page, built from
+  the reference frames by `make gallery` and refreshed by
+  `make golden-record`, so the pictures in the docs are the goldens.
 
 ## Alternatives Considered
 

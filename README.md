@@ -104,6 +104,8 @@ result := mmaid.Render(source,
 
 ## Supported diagram types
 
+Every type below has a rendered example in the [gallery](docs/gallery/README.md).
+
 | Type | Keyword | Description |
 |------|---------|-------------|
 | Flowchart | `graph` / `flowchart` | Directed graphs with shapes, subgraphs, styling |
@@ -210,6 +212,10 @@ reference frames in `testdata/golden/`. `make golden` runs that comparison
 and the lint; `make golden-record` rewrites the references, and the commit
 that does so says which frames changed and why. `testdata/fixtures/known-bad.txt`
 lists the fixtures whose frames trip the lint today.
+
+[`docs/gallery`](docs/gallery/README.md) shows every fixture rendered from its
+reference frame. `make gallery` rebuilds it, and `make golden-record` rebuilds
+it after re-recording.
 
 See ADR-101 for the format and the comparator's tolerances.
 
