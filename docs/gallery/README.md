@@ -118,6 +118,20 @@ graph LR
 
 ![flowchart](flowchart.png)
 
+## flowchart-ascii
+
+Rendered with `-a -t blueprint`.
+
+```mermaid
+graph LR
+    A[Request] --> B{Auth?}
+    B -->|Yes| C[Process]
+    B -->|No| D[Reject]
+    C --> E[Response]
+```
+
+![flowchart-ascii](flowchart-ascii.png)
+
 ## flowchart-cross
 
 Rendered with `-t default -w 120`.
@@ -154,6 +168,25 @@ gantt
 ```
 
 ![gantt](gantt.png)
+
+## gantt-ascii
+
+Rendered with `-a`.
+
+```mermaid
+gantt
+    title Sprint Plan
+    dateFormat YYYY-MM-DD
+    section Backend
+        API endpoints    :a1, 2026-03-17, 10d
+        Database work    :a2, 2026-03-20, 7d
+    section Frontend
+        UI components    :b1, 2026-03-19, 12d
+    section QA
+        Testing          :c1, after a2, 8d
+```
+
+![gantt-ascii](gantt-ascii.png)
 
 ## gitgraph
 

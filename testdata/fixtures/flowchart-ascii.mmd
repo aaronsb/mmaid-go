@@ -1,0 +1,6 @@
+%% mmaid: -a -t blueprint
+graph LR
+    A[Request] --> B{Auth?}
+    B -->|Yes| C[Process]
+    B -->|No| D[Reject]
+    C --> E[Response]
