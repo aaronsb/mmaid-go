@@ -331,3 +331,42 @@ func TestResolvedValueFormatting(t *testing.T) {
 		t.Errorf("failed value = %q", got)
 	}
 }
+
+func TestIdentityFromDA1(t *testing.T) {
+	cases := map[string]string{
+		"\x1b[?6c":                      "Alacritty",
+		"\x1b[?62;c":                    "kitty",
+		"\x1b[?65;4;6;18;22c":           "WezTerm",
+		"\x1b[?65;1;9c":                 "VTE",
+		"\x1b[?64;1;2;6;9;15;18;21;22c": "xterm",
+		"?1;0c":                         "WindowsTerminal",
+		"\x1b[?1;2c":                    "",
+		"":                              "",
+		"garbage":                       "",
+	}
+	for response, want := range cases {
+		if got := identityFromDA1(response); got != want {
+			t.Errorf("identityFromDA1(%q) = %q, want %q", response, got, want)
+		}
+	}
+}
+
+func TestProbedIdentityOrder(t *testing.T) {
+	answer := func(string) (string, error) { return "\x1b[?62;c", nil }
+	t.Setenv("TERM_PROGRAM", "WezTerm")
+	t.Setenv("TERM", "xterm-256color")
+	if got := ProbedIdentity(answer); got != "WezTerm" {
+		t.Errorf("TERM_PROGRAM should win, got %q", got)
+	}
+	t.Setenv("TERM_PROGRAM", "")
+	if got := ProbedIdentity(answer); got != "kitty" {
+		t.Errorf("DA1 should answer next, got %q", got)
+	}
+	if got := ProbedIdentity(nil); got != "xterm-256color" {
+		t.Errorf("without a query TERM answers, got %q", got)
+	}
+	unknown := func(string) (string, error) { return "\x1b[?1;2c", nil }
+	if got := ProbedIdentity(unknown); got != "xterm-256color" {
+		t.Errorf("an unlisted DA1 falls to TERM, got %q", got)
+	}
+}
