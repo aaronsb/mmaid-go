@@ -84,26 +84,37 @@ and the outside. A crossing never resolves to `┼`.
 - The compound-node rewrite is the standard approach to clustered
   layered layout and matches what Mermaid's dagre does.
 - A border port is the cell where the crossing run meets the border. A
-  run whose cell another edge holds moves to the nearest free cell of
-  the same gap that keeps its neighbours' directions and lies on no other
-  edge's line; a run that starts or ends at a node port keeps the node's
-  port. Sorting from the side's centre as ADR-102 does for nodes would
-  pull every crossing of a wide box toward its middle.
+  run between two turns whose cell another edge holds moves to the
+  nearest free cell of the same gap on the same side of every border
+  line, keeping its neighbours' directions and running along no other
+  edge's line; a run anchored at a node port cannot move, so that end
+  takes the next free port on its node side instead. Sorting from the
+  side's centre as ADR-102 does for nodes would pull every crossing of a
+  wide box toward its middle.
 - The tee's stem points toward the edge's target: the line stops one cell
   before the border, where its free end resolves to a half glyph, and
   starts again at the border cell. With the stem this way an arrowhead may
-  sit directly inside the border.
-- An edge that starts or ends at a subgraph starts at the border cell it
-  leaves through and ends with its arrowhead just outside the border it
-  enters. Before, it ran from the member node nearest the box's centre.
+  sit directly inside the border. Dashed and double strokes have no half
+  glyph and their stub cell is drawn light. ADR-101's rule 4 accepts the
+  stub against the tee.
+- An edge that starts or ends at a subgraph attaches to the subgraph's
+  border like an edge attaches to a node: the subgraph offers ports along
+  the side facing the other end, assigned centre-out as ADR-102 does, and
+  the edge starts at the border cell or ends with its arrowhead just
+  outside it. An edge between a node and the subgraph holding it loops at
+  the node.
 - Every gap column and row is sized from the borders in it so that the
-  corridor an edge follows never lies on a border line. The corridor of a
-  gap row holding one opening top border lies on the box's label row.
-  Cross-axis gaps take `SGGapPerLevel` per border instead of a flat 8.
+  corridor an edge follows lies outside every box in the gap with a
+  straight cell between it and each border line, and every gap in a graph
+  with subgraphs is at least `SGGapMin` so a crossing run has a free cell
+  to move to. A block whose label is wider than it widens its last node
+  column. Crossing a subgraph border costs 10 in the router.
+- A subgraph's `direction BT` or `RL` reverses its block in its own space
+  after the block is laid out; the canvas flip for a reversed graph
+  direction is taken into account so a block reverses only where its
+  direction and the graph's disagree on its axis.
 - Two edges that share a grid corridor still share its draw cells, as
   ADR-102 notes; `subgraph-cross` shows it between B and C.
-- A subgraph's `direction` is normalized inside its block; `BT` and `RL`
-  reverse only at the top level, as before.
 
 ## Alternatives Considered
 

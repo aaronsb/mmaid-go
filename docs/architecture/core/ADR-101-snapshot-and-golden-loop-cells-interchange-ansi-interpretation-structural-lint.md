@@ -112,11 +112,15 @@ returns one finding per violation, each with row, column, glyph, and rule:
    neither a space, a box-drawing glyph, nor an arrowhead.
 2. An arrowhead must have an arm feeding it from its tail side.
 3. An arm may meet an arrowhead only from the tail side.
+4. A half-line glyph is an open end. Its open side must meet text, a
+   marker, or a tee whose stem points away from it, which is a subgraph
+   border where an edge crosses it (ADR-103).
 
 The lint reads Unicode box-drawing glyphs only. ASCII output is ambiguous
 with text and is covered by the goldens.
 
-Rule 2 flags `╮►`. Rule 1 flags `─╭─`. Rule 3 flags `▼` over `┴`. The
+Rule 2 flags `╮►`. Rule 1 flags `─╭─`. Rule 3 flags `▼` over `┴`. Rule 4
+flags `─╴` before a space or a plain border line and passes `╴├`. The
 lint knows nothing about layout: a `┼` where an edge crosses a subgraph
 border is structurally sound and is left to the goldens.
 
