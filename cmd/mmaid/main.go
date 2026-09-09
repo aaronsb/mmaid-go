@@ -675,6 +675,15 @@ var demoSamples = map[string]string{
     curve a["Vendor A"]{85, 60, 90, 70, 75}
     curve b["Vendor B"]{60, 90, 70, 85, 65}
     max 100`,
+	"venn": `venn-beta
+    title What makes a good feature
+    set Desirable
+    set Feasible
+    set Viable
+    union Desirable,Feasible["Buildable"]
+    union Feasible,Viable["Sustainable"]
+    union Desirable,Viable["Marketable"]
+    union Desirable,Feasible,Viable["Ship it"]`,
 }
 
 var demoTypes = []struct{ name, key string }{
@@ -702,6 +711,7 @@ var demoTypes = []struct{ name, key string }{
 	{"C4 Diagram", "c4"},
 	{"Use Case Diagram", "usecase"},
 	{"Radar Chart", "radar"},
+	{"Venn Diagram", "venn"},
 }
 
 func runDemo(w io.Writer, themeName, diagramType string, opts ...mmaid.Option) {
@@ -736,6 +746,7 @@ func runDemo(w io.Writer, themeName, diagramType string, opts ...mmaid.Option) {
 			"eventmodel": "eventmodeling", "em": "eventmodeling",
 			"ishikawa-beta": "ishikawa", "fishbone": "ishikawa",
 			"radar-beta": "radar",
+			"venn-beta":  "venn",
 		}
 		if mapped, ok2 := aliases[strings.ToLower(diagramType)]; ok2 {
 			source = demoSamples[mapped]

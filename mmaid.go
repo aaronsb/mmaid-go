@@ -166,6 +166,8 @@ func detectDiagramType(source string) string {
 			return "usecase"
 		case strings.HasPrefix(lower, "radar"):
 			return "radar"
+		case strings.HasPrefix(lower, "venn"):
+			return "venn"
 		default:
 			return "flowchart"
 		}
@@ -248,6 +250,8 @@ func Render(source string, opts ...Option) (result string) {
 		canvas = renderer.RenderGraphCanvas(g, cs, cfg.paddingX, cfg.paddingY, cfg.roundedEdges, diagram.UsableWidth())
 	case "radar":
 		canvas = diagram.RenderRadar(source, cs, cfg.theme != "", getThemePtr(cfg.theme))
+	case "venn":
+		canvas = diagram.RenderVenn(source, cs, cfg.theme != "", getThemePtr(cfg.theme))
 	default:
 		g := parser.ParseFlowchart(source)
 		canvas = renderer.RenderGraphCanvas(g, cs, cfg.paddingX, cfg.paddingY, cfg.roundedEdges, diagram.UsableWidth())

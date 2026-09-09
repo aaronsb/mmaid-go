@@ -1301,3 +1301,42 @@ func TestRadarTooFewAxes(t *testing.T) {
 	c := RenderRadar("radar-beta\n  axis a, b\n  curve x{1,2}", renderer.UNICODE, false, nil)
 	assertCanvasContains(t, c, "three or more axes")
 }
+
+// ── Venn ────────────────────────────────────────────────────────────────────
+
+func TestVennSetsAndUnions(t *testing.T) {
+	c := RenderVenn("venn-beta\n  title Overlap\n  set Frontend\n  set Backend\n  union Frontend,Backend[\"APIs\"]", renderer.UNICODE, false, nil)
+	assertCanvasContains(t, c, "Overlap")
+	assertCanvasContains(t, c, "Frontend")
+	assertCanvasContains(t, c, "Backend")
+	assertCanvasContains(t, c, "APIs")
+}
+
+func TestVennLabelsAndSizes(t *testing.T) {
+	vd := parseVenn("venn-beta\n  set A[\"Alpha\"]:20\n  set B[\"Beta\"]:12\n  union A,B[\"AB\"]:3")
+	if len(vd.sets) != 2 || vd.sets[0].label != "Alpha" || vd.sets[0].size != 20 {
+		t.Fatalf("sets = %+v", vd.sets)
+	}
+	if len(vd.unions) != 1 || vd.unions[0].mask != 0b11 || vd.unions[0].size != 3 {
+		t.Fatalf("unions = %+v", vd.unions)
+	}
+}
+
+func TestVennUnionOfUndeclaredSetIsDropped(t *testing.T) {
+	vd := parseVenn("venn-beta\n  set A\n  union A,Ghost[\"AB\"]")
+	if len(vd.unions) != 0 {
+		t.Errorf("unions = %+v, want none", vd.unions)
+	}
+}
+
+func TestVennTextAndStyleAreSkipped(t *testing.T) {
+	vd := parseVenn("venn-beta\n  set A[\"Alpha\"]\n    text A1[\"React\"]\n  style A fill:#ff6b6b")
+	if len(vd.sets) != 1 {
+		t.Errorf("sets = %+v, want the one set", vd.sets)
+	}
+}
+
+func TestVennNoSets(t *testing.T) {
+	c := RenderVenn("venn-beta", renderer.UNICODE, false, nil)
+	assertCanvasContains(t, c, "no sets")
+}
