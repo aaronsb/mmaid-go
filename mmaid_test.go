@@ -671,3 +671,13 @@ func TestStripFrontmatter(t *testing.T) {
 		t.Error("content after frontmatter missing")
 	}
 }
+
+func TestBOMBeforeHeaderIsIgnored(t *testing.T) {
+	out := Render("\uFEFFsankey-beta\nA,B,1\n")
+	if strings.Contains(out, "A,B,1") {
+		t.Fatalf("a BOM made the sankey source render as a flowchart node:\n%s", out)
+	}
+	if detectDiagramType(stripFrontmatter("\uFEFFpie\n\"a\" : 1\n")) != "pie" {
+		t.Fatal("BOM defeats detectDiagramType")
+	}
+}
