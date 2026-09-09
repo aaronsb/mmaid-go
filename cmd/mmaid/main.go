@@ -440,6 +440,7 @@ func printUsage() {
 		{"quadrantChart", "2×2 matrix plots"},
 		{"xychart-beta", "Bar and line charts"},
 		{"treemap-beta", "Proportional treemaps"},
+		{"treeView-beta", "Indented file and folder trees"},
 		{"journey", "User journey maps"},
 		{"packet-beta", "Network packet layouts"},
 		{"requirementDiagram", "SysML requirements and elements"},
@@ -638,6 +639,15 @@ var demoSamples = map[string]string{
     columns 3
     A["Frontend"] B["API"] C["Database"]
     D["Cache"]:2 E["Queue"]`,
+	"treeview": `treeView-beta
+    mmaid-go/
+        cmd/
+            mmaid/
+                main.go
+        internal/
+            diagram/  ## one file per type
+            renderer/
+        README.md`,
 }
 
 var demoTypes = []struct{ name, key string }{
@@ -656,6 +666,7 @@ var demoTypes = []struct{ name, key string }{
 	{"Quadrant Chart", "quadrant"},
 	{"XY Chart", "xychart"},
 	{"Treemap", "treemap"},
+	{"Tree View", "treeview"},
 	{"User Journey", "journey"},
 	{"Packet Diagram", "packet"},
 	{"Requirement Diagram", "requirement"},
@@ -691,6 +702,7 @@ func runDemo(w io.Writer, themeName, diagramType string, opts ...mmaid.Option) {
 			"block-beta": "block", "git": "gitgraph",
 			"xy": "xychart", "xychart-beta": "xychart",
 			"quadrantchart": "quadrant",
+			"treeview-beta": "treeview", "tree": "treeview",
 		}
 		if mapped, ok2 := aliases[strings.ToLower(diagramType)]; ok2 {
 			source = demoSamples[mapped]

@@ -879,3 +879,82 @@ c   -   verifies   ->   a`)
 		}
 	}
 }
+
+// ── TreeView ────────────────────────────────────────────────────────────────
+
+// Indentation is the whole hierarchy, and a trailing slash is what makes a
+// node a directory.
+func TestTreeViewIndentationAndFolders(t *testing.T) {
+	td := parseTreeView(`treeView-beta
+    my-project/
+        src/
+            index.js
+        README.md`)
+
+	if len(td.roots) != 1 {
+		t.Fatalf("roots = %d, want the one outermost node", len(td.roots))
+	}
+	root := td.roots[0]
+	if root.label != "my-project/" || !root.folder {
+		t.Errorf("root = %q folder=%v", root.label, root.folder)
+	}
+	if len(root.children) != 2 {
+		t.Fatalf("children = %d, want src/ and README.md", len(root.children))
+	}
+	src := root.children[0]
+	if src.label != "src/" || !src.folder || len(src.children) != 1 {
+		t.Errorf("src = %+v", src)
+	}
+	if got := src.children[0]; got.label != "index.js" || got.folder {
+		t.Errorf("index.js = %q folder=%v", got.label, got.folder)
+	}
+	if leaf := root.children[1]; leaf.label != "README.md" || leaf.folder {
+		t.Errorf("README.md = %q folder=%v", leaf.label, leaf.folder)
+	}
+}
+
+// A quoted label keeps its spaces; `## text` becomes the description, and the
+// annotations this renderer does not draw are parsed off rather than kept.
+func TestTreeViewLabelsAndAnnotations(t *testing.T) {
+	td := parseTreeView(`treeView-beta
+    "my project"
+        notes.md ## the running log
+        theme.css :::highlight
+        main.rs icon(rust)`)
+
+	root := td.roots[0]
+	if root.label != "my project" {
+		t.Errorf("quoted label = %q", root.label)
+	}
+	want := []struct{ label, desc string }{
+		{"notes.md", "the running log"},
+		{"theme.css", ""},
+		{"main.rs", ""},
+	}
+	if len(root.children) != len(want) {
+		t.Fatalf("children = %d, want %d", len(root.children), len(want))
+	}
+	for i, w := range want {
+		got := root.children[i]
+		if got.label != w.label || got.desc != w.desc {
+			t.Errorf("child %d = %q / %q, want %q / %q", i, got.label, got.desc, w.label, w.desc)
+		}
+	}
+}
+
+// Every node at the outermost indent is a root, so a treeView may be a forest.
+func TestTreeViewForest(t *testing.T) {
+	td := parseTreeView("treeView-beta\napps/\n    web/\nlibs/")
+	if len(td.roots) != 2 {
+		t.Fatalf("roots = %d, want apps/ and libs/", len(td.roots))
+	}
+	if td.roots[0].label != "apps/" || td.roots[1].label != "libs/" {
+		t.Errorf("roots = %q, %q", td.roots[0].label, td.roots[1].label)
+	}
+}
+
+func TestTreeViewRenderGuides(t *testing.T) {
+	c := RenderTreeView("treeView-beta\nroot/\n    a.txt\n    b.txt", renderer.UNICODE)
+	assertCanvasContains(t, c, "├──a.txt")
+	assertCanvasContains(t, c, "└──b.txt")
+}

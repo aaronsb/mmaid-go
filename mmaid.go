@@ -132,6 +132,8 @@ func detectDiagramType(source string) string {
 			return "pie"
 		case strings.HasPrefix(lower, "treemap"):
 			return "treemap"
+		case strings.HasPrefix(lower, "treeview"):
+			return "treeview"
 		case strings.HasPrefix(lower, "statediagram"):
 			return "state"
 		case strings.HasPrefix(lower, "gantt"):
@@ -207,6 +209,8 @@ func Render(source string, opts ...Option) (result string) {
 		canvas = diagram.RenderGitGraph(source, cs)
 	case "treemap":
 		canvas = diagram.RenderTreemap(source, cs, getThemePtr(cfg.theme))
+	case "treeview":
+		canvas = diagram.RenderTreeView(source, cs)
 	case "gantt":
 		canvas = diagram.RenderGantt(source, cs, getThemePtr(cfg.theme))
 	case "timeline":
