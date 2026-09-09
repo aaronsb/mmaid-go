@@ -308,11 +308,43 @@ func drawEdgeLines(canvas *Canvas, re routing.RoutedEdge, roundedEdges, arrowEnd
 		for _, c := range crossingsOn(re.Crossings, start, end) {
 			before := routing.Point{Col: c.At.Col - dx, Row: c.At.Row - dy}
 			if before != start {
-				canvas.Segment(start.Row, start.Col, before.Row, before.Col, w, roundedEdges, "edge")
+				stubTo(canvas, start, before, w, roundedEdges)
 			}
 			start = c.At
 		}
 		canvas.Segment(start.Row, start.Col, end.Row, end.Col, w, roundedEdges, "edge")
+	}
+}
+
+// stubTo draws the piece of a line that stops one cell short of a border:
+// a segment whose last cell carries only the arm back along the line, so
+// it resolves to a half glyph. Dashed and double strokes have no half
+// glyph and their last cell is drawn light.
+func stubTo(canvas *Canvas, from, to routing.Point, w glyph.Weight, rounded bool) {
+	if w != glyph.Dashed && w != glyph.Double {
+		canvas.Segment(from.Row, from.Col, to.Row, to.Col, w, rounded, "edge")
+		return
+	}
+	dx, dy := sign(to.Col-from.Col), sign(to.Row-from.Row)
+	prev := routing.Point{Col: to.Col - dx, Row: to.Row - dy}
+	if prev != from {
+		canvas.Segment(from.Row, from.Col, prev.Row, prev.Col, w, rounded, "edge")
+	}
+	canvas.Arm(prev.Row, prev.Col, armOf(dx, dy), w, rounded, "edge")
+	canvas.Arm(to.Row, to.Col, armOf(-dx, -dy), glyph.Light, rounded, "edge")
+}
+
+// armOf returns the arm bit pointing along a unit step.
+func armOf(dx, dy int) glyph.Arms {
+	switch {
+	case dx > 0:
+		return glyph.E
+	case dx < 0:
+		return glyph.W
+	case dy > 0:
+		return glyph.S
+	default:
+		return glyph.N
 	}
 }
 
