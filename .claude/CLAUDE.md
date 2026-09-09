@@ -50,3 +50,28 @@ GitHub generates.
 `mmaid` but the tarball extracts to `mmaid-go-$pkgver`.
 
 The full contract: https://github.com/aaronsb/arch-repo/blob/main/docs/packaging-contract.md
+
+## Seeing what you render
+
+Terminal output shown inside a tool result is not what a terminal shows:
+columns drop, glyphs substitute, colour is lost. Do not judge a diagram by
+reading its ANSI in a tool result.
+
+```bash
+make snap FILE=testdata/fixtures/flowchart-cross.mmd ARGS="-t blueprint"
+```
+
+writes `.snap/<stem>.cells` and `.snap/<stem>.png` and prints the lint
+findings. Read the PNG. The edit loop is: change, `make snap`, Read the PNG,
+adjust (ADR-101).
+
+`make golden` compares every fixture in `testdata/fixtures` against its
+reference frame and runs the structural lint. A fixture that trips the lint
+is listed in `testdata/fixtures/known-bad.txt` with a one-line cause; fix the
+renderer rather than adding to the list, and remove an entry when its cause
+is gone. `make golden-record` rewrites references and rebuilds
+`docs/gallery`; the commit that re-records lists each changed frame and why.
+
+Every renderer draws lines through `Arm`, `Segment`, or `PutBox`, never a
+literal box glyph (ADR-400); fills, arrows, and markers come from the
+`CharSet` (ADR-500); label widths come from `textwidth` (ADR-401).
