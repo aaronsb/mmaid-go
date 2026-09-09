@@ -1,0 +1,26 @@
+# Fixtures whose frames trip the structural lint today. One stem per line.
+# ADR-400's implementation empties this file.
+#
+# Three sources, in rough order of how many findings each accounts for:
+#   - real edge defects: an arrowhead with no arm feeding it, a corner in a
+#     horizontal run, an arm bleeding past an arrowhead
+#   - arms running off the canvas edge in chart-style renderers
+#   - ASCII ambiguity: '+' claims all four arms, and '.' and ':' are dotted
+#     rules, so a corner or a period in a label reads as a dangling arm
+
+class
+er
+flowchart
+flowchart-cross
+gantt
+gitgraph
+journey
+kanban
+mindmap
+packet
+quadrant
+sequence
+state
+subgraph-cross
+timeline
+xychart

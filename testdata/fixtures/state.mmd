@@ -1,0 +1,8 @@
+%% mmaid: -t blueprint
+stateDiagram-v2
+    [*] --> Idle
+    Idle --> Processing : submit
+    Processing --> Review : complete
+    Review --> Idle : reject
+    Review --> Done : approve
+    Done --> [*]

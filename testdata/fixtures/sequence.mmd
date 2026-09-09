@@ -1,0 +1,9 @@
+%% mmaid: -t blueprint
+sequenceDiagram
+    participant Client
+    participant API
+    participant DB
+    Client->>API: GET /users
+    API->>DB: SELECT *
+    DB-->>API: rows
+    API-->>Client: 200 OK
