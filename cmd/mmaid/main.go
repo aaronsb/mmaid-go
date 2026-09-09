@@ -684,6 +684,21 @@ var demoSamples = map[string]string{
     union Feasible,Viable["Sustainable"]
     union Desirable,Viable["Marketable"]
     union Desirable,Feasible,Viable["Ship it"]`,
+	"wardley": `wardley-beta
+    title Tea Shop Value Chain
+    anchor Business [0.95, 0.63]
+    component Cup of Tea [0.79, 0.61]
+    component Tea [0.63, 0.81]
+    component Hot Water [0.52, 0.80]
+    component Kettle [0.43, 0.35] (buy)
+    component Power [0.10, 0.70] (market)
+    Business -> Cup of Tea
+    Cup of Tea -> Tea
+    Cup of Tea -> Hot Water
+    Hot Water -> Kettle
+    Kettle -> Power
+    evolve Kettle 0.62
+    note "Standard power lets kettles evolve" [0.30, 0.20]`,
 }
 
 var demoTypes = []struct{ name, key string }{
@@ -712,6 +727,7 @@ var demoTypes = []struct{ name, key string }{
 	{"Use Case Diagram", "usecase"},
 	{"Radar Chart", "radar"},
 	{"Venn Diagram", "venn"},
+	{"Wardley Map", "wardley"},
 }
 
 func runDemo(w io.Writer, themeName, diagramType string, opts ...mmaid.Option) {
@@ -745,8 +761,9 @@ func runDemo(w io.Writer, themeName, diagramType string, opts ...mmaid.Option) {
 			"treeview-beta": "treeview", "tree": "treeview",
 			"eventmodel": "eventmodeling", "em": "eventmodeling",
 			"ishikawa-beta": "ishikawa", "fishbone": "ishikawa",
-			"radar-beta": "radar",
-			"venn-beta":  "venn",
+			"radar-beta":   "radar",
+			"venn-beta":    "venn",
+			"wardley-beta": "wardley",
 		}
 		if mapped, ok2 := aliases[strings.ToLower(diagramType)]; ok2 {
 			source = demoSamples[mapped]

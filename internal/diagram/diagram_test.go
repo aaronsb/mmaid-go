@@ -1340,3 +1340,64 @@ func TestVennNoSets(t *testing.T) {
 	c := RenderVenn("venn-beta", renderer.UNICODE, false, nil)
 	assertCanvasContains(t, c, "no sets")
 }
+
+// ── Wardley ─────────────────────────────────────────────────────────────────
+
+func TestWardleyComponentsAndStages(t *testing.T) {
+	c := RenderWardley("wardley-beta\n  title Tea\n  anchor Business [0.95, 0.63]\n  component Kettle [0.43, 0.35]\n  Business -> Kettle", renderer.UNICODE, nil)
+	assertCanvasContains(t, c, "Tea")
+	assertCanvasContains(t, c, "Business")
+	assertCanvasContains(t, c, "Kettle")
+	assertCanvasContains(t, c, "Genesis")
+	assertCanvasContains(t, c, "Commodity")
+	assertCanvasContains(t, c, "◎") // the anchor's double ring
+}
+
+func TestWardleyDecoratorsAndHyphenatedNames(t *testing.T) {
+	wm := parseWardley("wardley-beta\n  component real-time processing [0.55, 0.40] (buy) (inertia)\n  component end-user [0.90, 0.95]\n  end-user -> real-time processing")
+	if len(wm.nodes) != 2 {
+		t.Fatalf("nodes = %+v", wm.nodes)
+	}
+	if wm.nodes[0].name != "real-time processing" || wm.nodes[0].sourced != "buy" || !wm.nodes[0].inertia {
+		t.Errorf("node = %+v", wm.nodes[0])
+	}
+	if len(wm.links) != 1 || wm.links[0].from != "end-user" {
+		t.Errorf("links = %+v", wm.links)
+	}
+}
+
+func TestWardleyLinkFormsAndLabels(t *testing.T) {
+	wm := parseWardley("wardley-beta\n  component A [0.1, 0.1]\n  component B [0.2, 0.2]\n  A --> B\n  A -.-> B\n  A +'backup'> B\n  A -> B; reads")
+	if len(wm.links) != 4 {
+		t.Fatalf("links = %+v", wm.links)
+	}
+	if wm.links[2].label != "backup" {
+		t.Errorf("flow label = %q, want backup", wm.links[2].label)
+	}
+	if wm.links[3].label != "reads" {
+		t.Errorf("annotation = %q, want reads", wm.links[3].label)
+	}
+}
+
+func TestWardleyLinkToUndeclaredComponentIsDropped(t *testing.T) {
+	wm := parseWardley("wardley-beta\n  component A [0.1, 0.1]\n  A -> Ghost")
+	if len(wm.links) != 0 {
+		t.Errorf("links = %+v, want none", wm.links)
+	}
+}
+
+func TestWardleyCustomEvolutionStages(t *testing.T) {
+	wm := parseWardley("wardley-beta\n  evolution Unmodelled -> Divergent -> Convergent -> Modelled\n  component A [0.1, 0.1]")
+	if len(wm.stages) != 4 || wm.stages[0].name != "Unmodelled" || wm.stages[3].name != "Modelled" {
+		t.Fatalf("stages = %+v", wm.stages)
+	}
+	wm = parseWardley("wardley-beta\n  evolution Genesis@0.2 -> Custom@0.4 -> Product@0.75 -> Commodity@1.0\n  component A [0.1, 0.1]")
+	if wm.stages[0].end != 0.2 || wm.stages[2].end != 0.75 {
+		t.Errorf("stage boundaries = %+v", wm.stages)
+	}
+}
+
+func TestWardleyNoComponents(t *testing.T) {
+	c := RenderWardley("wardley-beta\n  title Empty", renderer.UNICODE, nil)
+	assertCanvasContains(t, c, "no components")
+}
