@@ -22,16 +22,24 @@ import (
 //
 // and an element box leads with its type, the way the other ported diagrams
 // mark a node kind on its first line.
+//
+// Skipped: `style` and `classDef` statements and the `class` keyword — a class
+// name reaches the renderer as a style key no theme defines, so honouring one
+// would strip a node's colour rather than add to it; a `:::class` suffix on a
+// block header is still recorded on the node. Markdown emphasis inside a
+// quoted name or text renders as the literal source characters.
 
 var (
 	reReqHeader = regexp.MustCompile(`(?i)^requirementDiagram\s*$`)
 	reReqBlock  = regexp.MustCompile(`(?i)^(requirement|functionalRequirement|interfaceRequirement|performanceRequirement|physicalRequirement|designConstraint|element)\s+(.+?)\s*\{\s*$`)
 	reReqField  = regexp.MustCompile(`(?i)^(id|text|risk|verifymethod|type|docref)\s*:\s*(.*)$`)
 	reReqClose  = regexp.MustCompile(`^\}\s*$`)
-	// {source} - <type> -> {destination}
-	reReqRelFwd = regexp.MustCompile(`^(.+?)\s+-\s*(\w+)\s*->\s+(.+?)$`)
+	// {source} - <type> -> {destination}. The lexer skips whitespace globally
+	// and an entity name cannot hold `-`, `<`, `>`, `:` or `,`, so the spacing
+	// around the arrow is free.
+	reReqRelFwd = regexp.MustCompile(`^([^-<>]+?)\s*-\s*(\w+)\s*->\s*([^-<>]+)$`)
 	// {destination} <- <type> - {source}
-	reReqRelBack = regexp.MustCompile(`^(.+?)\s+<-\s*(\w+)\s*-\s+(.+?)$`)
+	reReqRelBack = regexp.MustCompile(`^([^-<>]+?)\s*<-\s*(\w+)\s*-\s*([^-<>]+)$`)
 	reReqStyling = regexp.MustCompile(`(?i)^(style|classDef|class)\s`)
 )
 

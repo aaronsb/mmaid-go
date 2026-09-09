@@ -553,7 +553,7 @@ func TestC4StyleMacrosIgnored(t *testing.T) {
 
 // ── Use Case ────────────────────────────────────────────────────────────────
 
-const useCaseSrc = `usecaseDiagram
+const useCaseSrc = `usecase-beta
     actor Customer("Customer")
     actor Agent("Support Agent")
     systemBoundary Storefront
@@ -608,7 +608,7 @@ func TestUseCaseIncludeIsDashed(t *testing.T) {
 }
 
 func TestUseCaseRelationshipForms(t *testing.T) {
-	src := `usecaseDiagram
+	src := `usecase-beta
 direction LR
 actor Admin
 actor Person
@@ -652,7 +652,7 @@ Person --x Report`
 }
 
 func TestUseCaseInlineAndReversed(t *testing.T) {
-	g := ParseUseCaseDiagram("usecaseDiagram\nactor \"Main administrator\" as Admin\nAdmin --> (Reset password)\nAdmin -- (Reset password)\n(Reset password) <-- Admin")
+	g := ParseUseCaseDiagram("usecase-beta\nactor \"Main administrator\" as Admin\nAdmin --> (Reset password)\nAdmin -- (Reset password)\n(Reset password) <-- Admin")
 	if g.Nodes["Admin"].Label != joinLabel([]string{"[actor]", "Main administrator"}) {
 		t.Errorf("aliased actor label = %q", g.Nodes["Admin"].Label)
 	}
@@ -667,5 +667,215 @@ func TestUseCaseInlineAndReversed(t *testing.T) {
 	}
 	if g.Edges[2].Source != "Admin" || g.Edges[2].Target != "Reset_password" || !g.Edges[2].HasArrowEnd {
 		t.Errorf("reversed association = %+v", g.Edges[2])
+	}
+}
+
+// ── Review regressions ──────────────────────────────────────────────────────
+
+// An explicit edge ID belongs to the operator, not to the source endpoint.
+func TestUseCaseEdgeIDsAreNotNodes(t *testing.T) {
+	g := ParseUseCaseDiagram(`usecase-beta
+actor Customer
+Checkout
+Payment
+Customer opens@-- "starts checkout" ---> Checkout
+Checkout payment@..> : include Payment`)
+
+	for _, id := range g.NodeOrder {
+		if strings.Contains(id, "@") || strings.Contains(id, "opens") || strings.Contains(id, "payment") {
+			t.Errorf("edge ID leaked into node %q (nodes: %v)", id, g.NodeOrder)
+		}
+	}
+	if len(g.Nodes) != 3 {
+		t.Fatalf("expected 3 nodes, got %d: %v", len(g.Nodes), g.NodeOrder)
+	}
+	if e := g.Edges[0]; e.Source != "Customer" || e.Target != "Checkout" || e.Label != "starts checkout" {
+		t.Errorf("labelled association = %+v", e)
+	}
+	if e := g.Edges[1]; e.Source != "Checkout" || e.Target != "Payment" || e.Label != "<<include>>" {
+		t.Errorf("include edge = %+v", e)
+	}
+}
+
+// A keyword is only a keyword when a separator follows it and its case matches.
+func TestUseCaseKeywordNamedNodes(t *testing.T) {
+	g := ParseUseCaseDiagram(`usecase-beta
+actor User
+System("The System")
+Title("Set title")
+Note("Take note")
+User --> System
+User --> Title
+User --> Note`)
+
+	if len(g.Subgraphs) != 0 {
+		t.Errorf("a node named System opened a boundary: %+v", g.Subgraphs)
+	}
+	for _, id := range []string{"System", "Title", "Note"} {
+		if _, ok := g.Nodes[id]; !ok {
+			t.Errorf("node %q was swallowed by a keyword regex (nodes: %v)", id, g.NodeOrder)
+		}
+	}
+	if g.Nodes["System"] != nil && g.Nodes["System"].Label != "The System" {
+		t.Errorf("System label = %q", g.Nodes["System"].Label)
+	}
+	if len(g.Edges) != 3 {
+		t.Errorf("expected 3 edges, got %d", len(g.Edges))
+	}
+}
+
+// Multi-line constructs are consumed whole rather than one node per line.
+func TestUseCaseMultiLineConstructs(t *testing.T) {
+	g := ParseUseCaseDiagram(`usecase-beta
+accDescr {
+    A customer signs in.
+    Then they pay.
+}
+json Payload@{
+  "status": "pending",
+  "count": 3
+}:::data
+Reset("` + "`Reset`" + `
+` + "`password`" + `")
+actor User
+User --> Reset`)
+
+	if len(g.Nodes) != 2 {
+		t.Fatalf("expected 2 nodes, got %d: %v", len(g.Nodes), g.NodeOrder)
+	}
+	if _, ok := g.Nodes["Reset"]; !ok {
+		t.Fatalf("multi-line label did not resolve to one node: %v", g.NodeOrder)
+	}
+	if !strings.Contains(g.Nodes["Reset"].Label, labelSep) {
+		t.Errorf("multi-line label lost its break: %q", g.Nodes["Reset"].Label)
+	}
+}
+
+// A line that matches no statement shape is dropped, not promoted to a node.
+func TestUseCaseUnknownLineIsDropped(t *testing.T) {
+	g := ParseUseCaseDiagram("usecase-beta\nactor User\nthis is not a statement, at all!\n")
+	if len(g.Nodes) != 1 {
+		t.Errorf("unknown line fabricated a node: %v", g.NodeOrder)
+	}
+}
+
+// Metadata-only statements attach to something that already exists; they never
+// declare one.
+func TestUseCaseMetadataOnlyStatements(t *testing.T) {
+	g := ParseUseCaseDiagram(`usecase-beta
+systemBoundary "Payment service"
+  actor Clerk("Payment clerk")
+  Authorize("Authorize payment")
+end
+Payment_service@{ type: package }
+Clerk starts@--> Authorize
+starts@{ animation: fast }`)
+
+	if _, ok := g.Nodes["Payment_service"]; ok {
+		t.Errorf("boundary metadata created a node: %v", g.NodeOrder)
+	}
+	if _, ok := g.Nodes["starts"]; ok {
+		t.Errorf("edge metadata created a node: %v", g.NodeOrder)
+	}
+	if len(g.Nodes) != 2 {
+		t.Errorf("expected 2 nodes, got %d: %v", len(g.Nodes), g.NodeOrder)
+	}
+}
+
+// A colon inside a quoted label is label text, not a relationship separator.
+func TestUseCaseColonInsideLabel(t *testing.T) {
+	g := ParseUseCaseDiagram("usecase-beta\nactor Customer\nCustomer --> Time(\"Set time: 10:00\")")
+	if _, ok := g.Nodes["Time"]; !ok {
+		t.Fatalf("target lost its identifier: %v", g.NodeOrder)
+	}
+	if got := g.Nodes["Time"].Label; got != "Set time: 10:00" {
+		t.Errorf("label = %q, want the colon kept", got)
+	}
+	if len(g.Edges) != 1 || g.Edges[0].Label != "" {
+		t.Errorf("edges = %+v, want one unlabelled association", g.Edges)
+	}
+}
+
+// A C4 boundary whose brace is on the next line still opens, and its `}` closes
+// it rather than the parent.
+func TestC4BoundaryBraceOnNextLine(t *testing.T) {
+	g := ParseC4Diagram(`C4Context
+Enterprise_Boundary(b0, "Bank") {
+    Boundary(b1, "Inner")
+    {
+      System(s1, "S1")
+    }
+    System(s2, "S2")
+}`)
+
+	if len(g.Subgraphs) != 1 || g.Subgraphs[0].Label != "Bank" {
+		t.Fatalf("top-level boundaries = %+v", g.Subgraphs)
+	}
+	bank := g.Subgraphs[0]
+	if len(bank.Children) != 1 || bank.Children[0].Label != "Inner" {
+		t.Fatalf("Inner boundary missing: %+v", bank.Children)
+	}
+	if !slices.Contains(bank.Children[0].NodeIDs, "s1") {
+		t.Errorf("s1 = %v, want inside Inner", bank.Children[0].NodeIDs)
+	}
+	if !slices.Contains(bank.NodeIDs, "s2") {
+		t.Errorf("s2 = %v, want inside Bank", bank.NodeIDs)
+	}
+}
+
+// An accDescr block's closing brace must not pop an open boundary.
+func TestC4AccDescrBlockSkipped(t *testing.T) {
+	g := ParseC4Diagram(`C4Context
+accDescr {
+    A bank and its systems.
+}
+Enterprise_Boundary(b0, "Bank") {
+    System(s1, "S1")
+    accDescr {
+        Nested prose.
+    }
+    System(s2, "S2")
+}`)
+
+	if len(g.Subgraphs) != 1 {
+		t.Fatalf("boundaries = %+v", g.Subgraphs)
+	}
+	if got := g.Subgraphs[0].NodeIDs; !slices.Equal(got, []string{"s1", "s2"}) {
+		t.Errorf("Bank holds %v, want both systems", got)
+	}
+	if len(g.Nodes) != 2 {
+		t.Errorf("accDescr prose became nodes: %v", g.NodeOrder)
+	}
+}
+
+// The requirement lexer skips whitespace, so the arrow's spacing is free.
+func TestRequirementRelationWhitespace(t *testing.T) {
+	g := ParseRequirementDiagram(`requirementDiagram
+requirement a {
+id: 1
+}
+element b {
+type: sim
+}
+element c {
+type: sim
+}
+a - satisfies ->b
+b- derives -> c
+c   -   verifies   ->   a`)
+
+	if len(g.Edges) != 3 {
+		t.Fatalf("expected 3 edges, got %d: %+v", len(g.Edges), g.Edges)
+	}
+	want := []struct{ source, target, label string }{
+		{"a", "b", "satisfies"},
+		{"b", "c", "derives"},
+		{"c", "a", "verifies"},
+	}
+	for i, w := range want {
+		e := g.Edges[i]
+		if e.Source != w.source || e.Target != w.target || e.Label != w.label {
+			t.Errorf("edge %d = %s -> %s %q, want %s -> %s %q", i, e.Source, e.Target, e.Label, w.source, w.target, w.label)
+		}
 	}
 }

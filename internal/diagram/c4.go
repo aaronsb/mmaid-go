@@ -18,6 +18,13 @@ import (
 // C4's own layout is statement-order driven and its direction hints
 // (Rel_U/D/L/R) address a placement model this engine does not have. They are
 // read only to pick between a left-to-right and a top-to-bottom graph.
+//
+// Skipped: `title`, `accTitle` and `accDescr` — the graph model carries no
+// title; `UpdateElementStyle`, `UpdateRelStyle`, `UpdateLayoutConfig` and the
+// `Lay_*` macros; `$sprite`, `$tags` and `$link` arguments; `RelIndex`'s index,
+// since sequence follows statement order; the `?descr` argument of `Rel` and of
+// `Deployment_Node`, which have no room beside the label the engine draws;
+// `AddElementTag`/`AddRelTag` and the legend they feed.
 
 var (
 	reC4Header = regexp.MustCompile(`(?i)^C4(Context|Container|Component|Dynamic|Deployment)\b`)
@@ -25,7 +32,8 @@ var (
 	reC4Open   = regexp.MustCompile(`^\{\s*$`)
 	reC4Close  = regexp.MustCompile(`^\}\s*$`)
 	reC4Named  = regexp.MustCompile(`^\$(\w+)\s*=\s*(.*)$`)
-	reC4Title  = regexp.MustCompile(`(?i)^title\s+(.*)$`)
+	reC4Title  = regexp.MustCompile(`(?i)^(title|accTitle|accDescr)\b`)
+	reC4Block  = regexp.MustCompile(`^accDescr\s*\{`)
 )
 
 // c4Kind describes how one element macro maps onto a graph node.
@@ -65,12 +73,19 @@ var c4Boundaries = map[string]int{
 	"deployment_node":     2,
 }
 
+// c4Pending is a boundary macro waiting for the `{` on the next line.
+type c4Pending struct {
+	args    c4Args
+	typeArg int
+}
+
 // c4Parser accumulates the graph while walking the boundary stack.
 type c4Parser struct {
-	g     *graph.Graph
-	stack []*graph.Subgraph
-	relLR bool // a Rel_L/Rel_R was seen
-	relTB bool // a Rel_U/Rel_D was seen
+	g       *graph.Graph
+	stack   []*graph.Subgraph
+	pending *c4Pending
+	relLR   bool // a Rel_L/Rel_R was seen
+	relTB   bool // a Rel_U/Rel_D was seen
 }
 
 // ParseC4Diagram parses any of the five C4 diagram types into a *graph.Graph
@@ -80,23 +95,47 @@ func ParseC4Diagram(text string) *graph.Graph {
 	p.g.Direction = graph.DirTB
 
 	explicit := false
-	for _, raw := range strings.Split(text, "\n") {
-		trimmed := strings.TrimSpace(stripLineComment(raw))
-		if trimmed == "" || reC4Header.MatchString(trimmed) || reC4Title.MatchString(trimmed) {
+	lines := strings.Split(text, "\n")
+	for i := 0; i < len(lines); i++ {
+		trimmed := strings.TrimSpace(stripLineComment(lines[i]))
+		if trimmed == "" || reC4Header.MatchString(trimmed) {
+			continue
+		}
+		// `accDescr { ... }` shares the boundary's brace shape, so its closing
+		// brace would otherwise pop whichever boundary is open. This runs ahead
+		// of the single-line `accDescr:` form the title check absorbs.
+		if reC4Block.MatchString(trimmed) {
+			i = skipBraceBlock(lines, i, trimmed)
+			p.pending = nil
+			continue
+		}
+		if reC4Title.MatchString(trimmed) {
+			p.pending = nil
 			continue
 		}
 		if m := reDirectionStmt.FindStringSubmatch(trimmed); m != nil {
 			p.g.Direction = normalizeDirection(m[1])
 			explicit = true
+			p.pending = nil
+			continue
+		}
+		// `Boundary(b1, "Inner")` followed by a bare `{` on the next line is a
+		// grammatical form of its own, so a boundary macro without a brace is
+		// held until the next line decides.
+		if reC4Open.MatchString(trimmed) {
+			if p.pending != nil {
+				p.openBoundary(p.pending.args, p.pending.typeArg)
+				p.pending = nil
+			}
 			continue
 		}
 		if reC4Close.MatchString(trimmed) {
+			p.pending = nil
 			p.closeBoundary()
 			continue
 		}
-		if reC4Open.MatchString(trimmed) {
-			continue
-		}
+		// A boundary macro whose brace never arrives declares nothing.
+		p.pending = nil
 		if m := reC4Macro.FindStringSubmatch(trimmed); m != nil {
 			p.macro(strings.ToLower(m[1]), parseC4Args(m[2]), m[3] == "{")
 		}
@@ -178,8 +217,12 @@ func (p *c4Parser) macro(name string, args c4Args, opensBlock bool) {
 		return
 	}
 
-	if typeArg, ok := c4Boundaries[name]; ok && opensBlock {
-		p.openBoundary(args, typeArg)
+	if typeArg, ok := c4Boundaries[name]; ok {
+		if opensBlock {
+			p.openBoundary(args, typeArg)
+		} else {
+			p.pending = &c4Pending{args: args, typeArg: typeArg}
+		}
 		return
 	}
 
