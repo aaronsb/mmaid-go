@@ -4,7 +4,7 @@ import "testing"
 
 func TestFindPathStraightLine(t *testing.T) {
 	isFree := func(col, row int) bool { return true }
-	path := FindPath(0, 5, 9, 5, isFree, nil)
+	path, _ := FindPath(0, 5, 9, 5, isFree, nil)
 	if len(path) == 0 {
 		t.Fatal("expected a path, got empty")
 	}
@@ -28,7 +28,7 @@ func TestFindPathAroundObstacle(t *testing.T) {
 		return !blocked[Point{col, row}]
 	}
 
-	path := FindPath(0, 5, 9, 5, isFree, nil)
+	path, _ := FindPath(0, 5, 9, 5, isFree, nil)
 	if len(path) == 0 {
 		t.Fatal("expected a path around obstacle, got empty")
 	}

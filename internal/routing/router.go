@@ -7,65 +7,353 @@ import (
 	"github.com/aaronsb/mmaid-go/internal/layout"
 )
 
-// AttachDir represents which side of a node an edge attaches to.
-type AttachDir int
+// AttachDir is the side of a node an edge attaches to.
+type AttachDir = layout.Side
 
 const (
-	AttachTop AttachDir = iota
-	AttachBottom
-	AttachLeft
-	AttachRight
+	AttachTop    = layout.Top
+	AttachBottom = layout.Bottom
+	AttachLeft   = layout.Left
+	AttachRight  = layout.Right
 )
 
-// RoutedEdge is an edge with its computed path in grid and drawing coordinates.
+// Ellipsis is what a label shrinks to after its first word when the whole
+// label does not fit.
+const Ellipsis = "…"
+
+// RoutedEdge is an edge with its computed path in grid and drawing
+// coordinates and the placement of its label.
 type RoutedEdge struct {
-	Edge          graph.Edge
-	GridPath      []Point
-	DrawPath      []Point
-	StartDir      AttachDir
-	EndDir        AttachDir
-	Label         string
+	Edge     graph.Edge
+	GridPath []Point
+	DrawPath []Point
+	StartDir AttachDir
+	EndDir   AttachDir
+	// StartPort and EndPort are the ends' offsets along their sides, in
+	// draw cells from the side's centre.
+	StartPort int
+	EndPort   int
+	Label     string
+	// LabelText is what the renderer draws at (LabelRow, LabelCol): the
+	// label, its first word with an ellipsis, or "" when nothing fit.
+	LabelText     string
+	LabelRow      int
+	LabelCol      int
 	Index         int
 	OccupiedCells map[Point]bool
 }
 
-// RouteEdges routes all edges in the graph using the computed layout.
-func RouteEdges(g *graph.Graph, l *layout.GridLayout) []RoutedEdge {
-	direction := g.Direction.Normalized()
-	var routed []RoutedEdge
-	softObstacles := make(map[Point]bool)
+// edgeEnds is what routing resolved for one edge of the graph.
+type edgeEnds struct {
+	src, tgt *layout.NodePlacement
+	self     bool
+	sides    [2]AttachDir
+	ports    [2]int
+}
 
-	// Build subgraph bounds lookup
+// RouteEdges routes all edges in the graph using the computed layout. Labels
+// shrink to their first word and Ellipsis when they do not fit.
+func RouteEdges(g *graph.Graph, l *layout.GridLayout) []RoutedEdge {
+	return RouteEdgesWith(g, l, Ellipsis)
+}
+
+// RouteEdgesWith is RouteEdges with the ellipsis a shrunk label ends in.
+//
+// Routing takes two passes over the edges. The first chooses each edge's
+// sides on the bare grid; ports are then assigned per side. The second
+// routes each edge through its chosen sides, places its label, and reserves
+// the label's cells against the edges after it.
+func RouteEdgesWith(g *graph.Graph, l *layout.GridLayout, ellipsis string) []RoutedEdge {
+	direction := g.Direction.Normalized()
+	l.Reserved = nil
+
 	sgBounds := make(map[string]*layout.SubgraphBounds, len(l.SubgraphBounds))
 	for i := range l.SubgraphBounds {
 		sb := &l.SubgraphBounds[i]
 		sgBounds[sb.Subgraph.ID] = sb
 	}
+	border := subgraphBorderCells(l)
 
+	ends := make([]*edgeEnds, len(g.Edges))
 	for i, edge := range g.Edges {
 		src := resolvePlacement(edge.Source, edge.SourceIsSubgraph, l, sgBounds)
 		tgt := resolvePlacement(edge.Target, edge.TargetIsSubgraph, l, sgBounds)
-
 		if src == nil || tgt == nil {
 			continue
 		}
+		ends[i] = &edgeEnds{src: src, tgt: tgt, self: edge.IsSelfReference() && !edge.SourceIsSubgraph}
+	}
 
-		if edge.IsSelfReference() && !edge.SourceIsSubgraph {
-			re := routeSelfEdge(edge, src, l, direction)
-			re.Index = i
-			routed = append(routed, re)
+	// Pass 1: sides.
+	soft := make(map[Point]Axis)
+	free := func(c, r int) bool { return l.IsFree(c, r, nil) }
+	for _, e := range ends {
+		if e == nil {
 			continue
 		}
-
-		re := routeEdge(edge, src, tgt, l, direction, softObstacles)
-		re.Index = i
-		for p := range re.OccupiedCells {
-			softObstacles[p] = true
+		if e.self {
+			e.sides = [2]AttachDir{AttachTop, AttachRight}
+			Occupy(soft, selfPath(e.src))
+			continue
 		}
+		path, sides := choosePath(e.src, e.tgt, direction, free, &Obstacles{Soft: soft, Border: border})
+		e.sides = sides
+		Occupy(soft, path)
+	}
+
+	// Ports.
+	var reqs []layout.PortRequest
+	var reqEnd []*edgeEnds
+	var reqWhich []int
+	for i, edge := range g.Edges {
+		e := ends[i]
+		if e == nil {
+			continue
+		}
+		if !edge.SourceIsSubgraph {
+			reqs = append(reqs, layout.PortRequest{Node: e.src.NodeID, Side: e.sides[0], Other: centreAlong(e.tgt, e.sides[0])})
+			reqEnd, reqWhich = append(reqEnd, e), append(reqWhich, 0)
+		}
+		if !edge.TargetIsSubgraph {
+			reqs = append(reqs, layout.PortRequest{Node: e.tgt.NodeID, Side: e.sides[1], Other: centreAlong(e.src, e.sides[1])})
+			reqEnd, reqWhich = append(reqEnd, e), append(reqWhich, 1)
+		}
+	}
+	for i, port := range l.AssignPorts(reqs) {
+		reqEnd[i].ports[reqWhich[i]] = port
+	}
+
+	// Pass 2: paths, draw paths, labels.
+	soft = make(map[Point]Axis)
+	space := newLabelSpace(g, l)
+	var routed []RoutedEdge
+	for i, edge := range g.Edges {
+		e := ends[i]
+		if e == nil {
+			continue
+		}
+		var path []Point
+		if e.self {
+			path = selfPath(e.src)
+		} else {
+			path = routeThrough(e, l, direction, &Obstacles{Soft: soft, Border: border})
+		}
+		Occupy(soft, path)
+
+		re := RoutedEdge{
+			Edge:          edge,
+			GridPath:      SimplifyPath(path),
+			DrawPath:      drawPath(l, path, e.sides, e.ports),
+			StartDir:      e.sides[0],
+			EndDir:        e.sides[1],
+			StartPort:     e.ports[0],
+			EndPort:       e.ports[1],
+			Label:         edge.Label,
+			Index:         i,
+			OccupiedCells: make(map[Point]bool, len(path)),
+		}
+		for _, p := range path {
+			re.OccupiedCells[p] = true
+		}
+		space.addLines(re.DrawPath)
+		space.place(&re, ellipsis)
 		routed = append(routed, re)
 	}
 
 	return routed
+}
+
+// centreAlong returns a placement's centre along the axis a side runs
+// along, in draw cells.
+func centreAlong(p *layout.NodePlacement, side AttachDir) int {
+	if side.Vertical() {
+		return p.DrawY + p.DrawHeight/2
+	}
+	return p.DrawX + p.DrawWidth/2
+}
+
+// choosePath routes an edge through its preferred and alternative side
+// pairs and returns the cheaper path with the pair it used. With no path
+// either way it returns a direct line through the preferred pair.
+func choosePath(
+	src, tgt *layout.NodePlacement,
+	direction graph.Direction,
+	free func(c, r int) bool,
+	obs *Obstacles,
+) ([]Point, [2]AttachDir) {
+	pref, alt := layout.PreferredSides(src.Grid, tgt.Grid, direction)
+	pathPref, costPref := findBetween(src, tgt, pref, free, obs)
+	pathAlt, costAlt := findBetween(src, tgt, alt, free, obs)
+
+	switch {
+	case pathPref != nil && (pathAlt == nil || costPref <= costAlt):
+		return pathPref, pref
+	case pathAlt != nil:
+		return pathAlt, alt
+	default:
+		return []Point{attachPoint(src, pref[0]), attachPoint(tgt, pref[1])}, pref
+	}
+}
+
+// routeThrough routes an edge through the sides pass 1 chose, with the
+// labels placed so far as hard obstacles. If those sides no longer connect
+// it tries the other pair, and if no label-free path exists it routes
+// through the labels rather than draw a direct line.
+func routeThrough(e *edgeEnds, l *layout.GridLayout, direction graph.Direction, obs *Obstacles) []Point {
+	free := func(c, r int) bool { return l.IsFree(c, r, nil) }
+	if path, _ := findBetween(e.src, e.tgt, e.sides, free, obs); path != nil {
+		return path
+	}
+	pref, alt := layout.PreferredSides(e.src.Grid, e.tgt.Grid, direction)
+	other := alt
+	if e.sides == alt {
+		other = pref
+	}
+	if path, _ := findBetween(e.src, e.tgt, other, free, obs); path != nil {
+		e.sides = other
+		e.ports = [2]int{}
+		return path
+	}
+	ignoreLabels := func(c, r int) bool {
+		_, node := l.GridOccupied[layout.GridCoord{Col: c, Row: r}]
+		return c >= 0 && r >= 0 && !node
+	}
+	if path, _ := findBetween(e.src, e.tgt, e.sides, ignoreLabels, obs); path != nil {
+		return path
+	}
+	return []Point{attachPoint(e.src, e.sides[0]), attachPoint(e.tgt, e.sides[1])}
+}
+
+func findBetween(src, tgt *layout.NodePlacement, sides [2]AttachDir, free func(c, r int) bool, obs *Obstacles) ([]Point, float64) {
+	s := attachPoint(src, sides[0])
+	t := attachPoint(tgt, sides[1])
+	return FindPath(s.Col, s.Row, t.Col, t.Row, free, obs)
+}
+
+// attachPoint returns the grid cell on a node's border an edge attaches to.
+func attachPoint(p *layout.NodePlacement, side AttachDir) Point {
+	gc := side.AttachCell(p.Grid)
+	return Point{gc.Col, gc.Row}
+}
+
+// selfPath is the grid loop a self-referencing edge draws: out of the top,
+// over to the right, and back into the right side.
+func selfPath(src *layout.NodePlacement) []Point {
+	gc := src.Grid
+	return []Point{
+		{gc.Col, gc.Row - 1},
+		{gc.Col, gc.Row - 2},
+		{gc.Col + 2, gc.Row - 2},
+		{gc.Col + 2, gc.Row},
+		{gc.Col + 1, gc.Row},
+	}
+}
+
+// drawPath converts a grid path to draw coordinates. Each end sits at its
+// port on the node border; the first and last runs carry the port's offset
+// to their first turn, and a path with no turn jogs between its two ports
+// on the centre line of its first gap cell.
+func drawPath(l *layout.GridLayout, path []Point, sides [2]AttachDir, ports [2]int) []Point {
+	simp := SimplifyPath(path)
+	pts := make([]Point, len(simp))
+	for i, p := range simp {
+		x, y := l.GridToDrawCenter(p.Col, p.Row)
+		pts[i] = Point{x, y}
+	}
+	if len(pts) < 2 {
+		return pts
+	}
+	m := len(pts) - 1
+	shift(&pts[0], sides[0], ports[0])
+	shift(&pts[m], sides[1], ports[1])
+
+	if m == 1 {
+		var corr Point
+		if len(path) >= 3 {
+			x, y := l.GridToDrawCenter(path[1].Col, path[1].Row)
+			corr = Point{x, y}
+		} else {
+			corr = Point{(pts[0].Col + pts[1].Col) / 2, (pts[0].Row + pts[1].Row) / 2}
+		}
+		var j1, j2 Point
+		if path[1].Row == path[0].Row {
+			j1, j2 = Point{corr.Col, pts[0].Row}, Point{corr.Col, pts[1].Row}
+		} else {
+			j1, j2 = Point{pts[0].Col, corr.Row}, Point{pts[1].Col, corr.Row}
+		}
+		pts = []Point{pts[0], j1, j2, pts[1]}
+	} else {
+		if simp[1].Row == simp[0].Row {
+			pts[1].Row = pts[0].Row
+		} else {
+			pts[1].Col = pts[0].Col
+		}
+		if simp[m].Row == simp[m-1].Row {
+			pts[m-1].Row = pts[m].Row
+		} else {
+			pts[m-1].Col = pts[m].Col
+		}
+	}
+	return straighten(pts)
+}
+
+// straighten drops repeated points and points inside a straight run. Unlike
+// SimplifyPath it compares directions, since draw runs step by more than
+// one cell.
+func straighten(pts []Point) []Point {
+	var out []Point
+	for _, p := range pts {
+		n := len(out)
+		if n > 0 && p == out[n-1] {
+			continue
+		}
+		if n > 1 {
+			a, b := out[n-2], out[n-1]
+			if sign(b.Col-a.Col) == sign(p.Col-b.Col) && sign(b.Row-a.Row) == sign(p.Row-b.Row) {
+				out[n-1] = p
+				continue
+			}
+		}
+		out = append(out, p)
+	}
+	return out
+}
+
+// shift moves a draw point along its side by a port offset.
+func shift(p *Point, side AttachDir, port int) {
+	if side.Vertical() {
+		p.Row += port
+	} else {
+		p.Col += port
+	}
+}
+
+// subgraphBorderCells returns the grid cells a subgraph border runs
+// through.
+func subgraphBorderCells(l *layout.GridLayout) map[Point]bool {
+	if len(l.SubgraphBounds) == 0 {
+		return nil
+	}
+	cells := make(map[Point]bool)
+	mark := func(x, y int) {
+		c, r := l.DrawToGrid(x, y)
+		cells[Point{c, r}] = true
+	}
+	for _, sb := range l.SubgraphBounds {
+		if sb.Width <= 0 || sb.Height <= 0 {
+			continue
+		}
+		x1, y1 := sb.X+sb.Width-1, sb.Y+sb.Height-1
+		for x := sb.X; x <= x1; x++ {
+			mark(x, sb.Y)
+			mark(x, y1)
+		}
+		for y := sb.Y; y <= y1; y++ {
+			mark(sb.X, y)
+			mark(x1, y)
+		}
+	}
+	return cells
 }
 
 // resolvePlacement resolves a node or subgraph ID to a NodePlacement.
@@ -116,202 +404,5 @@ func resolvePlacement(
 		DrawY:      sb.Y,
 		DrawWidth:  sb.Width,
 		DrawHeight: sb.Height,
-	}
-}
-
-// getAttachPoint returns the grid coordinate of an attachment point on a node.
-func getAttachPoint(placement *layout.NodePlacement, dir AttachDir) Point {
-	gc := placement.Grid
-	switch dir {
-	case AttachTop:
-		return Point{gc.Col, gc.Row - 1}
-	case AttachBottom:
-		return Point{gc.Col, gc.Row + 1}
-	case AttachLeft:
-		return Point{gc.Col - 1, gc.Row}
-	case AttachRight:
-		return Point{gc.Col + 1, gc.Row}
-	}
-	return Point{gc.Col, gc.Row}
-}
-
-// dirPair is a pair of attachment directions (start, end).
-type dirPair struct {
-	start AttachDir
-	end   AttachDir
-}
-
-// determineDirections returns preferred and alternative start/end attachment
-// directions based on relative position and flow direction.
-func determineDirections(
-	src, tgt *layout.NodePlacement,
-	direction graph.Direction,
-) (preferred, alt dirPair) {
-	sc, sr := src.Grid.Col, src.Grid.Row
-	tc, tr := tgt.Grid.Col, tgt.Grid.Row
-
-	if direction.IsHorizontal() {
-		// Primary flow is left-to-right
-		if tc > sc {
-			preferred = dirPair{AttachRight, AttachLeft}
-		} else if tc < sc {
-			// Back-edge: exit BOTTOM to separate from other back-edges entering TOP
-			preferred = dirPair{AttachBottom, AttachBottom}
-			return preferred, dirPair{AttachBottom, AttachTop}
-		} else {
-			if tr > sr {
-				preferred = dirPair{AttachBottom, AttachTop}
-			} else {
-				preferred = dirPair{AttachTop, AttachBottom}
-			}
-		}
-
-		// Alternative uses vertical
-		if tr > sr {
-			alt = dirPair{AttachBottom, AttachTop}
-		} else if tr < sr {
-			alt = dirPair{AttachTop, AttachBottom}
-		} else {
-			alt = preferred
-		}
-	} else {
-		// Primary flow is top-to-bottom
-		if tr > sr {
-			preferred = dirPair{AttachBottom, AttachTop}
-		} else if tr < sr {
-			// Back-edge: exit RIGHT to separate from other back-edges entering LEFT
-			preferred = dirPair{AttachRight, AttachRight}
-			return preferred, dirPair{AttachRight, AttachLeft}
-		} else {
-			if tc > sc {
-				preferred = dirPair{AttachRight, AttachLeft}
-			} else {
-				preferred = dirPair{AttachLeft, AttachRight}
-			}
-		}
-
-		// Alternative uses horizontal
-		if tc > sc {
-			alt = dirPair{AttachRight, AttachLeft}
-		} else if tc < sc {
-			alt = dirPair{AttachLeft, AttachRight}
-		} else {
-			alt = preferred
-		}
-	}
-
-	return preferred, alt
-}
-
-// routeEdge routes a single edge between two nodes.
-func routeEdge(
-	edge graph.Edge,
-	src, tgt *layout.NodePlacement,
-	l *layout.GridLayout,
-	direction graph.Direction,
-	softObstacles map[Point]bool,
-) RoutedEdge {
-	preferred, alt := determineDirections(src, tgt, direction)
-
-	// Try preferred path
-	startPref := getAttachPoint(src, preferred.start)
-	endPref := getAttachPoint(tgt, preferred.end)
-
-	isFree := func(c, r int) bool {
-		return l.IsFree(c, r, nil)
-	}
-
-	pathPref := FindPath(startPref.Col, startPref.Row, endPref.Col, endPref.Row, isFree, softObstacles)
-
-	// Try alternative path
-	startAlt := getAttachPoint(src, alt.start)
-	endAlt := getAttachPoint(tgt, alt.end)
-
-	pathAlt := FindPath(startAlt.Col, startAlt.Row, endAlt.Col, endAlt.Row, isFree, softObstacles)
-
-	// Pick shorter path
-	var path []Point
-	var startDir, endDir AttachDir
-
-	if pathPref != nil && pathAlt != nil {
-		if len(pathPref) <= len(pathAlt) {
-			path, startDir, endDir = pathPref, preferred.start, preferred.end
-		} else {
-			path, startDir, endDir = pathAlt, alt.start, alt.end
-		}
-	} else if pathPref != nil {
-		path, startDir, endDir = pathPref, preferred.start, preferred.end
-	} else if pathAlt != nil {
-		path, startDir, endDir = pathAlt, alt.start, alt.end
-	} else {
-		// Fallback: direct line
-		path = []Point{startPref, endPref}
-		startDir, endDir = preferred.start, preferred.end
-	}
-
-	simplified := SimplifyPath(path)
-
-	// Convert to drawing coordinates (center of each cell)
-	drawPath := make([]Point, len(simplified))
-	for i, p := range simplified {
-		dx, dy := l.GridToDrawCenter(p.Col, p.Row)
-		drawPath[i] = Point{dx, dy}
-	}
-
-	// Track occupied cells
-	occupied := make(map[Point]bool, len(path))
-	for _, p := range path {
-		occupied[p] = true
-	}
-
-	return RoutedEdge{
-		Edge:          edge,
-		GridPath:      simplified,
-		DrawPath:      drawPath,
-		StartDir:      startDir,
-		EndDir:        endDir,
-		Label:         edge.Label,
-		OccupiedCells: occupied,
-	}
-}
-
-// routeSelfEdge routes a self-referencing edge (A --> A).
-// The loop goes out from the top, right, and back.
-func routeSelfEdge(
-	edge graph.Edge,
-	src *layout.NodePlacement,
-	l *layout.GridLayout,
-	direction graph.Direction,
-) RoutedEdge {
-	gc := src.Grid
-
-	// Loop: top -> above-right -> right -> back to right border
-	path := []Point{
-		{gc.Col, gc.Row - 1},     // top border of node
-		{gc.Col, gc.Row - 2},     // one cell above
-		{gc.Col + 2, gc.Row - 2}, // above and to the right
-		{gc.Col + 2, gc.Row},     // right and level with center
-		{gc.Col + 1, gc.Row},     // right border of node
-	}
-
-	drawPath := make([]Point, len(path))
-	for i, p := range path {
-		dx, dy := l.GridToDrawCenter(p.Col, p.Row)
-		drawPath[i] = Point{dx, dy}
-	}
-
-	occupied := make(map[Point]bool, len(path))
-	for _, p := range path {
-		occupied[p] = true
-	}
-
-	return RoutedEdge{
-		Edge:          edge,
-		GridPath:      path,
-		DrawPath:      drawPath,
-		StartDir:      AttachTop,
-		EndDir:        AttachRight,
-		Label:         edge.Label,
-		OccupiedCells: occupied,
 	}
 }

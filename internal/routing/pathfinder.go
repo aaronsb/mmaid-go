@@ -58,17 +58,85 @@ func (h *nodeHeap) Pop() interface{} {
 
 const defaultMaxIterations = 5000
 
-// FindPath finds a path from (startCol, startRow) to (endCol, endRow) using A*.
+// Step costs. A cell an earlier edge runs through along the same axis is a
+// shared corridor; crossing it perpendicular is cheaper; a corner is
+// cheaper still. Entering a cell on a subgraph border pays for the border.
+const (
+	CostStep     = 1.0
+	CostShared   = 6.0
+	CostCrossing = 3.0
+	CostBorder   = 4.0
+	CostCorner   = 0.5
+)
+
+// Axis is a set of the orientations an edge runs through a cell along.
+type Axis uint8
+
+const (
+	AxisH Axis = 1 << iota
+	AxisV
+)
+
+// axisOf returns the axis of a unit step.
+func axisOf(d Point) Axis {
+	if d.Row == 0 {
+		return AxisH
+	}
+	return AxisV
+}
+
+// Obstacles is what earlier edges and the layout put in the way of a path.
+// Soft maps a cell to the axes earlier edges run through it along; Border
+// marks cells on a subgraph border. Either map may be nil.
+type Obstacles struct {
+	Soft   map[Point]Axis
+	Border map[Point]bool
+}
+
+// stepCost is the cost of entering cell p along axis a; waived skips the
+// charge for earlier edges through p.
+func (o *Obstacles) stepCost(p Point, a Axis, waived bool) float64 {
+	cost := CostStep
+	if o == nil {
+		return cost
+	}
+	if occ := o.Soft[p]; occ != 0 && !waived {
+		if occ&a != 0 {
+			cost += CostShared
+		} else {
+			cost += CostCrossing
+		}
+	}
+	if o.Border[p] {
+		cost += CostBorder
+	}
+	return cost
+}
+
+// FindPath finds a path from (startCol, startRow) to (endCol, endRow) using
+// A* and returns it with its cost.
 //
-// isFree reports whether a grid cell is unoccupied by any node.
-// softObstacles marks cells occupied by previously-routed edges (cost +2).
-// Returns the path as a slice of Points, or nil if no path is found.
-func FindPath(startCol, startRow, endCol, endRow int, isFree func(col, row int) bool, softObstacles map[Point]bool) []Point {
+// isFree reports whether a grid cell is open to a path; the start and end
+// cells are allowed regardless. The cells next to the start and end are
+// where a node side's ports fan out, so earlier edges through them cost
+// nothing: the first step out of the start, the step into the end, and the
+// step into any free neighbour of the end. Returns nil when no path exists.
+func FindPath(startCol, startRow, endCol, endRow int, isFree func(col, row int) bool, obs *Obstacles) ([]Point, float64) {
 	if startCol == endCol && startRow == endRow {
-		return []Point{{startCol, startRow}}
+		return []Point{{startCol, startRow}}, 0
 	}
 
-	soft := softObstacles // may be nil
+	start := Point{startCol, startRow}
+	end := Point{endCol, endRow}
+	endApron := make(map[Point]bool, 4)
+	for _, d := range dirs {
+		if p := (Point{endCol + d.Col, endRow + d.Row}); isFree(p.Col, p.Row) {
+			endApron[p] = true
+		}
+	}
+	waived := func(from, to Point) bool {
+		return to == end || endApron[to] || from == start
+	}
 
 	startNode := &aStarNode{
 		fCost: heuristic(startCol, startRow, endCol, endRow),
@@ -90,7 +158,7 @@ func FindPath(startCol, startRow, endCol, endRow int, isFree func(col, row int) 
 		current := heap.Pop(openSet).(*aStarNode)
 
 		if current.col == endCol && current.row == endRow {
-			return reconstruct(current)
+			return reconstruct(current), current.gCost
 		}
 
 		key := Point{current.col, current.row}
@@ -113,18 +181,14 @@ func FindPath(startCol, startRow, endCol, endRow int, isFree func(col, row int) 
 				continue
 			}
 
-			// Base cost + soft obstacle penalty
-			stepCost := 1.0
-			if soft != nil && soft[nkey] {
-				stepCost += 2.0
-			}
+			stepCost := obs.stepCost(nkey, axisOf(d), waived(key, nkey))
 
 			// Corner penalty: if direction changes from parent's direction
 			if current.parent != nil {
 				prevDC := current.col - current.parent.col
 				prevDR := current.row - current.parent.row
 				if d.Col != prevDC || d.Row != prevDR {
-					stepCost += 0.5 // slight corner penalty in g-cost too
+					stepCost += CostCorner
 				}
 			}
 
@@ -147,7 +211,21 @@ func FindPath(startCol, startRow, endCol, endRow int, isFree func(col, row int) 
 		}
 	}
 
-	return nil // no path found
+	return nil, 0 // no path found
+}
+
+// Occupy records the axes a path runs through each of its cells along: the
+// first cell gets the axis it leaves by, the last the axis it arrives by,
+// and a corner both.
+func Occupy(soft map[Point]Axis, path []Point) {
+	for i, p := range path {
+		if i > 0 {
+			soft[p] |= axisOf(Point{p.Col - path[i-1].Col, p.Row - path[i-1].Row})
+		}
+		if i+1 < len(path) {
+			soft[p] |= axisOf(Point{path[i+1].Col - p.Col, path[i+1].Row - p.Row})
+		}
+	}
 }
 
 // reconstruct walks parent pointers to build the path from start to end.
