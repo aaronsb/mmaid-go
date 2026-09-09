@@ -456,6 +456,24 @@ requirementDiagram
 
 ![requirement](requirement.png)
 
+## sankey
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+sankey-beta
+
+%% source,target,value
+Coal,Electricity,45
+Gas,Electricity,30
+Solar,Electricity,15
+Electricity,Homes,40
+Electricity,Industry,35
+Electricity,"Losses, grid",15
+```
+
+![sankey](sankey.png)
+
 ## sequence
 
 Rendered with `-t blueprint`.
@@ -676,3 +694,28 @@ xychart-beta
 ```
 
 ![xychart](xychart.png)
+
+## zenuml
+
+Rendered with `-t default -w 120`.
+
+```mermaid
+zenuml
+    title Order checkout
+    @Actor Customer
+    Cart
+    @Database Inventory
+    Customer->Cart: add item
+    // reserve stock, then charge
+    receipt = Cart.checkout(token) {
+      Inventory.reserve(sku)
+      if (inStock) {
+        Payments.charge(token)
+        return receipt
+      } else {
+        return backorder
+      }
+    }
+```
+
+![zenuml](zenuml.png)

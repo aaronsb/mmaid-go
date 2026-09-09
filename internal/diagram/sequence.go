@@ -84,6 +84,10 @@ type destroyEvent struct {
 }
 
 type sequenceDiagram struct {
+	// title is drawn above the participants. Mermaid's own sequence parser
+	// has no title statement; ZenUML's does, and both render through this
+	// model.
+	title        string
 	participants []*participant
 	events       []interface{}
 	autonumber   bool
@@ -439,6 +443,7 @@ type layoutResult struct {
 	boxWidths    []int
 	canvasWidth  int
 	canvasHeight int
+	titleRows    int
 	headerHeight int
 	rowOffsets   []int
 }
@@ -617,7 +622,11 @@ func computeLayout(diagram *sequenceDiagram, autonumber bool, flatEvents []inter
 	}
 
 	// Compute row offsets (cumulative event heights)
-	lifelineStart := topMargin + headerHeight
+	titleRows := 0
+	if diagram.title != "" {
+		titleRows = 2
+	}
+	lifelineStart := topMargin + titleRows + headerHeight
 	rowOffsets := make([]int, len(flatEvents))
 	cumulative := lifelineStart + 1
 	for i, h := range eventHeights {
@@ -625,7 +634,7 @@ func computeLayout(diagram *sequenceDiagram, autonumber bool, flatEvents []inter
 		cumulative += h
 	}
 
-	canvasWidth := maxRight
+	canvasWidth := maxInt(maxRight, textwidth.String(diagram.title)+1)
 	canvasHeight := cumulative + bottomMargin
 
 	return &layoutResult{
@@ -633,6 +642,7 @@ func computeLayout(diagram *sequenceDiagram, autonumber bool, flatEvents []inter
 		boxWidths:    boxWidths,
 		canvasWidth:  canvasWidth,
 		canvasHeight: canvasHeight,
+		titleRows:    titleRows,
 		headerHeight: headerHeight,
 		rowOffsets:   rowOffsets,
 	}
@@ -843,7 +853,7 @@ func drawCollections(canvas *renderer.Canvas, cx, y, width int, label string, cs
 }
 
 func drawParticipantHeader(
-	canvas *renderer.Canvas, cx, bw, headerHeight int,
+	canvas *renderer.Canvas, cx, bw, top, headerHeight int,
 	p *participant, cs renderer.CharSet, useASCII bool,
 ) {
 	kind := p.kind
@@ -851,29 +861,29 @@ func drawParticipantHeader(
 
 	switch kind {
 	case "actor":
-		actorY := topMargin + (headerHeight - actorHeight)
+		actorY := top + (headerHeight - actorHeight)
 		drawActor(canvas, cx, actorY, label, useASCII)
 	case "database":
-		dbY := topMargin + (headerHeight - 5)
+		dbY := top + (headerHeight - 5)
 		drawDatabase(canvas, cx, dbY, bw, label, cs)
 	case "queue":
-		qY := topMargin + (headerHeight - 5)
+		qY := top + (headerHeight - 5)
 		drawQueue(canvas, cx, qY, bw, label, cs, useASCII)
 	case "boundary":
-		bY := topMargin + (headerHeight - 5)
+		bY := top + (headerHeight - 5)
 		drawBoundary(canvas, cx, bY, label, cs, useASCII)
 	case "control":
-		cY := topMargin + (headerHeight - 5)
+		cY := top + (headerHeight - 5)
 		drawControl(canvas, cx, cY, label, cs, useASCII)
 	case "entity":
-		eY := topMargin + (headerHeight - 5)
+		eY := top + (headerHeight - 5)
 		drawEntity(canvas, cx, eY, label, cs, useASCII)
 	case "collections":
-		colY := topMargin + (headerHeight - 5)
+		colY := top + (headerHeight - 5)
 		drawCollections(canvas, cx, colY, bw, label, cs, useASCII)
 	default:
 		// Default: participant box
-		boxY := topMargin + (headerHeight - boxHeight)
+		boxY := top + (headerHeight - boxHeight)
 		bx := cx - bw/2
 		renderer.DrawRectangle(canvas, bx, boxY, bw, boxHeight, label, cs, "node")
 	}
@@ -1256,8 +1266,14 @@ func drawSelfMessage(
 
 // RenderSequence parses a Mermaid sequence diagram source and renders it to a Canvas.
 func RenderSequence(source string, cs renderer.CharSet) *renderer.Canvas {
+	return renderSequenceModel(parseSequenceDiagram(source), cs)
+}
+
+// renderSequenceModel lays out and draws a parsed sequence model. Every
+// parser that targets this model — Mermaid's own syntax and ZenUML's — ends
+// here.
+func renderSequenceModel(diagram *sequenceDiagram, cs renderer.CharSet) *renderer.Canvas {
 	useASCII := cs.ASCII
-	diagram := parseSequenceDiagram(source)
 
 	// Flatten events for linear layout
 	flatEvents := flattenEvents(diagram.events, 0)
@@ -1270,14 +1286,19 @@ func RenderSequence(source string, cs renderer.CharSet) *renderer.Canvas {
 	canvas := renderer.NewCanvas(layout.canvasWidth, layout.canvasHeight)
 	canvas.SetCharSet(cs)
 
+	if diagram.title != "" {
+		canvas.PutText(0, 0, diagram.title, "bold_label")
+	}
+
 	// Compute activation ranges
 	activationRanges := computeActivationRanges(flatEvents, layout.rowOffsets)
 
 	// 1. Draw participant headers at top
+	headerTop := topMargin + layout.titleRows
 	for i, p := range diagram.participants {
 		cx := layout.colCenters[i]
 		bw := layout.boxWidths[i]
-		drawParticipantHeader(canvas, cx, bw, layout.headerHeight, p, cs, useASCII)
+		drawParticipantHeader(canvas, cx, bw, headerTop, layout.headerHeight, p, cs, useASCII)
 	}
 
 	// Compute destroyed participants and their destruction rows
@@ -1291,7 +1312,7 @@ func RenderSequence(source string, cs renderer.CharSet) *renderer.Canvas {
 	}
 
 	// 2. Draw lifelines
-	lifelineStart := topMargin + layout.headerHeight
+	lifelineStart := headerTop + layout.headerHeight
 	lifelineEnd := layout.canvasHeight - bottomMargin - 1
 	var lifelineChar, activeChar rune
 	if useASCII {

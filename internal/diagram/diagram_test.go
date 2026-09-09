@@ -1,6 +1,7 @@
 package diagram
 
 import (
+	"fmt"
 	"math"
 	"slices"
 	"strings"
@@ -1620,5 +1621,468 @@ func TestCellPathClipsToItsRectangle(t *testing.T) {
 		if p[0] < 0 || p[0] > 9 || p[1] < 0 || p[1] > 9 {
 			t.Fatalf("cell %v is outside the rectangle", p)
 		}
+	}
+}
+
+// ── Sankey ──────────────────────────────────────────────────────────────────
+
+func TestSankeyRowsAndNodeOrder(t *testing.T) {
+	sd := parseSankey(`sankey-beta
+
+%% source,target,value
+Coal,Electricity,45
+Gas,Electricity,30
+Electricity,Homes,60`)
+
+	if len(sd.links) != 3 {
+		t.Fatalf("links = %d, want 3", len(sd.links))
+	}
+	want := []string{"Coal", "Electricity", "Gas", "Homes"}
+	got := make([]string, len(sd.nodes))
+	for i, n := range sd.nodes {
+		got[i] = n.name
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("nodes = %v, want %v", got, want)
+	}
+	if e := sd.nodes[sd.index["Electricity"]]; e.in != 75 || e.out != 60 || e.value() != 75 {
+		t.Errorf("Electricity in=%v out=%v value=%v, want 75 60 75", e.in, e.out, e.value())
+	}
+}
+
+// A quoted field carries commas, and a pair of quotes inside one is a single
+// quote.
+func TestSankeyQuotedFields(t *testing.T) {
+	sd := parseSankey(`sankey
+Pumped heat,"Heating and cooling, ""homes""",193.026`)
+
+	if len(sd.links) != 1 {
+		t.Fatalf("links = %+v", sd.links)
+	}
+	if got := sd.links[0].target; got != `Heating and cooling, "homes"` {
+		t.Errorf("target = %q", got)
+	}
+	if sd.links[0].value != 193.026 {
+		t.Errorf("value = %v, want 193.026", sd.links[0].value)
+	}
+
+	// Upstream trims the escaped form as well as the plain one, so a quoted
+	// name and a bare one are the same node.
+	sd = parseSankey("sankey\n\"A\" ,B,3\nA,C,3")
+	if len(sd.nodes) != 3 {
+		names := []string{}
+		for _, n := range sd.nodes {
+			names = append(names, n.name)
+		}
+		t.Errorf("nodes = %q, want A, B and C", names)
+	}
+}
+
+// A row is dropped when it does not hold three fields, or when the third one
+// is not a number.
+func TestSankeyMalformedRowsDropped(t *testing.T) {
+	sd := parseSankey("sankey\nA,B\nA,B,C,4\nA,B,many\nA,B,1")
+	if len(sd.links) != 1 {
+		t.Fatalf("links = %+v, want the last row only", sd.links)
+	}
+}
+
+// Depth is the longest path from a source, so a node sits right of every node
+// feeding it.
+func TestSankeyDepthIsLongestPath(t *testing.T) {
+	sd := parseSankey("sankey\nA,B,1\nB,C,1\nA,C,1")
+	sankeyDepths(sd)
+	for name, want := range map[string]int{"A": 0, "B": 1, "C": 2} {
+		if got := sd.nodes[sd.index[name]].depth; got != want {
+			t.Errorf("%s depth = %d, want %d", name, got, want)
+		}
+	}
+}
+
+// A link that closes a cycle is dropped: it is left out of both totals and
+// out of the drawing, and the columns behind it do not spread.
+func TestSankeyCycleLinksAreDropped(t *testing.T) {
+	sd := parseSankey("sankey\nA,B,1\nB,A,1")
+	if len(sd.links) != 2 || sd.links[0].back || !sd.links[1].back {
+		t.Fatalf("links = %+v, want the second marked as the back edge", sd.links)
+	}
+	a, b := sd.nodes[sd.index["A"]], sd.nodes[sd.index["B"]]
+	if a.in != 0 || a.out != 1 || b.in != 1 || b.out != 0 {
+		t.Errorf("totals: A in=%v out=%v, B in=%v out=%v; want the back edge out of both", a.in, a.out, b.in, b.out)
+	}
+	p := sankeyLayout(sd)
+	if len(p.cols) != 2 {
+		t.Errorf("columns = %d, want 2 with none empty", len(p.cols))
+	}
+	for i, col := range p.cols {
+		if len(col) == 0 {
+			t.Errorf("column %d is empty", i)
+		}
+	}
+	assertCanvasNotEmpty(t, RenderSankey("sankey\nA,B,1\nB,A,1", renderer.UNICODE, nil))
+}
+
+// A link from a node to itself closes the shortest cycle there is, so it does
+// not inflate the node's value with rows nothing draws.
+func TestSankeySelfLinkIsDropped(t *testing.T) {
+	sd := parseSankey("sankey\nA,A,3\nA,B,2")
+	if !sd.links[0].back || sd.links[1].back {
+		t.Fatalf("links = %+v, want the self link marked", sd.links)
+	}
+	if a := sd.nodes[sd.index["A"]]; a.value() != 2 {
+		t.Errorf("A value = %v, want 2", a.value())
+	}
+	p := sankeyLayout(sd)
+	if len(p.cols) != 2 {
+		t.Errorf("columns = %d, want 2", len(p.cols))
+	}
+}
+
+func TestSankeyRendersLabelsWithValues(t *testing.T) {
+	c := RenderSankey("sankey-beta\nCoal,Electricity,45\nElectricity,Homes,45", renderer.UNICODE, nil)
+	assertCanvasContains(t, c, "Coal 45")
+	assertCanvasContains(t, c, "Electricity 45")
+	assertCanvasContains(t, c, "Homes 45")
+}
+
+func TestSankeyEmpty(t *testing.T) {
+	c := RenderSankey("sankey-beta", renderer.UNICODE, nil)
+	assertCanvasContains(t, c, "[sankey] no links")
+}
+
+// ── ZenUML ──────────────────────────────────────────────────────────────────
+
+// zenMessages lists the arrows a parsed ZenUML source draws, in order, as
+// "source>target:label" with a leading "~" on a dotted one.
+func zenMessages(t *testing.T, source string) []string {
+	t.Helper()
+	var out []string
+	for _, ev := range flattenEvents(parseZenUML(source).events, 0) {
+		if m, ok := ev.(*message); ok {
+			prefix := ""
+			if m.lineType == "dotted" {
+				prefix = "~"
+			}
+			out = append(out, prefix+m.source+">"+m.target+":"+m.label)
+		}
+	}
+	return out
+}
+
+// A sync call is an arrow, an activation on the callee, the statements of its
+// body, and the reply its `return` asks for.
+func TestZenUMLSyncCallReturnsToItsCaller(t *testing.T) {
+	got := zenMessages(t, `zenuml
+    Client->A.method() {
+      B.method() {
+        return inner
+      }
+      return outer
+    }`)
+	want := []string{
+		"Client>A:method()",
+		"A>B:method()",
+		"~B>A:inner",
+		"~A>Client:outer",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("messages =\n%v\nwant\n%v", got, want)
+	}
+}
+
+// An assignment replies with the variable's name, and only when the body did
+// not reply for itself.
+func TestZenUMLAssignmentReplies(t *testing.T) {
+	got := zenMessages(t, "zenuml\nStarter\nresult = A.get()\nSomeType typed = A.get2()")
+	want := []string{"Starter>A:get()", "~A>Starter:result", "Starter>A:get2()", "~A>Starter:typed"}
+	if !slices.Equal(got, want) {
+		t.Errorf("messages = %v, want %v", got, want)
+	}
+
+	got = zenMessages(t, "zenuml\nStarter\nresult = A.get() {\n  return actual\n}")
+	want = []string{"Starter>A:get()", "~A>Starter:actual"}
+	if !slices.Equal(got, want) {
+		t.Errorf("messages = %v, want %v", got, want)
+	}
+}
+
+// A call raises an activation on its callee and drops it when the body ends.
+func TestZenUMLCallActivatesTheCallee(t *testing.T) {
+	events := flattenEvents(parseZenUML("zenuml\nStarter\nA.method() {\n  B.method()\n}").events, 0)
+	var got []string
+	for _, ev := range events {
+		if a, ok := ev.(*activateEvent); ok {
+			state := "off"
+			if a.active {
+				state = "on"
+			}
+			got = append(got, a.participant+":"+state)
+		}
+	}
+	want := []string{"A:on", "B:on", "B:off", "A:off"}
+	if !slices.Equal(got, want) {
+		t.Errorf("activations = %v, want %v", got, want)
+	}
+}
+
+// The starter is the declared one, else the first statement's sender, else
+// the first declared participant, else a lane of its own.
+func TestZenUMLStarterResolution(t *testing.T) {
+	cases := []struct{ source, want string }{
+		{"zenuml\n@Starter(Bob)\nAlice->John: hi", "Bob"},
+		{"zenuml\nBob\nAlice\nAlice->Bob: Hi Bob", "Alice"},
+		{"zenuml\nBookService\nBookService.getBook()", "BookService"},
+		{"zenuml\nA.method()", "Starter"},
+	}
+	for _, c := range cases {
+		if got := zenStarter(zenLines(c.source)); got != c.want {
+			t.Errorf("starter of %q = %q, want %q", c.source, got, c.want)
+		}
+	}
+}
+
+// An annotator picks the participant's shape and `as` its label.
+func TestZenUMLAnnotatorsAndAliases(t *testing.T) {
+	d := parseZenUML("zenuml\n@Actor Customer\n@Database Inventory\n@Lambda Fn\nA as Alice\nCustomer->A: hi")
+	want := []struct{ id, label, kind string }{
+		{"Customer", "Customer", "actor"},
+		{"Inventory", "Inventory", "database"},
+		{"Fn", "Fn", "participant"},
+		{"A", "Alice", "participant"},
+	}
+	if len(d.participants) != len(want) {
+		t.Fatalf("participants = %+v", d.participants)
+	}
+	for i, w := range want {
+		p := d.participants[i]
+		if p.id != w.id || p.label != w.label || p.kind != w.kind {
+			t.Errorf("participant %d = %q/%q/%q, want %q/%q/%q", i, p.id, p.label, p.kind, w.id, w.label, w.kind)
+		}
+	}
+}
+
+// Each fragment keyword maps to the frame the sequence renderer draws for it.
+func TestZenUMLFragmentsMapToFrames(t *testing.T) {
+	d := parseZenUML(`zenuml
+    Starter
+    if (a) {
+      A.one()
+    } else if (b) {
+      A.two()
+    } else {
+      A.three()
+    }
+    while (more) {
+      A.four()
+    }
+    opt {
+      A.five()
+    }
+    par {
+      A.six()
+    }
+    try {
+      A.seven()
+    } catch (Boom) {
+      A.eight()
+    } finally {
+      A.nine()
+    }`)
+
+	var kinds []string
+	var sections []string
+	for _, ev := range d.events {
+		blk, ok := ev.(*block)
+		if !ok {
+			continue
+		}
+		kinds = append(kinds, blk.kind)
+		for _, s := range blk.sections {
+			sections = append(sections, s.label)
+		}
+	}
+	if want := []string{"alt", "loop", "opt", "par", "critical"}; !slices.Equal(kinds, want) {
+		t.Errorf("frames = %v, want %v", kinds, want)
+	}
+	if want := []string{"b", "else", "Boom", "finally"}; !slices.Equal(sections, want) {
+		t.Errorf("sections = %v, want %v", sections, want)
+	}
+}
+
+// A comment above a message becomes a note over the participant it reaches.
+func TestZenUMLCommentBecomesANote(t *testing.T) {
+	d := parseZenUML("zenuml\nBookService\n// a comment on a message.\n// **Markdown** is supported.\nBookService.getBook()")
+	n, ok := d.events[0].(*note)
+	if !ok {
+		t.Fatalf("first event = %T, want a note", d.events[0])
+	}
+	if n.position != "over" || len(n.participants) != 1 || n.participants[0] != "BookService" {
+		t.Errorf("note = %+v", n)
+	}
+	if want := "a comment on a message.\n**Markdown** is supported."; n.text != want {
+		t.Errorf("note text = %q, want %q", n.text, want)
+	}
+}
+
+// A comment on a participant is not rendered.
+func TestZenUMLCommentOnAParticipantIsDropped(t *testing.T) {
+	d := parseZenUML("zenuml\n// a comment on a participant\nBookService\nA->B: hi")
+	for _, ev := range d.events {
+		if _, ok := ev.(*note); ok {
+			t.Errorf("events = %+v, want no note", d.events)
+		}
+	}
+}
+
+// The @return annotator makes the async message that follows it a reply.
+func TestZenUMLReturnAnnotator(t *testing.T) {
+	got := zenMessages(t, "zenuml\n@return\nA->Client: x11\nA->Client: x12")
+	want := []string{"~A>Client:x11", "A>Client:x12"}
+	if !slices.Equal(got, want) {
+		t.Errorf("messages = %v, want %v", got, want)
+	}
+}
+
+// A title is a sequence-model field, and both syntaxes render through it.
+func TestZenUMLTitle(t *testing.T) {
+	c := RenderZenUML("zenuml\ntitle Demo\nAlice->John: Hello", renderer.UNICODE)
+	assertCanvasContains(t, c, "Demo")
+	assertCanvasContains(t, c, "Hello")
+	if got := parseSequenceDiagram("sequenceDiagram\n  A->>B: x").title; got != "" {
+		t.Errorf("a sequence diagram has title %q, want none", got)
+	}
+}
+
+func TestZenUMLEmpty(t *testing.T) {
+	assertCanvasNotEmpty(t, RenderZenUML("zenuml\nAlice->Bob: hi", renderer.UNICODE))
+}
+
+// assertSankeyBandsFitTheirBars checks the invariant the apportionment
+// exists for: every band leaves and lands inside the bar it meets, and the
+// bands meeting one side of a bar cover it exactly when that side carries the
+// node's whole flow.
+func assertSankeyBandsFitTheirBars(t *testing.T, source string) {
+	t.Helper()
+	sd := parseSankey(source)
+	p := sankeyLayout(sd)
+	fromRows := map[string]int{}
+	intoRows := map[string]int{}
+
+	for _, l := range sd.links {
+		if l.back {
+			continue
+		}
+		s, tn := p.node(l.source), p.node(l.target)
+		if l.sy < s.top || l.sy+l.hs > s.top+s.height {
+			t.Errorf("%s->%s leaves rows %d..%d, outside %s's bar at %d..%d",
+				l.source, l.target, l.sy, l.sy+l.hs-1, l.source, s.top, s.top+s.height-1)
+		}
+		if l.ty < tn.top || l.ty+l.ht > tn.top+tn.height {
+			t.Errorf("%s->%s lands on rows %d..%d, outside %s's bar at %d..%d",
+				l.source, l.target, l.ty, l.ty+l.ht-1, l.target, tn.top, tn.top+tn.height-1)
+		}
+		fromRows[l.source] += l.hs
+		intoRows[l.target] += l.ht
+	}
+	for _, n := range sd.nodes {
+		if n.out == n.value() && fromRows[n.name] != n.height {
+			t.Errorf("bands leaving %s cover %d rows of a %d-row bar", n.name, fromRows[n.name], n.height)
+		}
+		if n.in == n.value() && intoRows[n.name] != n.height {
+			t.Errorf("bands meeting %s cover %d rows of a %d-row bar", n.name, intoRows[n.name], n.height)
+		}
+	}
+}
+
+// Five equal flows into one node round to four rows each and the bar is 18:
+// apportionment spends the bar's rows, it does not hand out more than it has.
+func TestSankeyBandRowsFitTheBarTheyMeet(t *testing.T) {
+	assertSankeyBandsFitTheirBars(t, "sankey-beta\nP,X,0.3\nQ,X,0.3\nR,X,0.3\nS,X,0.3\nT,X,0.3")
+	assertSankeyBandsFitTheirBars(t, "sankey-beta\nCoal,Electricity,45\nGas,Electricity,30\nSolar,Electricity,15\nElectricity,Homes,40\nElectricity,Industry,35\nElectricity,\"Losses, grid\",15")
+
+	// Thirty sources of one unit each, at the width the reviewer used: more
+	// links than the target bar has rows.
+	var b strings.Builder
+	b.WriteString("sankey-beta\n")
+	for i := range 30 {
+		fmt.Fprintf(&b, "S%d,Electricity,1\n", i)
+	}
+	src := b.String()
+	SetWidthOverride(60)
+	defer SetWidthOverride(0)
+	assertSankeyBandsFitTheirBars(t, src)
+	assertCanvasNotEmpty(t, RenderSankey(src, renderer.UNICODE, nil))
+}
+
+// A value is read the way upstream's parseFloat reads one, and a row that is
+// not a finite, non-negative number is dropped.
+func TestSankeyValuesMustBeFiniteAndPositive(t *testing.T) {
+	for _, source := range []string{
+		"sankey\nA,B,NaN\nC,D,1000",
+		"sankey\nA,B,Inf\nC,D,1000",
+		"sankey\nA,B,-5\nC,D,1000",
+		"sankey\nA,B,1_000\nC,D,1000",
+		"sankey\nA,B,0x1p4\nC,D,1000",
+	} {
+		sd := parseSankey(source)
+		if len(sd.links) != 1 || sd.links[0].source != "C" {
+			t.Errorf("%q parsed %+v, want the C,D row only", source, sd.links)
+		}
+	}
+	// A total that overflows to infinity must not set an unbounded scale.
+	c := RenderSankey("sankey\nA,B,1e308\nA,C,1e308", renderer.UNICODE, nil)
+	if c.Height > 4*sankeyMaxRows {
+		t.Errorf("canvas is %d rows for an overflowing total", c.Height)
+	}
+}
+
+// A flow prints in at most six significant digits, and a whole number prints
+// as one.
+func TestSankeyValueFormat(t *testing.T) {
+	cases := map[float64]string{
+		45: "45", 124.729: "124.729", 0.5: "0.5",
+		1000000: "1000000", 1e308: "1e+308", 1.0 / 3.0: "0.333333",
+	}
+	for v, want := range cases {
+		if got := sankeyValue(v); got != want {
+			t.Errorf("sankeyValue(%v) = %q, want %q", v, got, want)
+		}
+	}
+}
+
+// A keyword is a keyword only as upstream's lexer spells it, so a capitalised
+// participant name that starts with one is still a participant.
+func TestZenUMLKeywordsAreCaseSensitive(t *testing.T) {
+	got := zenMessages(t, "zenuml\nClient\nIf.check(x)\nLoop.next()\nReturn.value()")
+	want := []string{"Client>If:check(x)", "Client>Loop:next()", "Client>Return:value()"}
+	if !slices.Equal(got, want) {
+		t.Errorf("messages = %v, want %v", got, want)
+	}
+	d := parseZenUML("zenuml\nClient\nIf.check(x)\nLoop.next()\nReturn.value()")
+	if len(d.events) == 0 {
+		t.Fatal("no events")
+	}
+	for _, ev := range d.events {
+		if blk, ok := ev.(*block); ok {
+			t.Errorf("a capitalised name opened a %q frame", blk.kind)
+		}
+	}
+
+	// `Title` alone is a participant, not an empty title.
+	d = parseZenUML("zenuml\nTitle\nTitle->B: hi")
+	if d.title != "" {
+		t.Errorf("title = %q, want none", d.title)
+	}
+	if len(d.participants) != 2 || d.participants[0].id != "Title" {
+		t.Errorf("participants = %+v, want Title first", d.participants)
+	}
+}
+
+// The reply annotation binds to the line after it and to nothing further.
+func TestZenUMLReturnAnnotatorBindsToTheNextLine(t *testing.T) {
+	got := zenMessages(t, "zenuml\nA\n@return\nB.sync()\nB->A: late")
+	want := []string{"A>B:sync()", "B>A:late"}
+	if !slices.Equal(got, want) {
+		t.Errorf("messages = %v, want the late arrow solid: %v", got, want)
 	}
 }

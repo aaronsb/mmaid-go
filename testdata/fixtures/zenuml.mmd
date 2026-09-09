@@ -1,0 +1,16 @@
+zenuml
+    title Order checkout
+    @Actor Customer
+    Cart
+    @Database Inventory
+    Customer->Cart: add item
+    // reserve stock, then charge
+    receipt = Cart.checkout(token) {
+      Inventory.reserve(sku)
+      if (inStock) {
+        Payments.charge(token)
+        return receipt
+      } else {
+        return backorder
+      }
+    }

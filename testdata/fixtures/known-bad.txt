@@ -14,3 +14,4 @@ quadrant
 sequence
 timeline
 xychart
+zenuml    # dashed lifelines meeting message arms; arms off the bottom edge
