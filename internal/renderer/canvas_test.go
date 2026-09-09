@@ -118,6 +118,14 @@ func TestSegmentEndpointsInwardOnly(t *testing.T) {
 	}
 }
 
+func TestSegmentSingleCell(t *testing.T) {
+	c := NewCanvas(3, 1)
+	c.Segment(0, 1, 0, 1, glyph.Light, false, "")
+	if got := c.Get(0, 1); got != '─' {
+		t.Errorf("single cell = %c, want ─", got)
+	}
+}
+
 func TestSegmentsMakeCorners(t *testing.T) {
 	c := NewCanvas(5, 4)
 	c.Segment(0, 0, 0, 4, glyph.Light, false, "")
@@ -180,7 +188,7 @@ func TestResolveASCII(t *testing.T) {
 	c.Segment(0, 0, 3, 0, glyph.Light, true, "")
 	c.Segment(0, 4, 3, 4, glyph.Light, true, "")
 	c.Segment(0, 2, 3, 2, glyph.Dashed, true, "")
-	want := "+-+-+\n| | |\n| | |\n+-+-+"
+	want := "+-+-+\n| : |\n| : |\n+-+-+"
 	if got := c.ToString(); got != want {
 		t.Errorf("ToString =\n%s\nwant\n%s", got, want)
 	}
@@ -471,6 +479,20 @@ func TestWideRuneContinuationTakesNoArms(t *testing.T) {
 		t.Errorf("continuation arms = %04b, want none", a)
 	}
 	if got := c.ToString(); got != "╶─字─╴" {
+		t.Errorf("ToString = %q", got)
+	}
+}
+
+func TestWideRuneOverArmsZeroesContinuation(t *testing.T) {
+	c := NewCanvas(6, 1)
+	c.Segment(0, 0, 0, 5, glyph.Light, false, "")
+	c.PutText(0, 2, "字", "")
+	if a := c.Arms(0, 3); a != 0 {
+		t.Errorf("continuation arms = %04b, want none", a)
+	}
+	// Overwriting the wide rune clears its continuation, which stays blank.
+	c.Put(0, 2, 'X', "")
+	if got := c.ToString(); got != "╶─X ─╴" {
 		t.Errorf("ToString = %q", got)
 	}
 }

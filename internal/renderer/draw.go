@@ -329,8 +329,8 @@ func drawEdgeEndpoints(canvas *Canvas, re routing.RoutedEdge, g *graph.Graph, l 
 	}
 
 	// The source attach cell: a tee on a box border, a line running into a
-	// state marker.
-	if len(path) >= 2 {
+	// state marker. An arrowhead at the start owns that end instead.
+	if len(path) >= 2 && !edge.HasArrowStart {
 		if isMarker(g.Nodes[edge.Source]) {
 			markerThrough(canvas, path[0], path[1], edge.Style)
 		} else {
@@ -359,7 +359,6 @@ func markerThrough(canvas *Canvas, attach, next routing.Point, style graph.EdgeS
 	canvas.Arm(attach.Row, attach.Col, a, w, false, "edge")
 }
 
-// drawArrowHead draws an arrow head at the end of an edge path.
 // drawArrowHead draws an arrow head at the end of an edge path.
 // The arrow is placed one cell BACK from to_point (in the gap, not on border).
 func drawArrowHead(canvas *Canvas, from, to routing.Point, cs CharSet, style graph.EdgeStyle, arrowType graph.ArrowType) {

@@ -163,10 +163,12 @@ func (c *Canvas) Arm(row, col int, a glyph.Arms, w glyph.Weight, rounded bool, s
 }
 
 // Segment draws a straight line between two cells. Endpoint cells get only
-// the arm pointing inward; interior cells get both along-axis arms. A
-// diagonal or a single cell draws nothing.
+// the arm pointing inward; interior cells get both along-axis arms. A single
+// cell gets both horizontal arms; a diagonal draws nothing.
 func (c *Canvas) Segment(r1, c1, r2, c2 int, w glyph.Weight, rounded bool, style string) {
 	switch {
+	case r1 == r2 && c1 == c2:
+		c.Arm(r1, c1, glyph.Horizontal, w, rounded, style)
 	case r1 == r2 && c1 != c2:
 		if c1 > c2 {
 			c1, c2 = c2, c1
@@ -210,6 +212,9 @@ func (c *Canvas) putWide(row, col int, ch rune, style string) int {
 	c.Put(row, col, ch, style)
 	if w == 2 {
 		c.Put(row, col+1, Continuation, style)
+		if c.inBounds(row, col+1) {
+			c.lines[row][col+1] = lineCell{}
+		}
 	}
 	return w
 }
@@ -282,17 +287,13 @@ func (c *Canvas) GetStyle(row, col int) string {
 }
 
 // DrawHorizontal draws a horizontal segment from colStart to colEnd
-// (inclusive). A single cell gets both horizontal arms.
+// (inclusive).
 func (c *Canvas) DrawHorizontal(row, colStart, colEnd int, w glyph.Weight, style string) {
-	if colStart == colEnd {
-		c.Arm(row, colStart, glyph.Horizontal, w, false, style)
-		return
-	}
 	c.Segment(row, colStart, row, colEnd, w, false, style)
 }
 
 // DrawVertical draws a vertical segment from rowStart to rowEnd (inclusive).
-// A single cell gets both vertical arms.
+// A single cell gets both vertical arms, the axis being known here.
 func (c *Canvas) DrawVertical(col, rowStart, rowEnd int, w glyph.Weight, style string) {
 	if rowStart == rowEnd {
 		c.Arm(rowStart, col, glyph.Vertical, w, false, style)
@@ -324,23 +325,24 @@ func (c *Canvas) Resize(newWidth, newHeight int) {
 	c.Height = h
 }
 
-// Resolve writes one glyph from cs into every armed cell that holds no
-// literal. It is idempotent and runs before every serialization.
-func (c *Canvas) Resolve(cs CharSet) {
+// Resolve writes one glyph from the canvas's charset into every armed cell
+// that holds no literal. It is idempotent and runs before every
+// serialization.
+func (c *Canvas) Resolve() {
 	for r := range c.Height {
 		for col := range c.Width {
 			lc := c.lines[r][col]
 			if lc.arms == 0 || c.literal[r][col] {
 				continue
 			}
-			c.grid[r][col] = cs.Glyph(lc.arms, lc.weight, lc.rounded)
+			c.grid[r][col] = c.cs.Glyph(lc.arms, lc.weight, lc.rounded)
 		}
 	}
 }
 
 // ToString renders the canvas to a string, trimming trailing whitespace.
 func (c *Canvas) ToString() string {
-	c.Resolve(c.cs)
+	c.Resolve()
 	lines := make([]string, c.Height)
 	for y := range c.Height {
 		var b strings.Builder
@@ -446,7 +448,7 @@ type StyledPair struct {
 
 // ToStyledPairs returns the canvas content as a 2D slice of StyledPairs.
 func (c *Canvas) ToStyledPairs() [][]StyledPair {
-	c.Resolve(c.cs)
+	c.Resolve()
 	result := make([][]StyledPair, c.Height)
 	for y := range c.Height {
 		row := make([]StyledPair, 0, c.Width)

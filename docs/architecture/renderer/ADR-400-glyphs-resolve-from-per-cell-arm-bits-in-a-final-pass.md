@@ -68,8 +68,9 @@ and writes one glyph per armed cell from a 16-entry table indexed by the
 arm bits. `CharSet` carries one table per weight (`Light`, `Heavy`,
 `Double`, `Dashed`) and a four-entry `Rounded` override for the corners.
 Single-arm cells resolve to the half-line glyphs `╴╵╶╷` in light and
-heavy, and to the full line in double, which has no half glyphs. ASCII
-tables map every entry to `-`, `|`, or `+`.
+heavy, and to the full line in double and dashed, which have no half
+glyphs. ASCII tables map straight runs to the stroke's pair (`-`/`|`,
+`=`/`|`, `.`/`:`) and every other entry to `+`.
 
 A literal glyph already in the cell wins over the arms: arrowheads, shape
 indicators, endpoint markers, and text are written with `Put` as now and
@@ -78,14 +79,16 @@ are never replaced by the resolver. `junctionTable`, `boxChars`, and
 the table.
 
 `FlipVertical` and `FlipHorizontal` swap arm bits before the resolve pass
-and keep their rune maps for arrowheads only.
+and keep their rune maps for arrowheads and other literals.
 
 ### The edge invariant
 
 An edge writes arms into exactly two node cells at most: the source attach
-cell on the node border, and the target attach cell when that end has no
-arrowhead. A segment toward an arrowhead ends at the arrowhead's tail. The
-lint rule 3 of ADR-101 fails any build that breaks this.
+cell on the node border and the target attach cell, each only when that
+end has no arrowhead. A segment toward an arrowhead runs to the arrowhead's cell,
+where the arrowhead literal wins, so the tail cell keeps both arms and no
+arm reaches the node border. The lint rule 3 of ADR-101 fails any build
+that breaks this.
 
 ### Glyph swaps carried in the same change
 
@@ -95,10 +98,10 @@ ADR-500 makes both subject to family fallback.
 
 ### Gate
 
-The three ADR-101 fixtures for the defects leave `known-bad.txt` in this
-change, and every golden is re-recorded with the commit naming which
-frames changed and why. Any frame whose only change is a corrected
-junction is expected.
+`flowchart` and `subgraph-cross` leave `known-bad.txt`; `flowchart-cross`
+stays until ADR-102 spreads the ports. Every golden is re-recorded with
+the commit naming which frames changed and why. Any frame whose only
+change is a corrected junction is expected.
 
 ## Consequences
 
@@ -125,6 +128,8 @@ junction is expected.
 ### Neutral
 
 - `Put` loses its `merge` parameter.
+- ASCII keeps `.`/`:` for dashed and `=` for heavy and double runs; every
+  ASCII junction is `+`.
 - Visual output of `├──┬►│` for two edges sharing a port is structurally
   sound and still ugly. ADR-102 spreads the ports.
 - A port that one edge leaves through and another enters keeps a rule 3

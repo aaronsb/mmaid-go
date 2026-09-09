@@ -663,34 +663,34 @@ func drawQueue(canvas *renderer.Canvas, cx, y, width int, label string, cs rende
 	h := 5
 
 	// Top border
-	canvas.PutBox(y, bx, cs.Rune(glyph.TopLeft, glyph.Light), style)
+	canvas.Arm(y, bx, glyph.TopLeft, glyph.Light, false, style)
 	for c := bx + 1; c < bx+width-1; c++ {
-		canvas.PutBox(y, c, cs.Rune(glyph.Horizontal, glyph.Light), style)
+		canvas.Arm(y, c, glyph.Horizontal, glyph.Light, false, style)
 	}
 	if !useASCII {
-		canvas.PutBox(y, bx+width-1, cs.Round(glyph.TopRight), style)
+		canvas.Arm(y, bx+width-1, glyph.TopRight, glyph.Light, true, style)
 	} else {
-		canvas.PutBox(y, bx+width-1, cs.Rune(glyph.TopRight, glyph.Light), style)
+		canvas.Arm(y, bx+width-1, glyph.TopRight, glyph.Light, false, style)
 	}
 
 	// Bottom border
-	canvas.PutBox(y+h-1, bx, cs.Rune(glyph.BottomLeft, glyph.Light), style)
+	canvas.Arm(y+h-1, bx, glyph.BottomLeft, glyph.Light, false, style)
 	for c := bx + 1; c < bx+width-1; c++ {
-		canvas.PutBox(y+h-1, c, cs.Rune(glyph.Horizontal, glyph.Light), style)
+		canvas.Arm(y+h-1, c, glyph.Horizontal, glyph.Light, false, style)
 	}
 	if !useASCII {
-		canvas.PutBox(y+h-1, bx+width-1, cs.Round(glyph.BottomRight), style)
+		canvas.Arm(y+h-1, bx+width-1, glyph.BottomRight, glyph.Light, true, style)
 	} else {
-		canvas.PutBox(y+h-1, bx+width-1, cs.Rune(glyph.BottomRight, glyph.Light), style)
+		canvas.Arm(y+h-1, bx+width-1, glyph.BottomRight, glyph.Light, false, style)
 	}
 
 	// Side borders
 	for r := y + 1; r < y+h-1; r++ {
-		canvas.PutBox(r, bx, cs.Rune(glyph.Vertical, glyph.Light), style)
+		canvas.Arm(r, bx, glyph.Vertical, glyph.Light, false, style)
 		if !useASCII {
 			canvas.Put(r, bx+width-1, '\u2551', style) // ║
 		} else {
-			canvas.PutBox(r, bx+width-1, cs.Rune(glyph.Vertical, glyph.Light), style)
+			canvas.Arm(r, bx+width-1, glyph.Vertical, glyph.Light, false, style)
 		}
 	}
 
@@ -706,26 +706,25 @@ func drawBoundary(canvas *renderer.Canvas, cx, y int, label string, cs renderer.
 	boxRight := cx + 1
 
 	// Top of box
-	canvas.PutBox(y, boxLeft, cs.Rune(glyph.TopLeft, glyph.Light), style)
-	canvas.PutBox(y, cx, cs.Rune(glyph.Horizontal, glyph.Light), style)
-	canvas.PutBox(y, boxRight, cs.Rune(glyph.TopRight, glyph.Light), style)
+	canvas.Arm(y, boxLeft, glyph.TopLeft, glyph.Light, false, style)
+	canvas.Arm(y, cx, glyph.Horizontal, glyph.Light, false, style)
+	canvas.Arm(y, boxRight, glyph.TopRight, glyph.Light, false, style)
 
 	// Middle row: bar extending left + box sides
 	barStart := cx - 3
 	canvas.Put(y+1, barStart, cs.Rune(glyph.Horizontal, glyph.Light), style)
 	canvas.Put(y+1, barStart+1, cs.Rune(glyph.Horizontal, glyph.Light), style)
 	if !useASCII {
-		canvas.PutBox(y+1, boxLeft, cs.Rune(glyph.TeeLeft, glyph.Light), style)
+		canvas.Arm(y+1, boxLeft, glyph.TeeLeft, glyph.Light, false, style)
 	} else {
-		canvas.PutBox(y+1, boxLeft, cs.Rune(glyph.Vertical, glyph.Light), style)
+		canvas.Arm(y+1, boxLeft, glyph.Vertical, glyph.Light, false, style)
 	}
-	canvas.Put(y+1, cx, ' ', style)
-	canvas.PutBox(y+1, boxRight, cs.Rune(glyph.Vertical, glyph.Light), style)
+	canvas.Arm(y+1, boxRight, glyph.Vertical, glyph.Light, false, style)
 
 	// Bottom of box
-	canvas.PutBox(y+2, boxLeft, cs.Rune(glyph.BottomLeft, glyph.Light), style)
-	canvas.PutBox(y+2, cx, cs.Rune(glyph.Horizontal, glyph.Light), style)
-	canvas.PutBox(y+2, boxRight, cs.Rune(glyph.BottomRight, glyph.Light), style)
+	canvas.Arm(y+2, boxLeft, glyph.BottomLeft, glyph.Light, false, style)
+	canvas.Arm(y+2, cx, glyph.Horizontal, glyph.Light, false, style)
+	canvas.Arm(y+2, boxRight, glyph.BottomRight, glyph.Light, false, style)
 
 	// Label below
 	labelCol := cx - textwidth.String(label)/2
@@ -743,19 +742,19 @@ func drawControl(canvas *renderer.Canvas, cx, y int, label string, cs renderer.C
 
 	// Small rounded box
 	if !useASCII {
-		canvas.PutBox(y+1, cx-1, cs.Round(glyph.TopLeft), style)
-		canvas.PutBox(y+1, cx, cs.Rune(glyph.Horizontal, glyph.Light), style)
-		canvas.PutBox(y+1, cx+1, cs.Round(glyph.TopRight), style)
-		canvas.PutBox(y+2, cx-1, cs.Round(glyph.BottomLeft), style)
-		canvas.PutBox(y+2, cx, cs.Rune(glyph.Horizontal, glyph.Light), style)
-		canvas.PutBox(y+2, cx+1, cs.Round(glyph.BottomRight), style)
+		canvas.Arm(y+1, cx-1, glyph.TopLeft, glyph.Light, true, style)
+		canvas.Arm(y+1, cx, glyph.Horizontal, glyph.Light, false, style)
+		canvas.Arm(y+1, cx+1, glyph.TopRight, glyph.Light, true, style)
+		canvas.Arm(y+2, cx-1, glyph.BottomLeft, glyph.Light, true, style)
+		canvas.Arm(y+2, cx, glyph.Horizontal, glyph.Light, false, style)
+		canvas.Arm(y+2, cx+1, glyph.BottomRight, glyph.Light, true, style)
 	} else {
-		canvas.PutBox(y+1, cx-1, cs.Rune(glyph.TopLeft, glyph.Light), style)
-		canvas.PutBox(y+1, cx, cs.Rune(glyph.Horizontal, glyph.Light), style)
-		canvas.PutBox(y+1, cx+1, cs.Rune(glyph.TopRight, glyph.Light), style)
-		canvas.PutBox(y+2, cx-1, cs.Rune(glyph.BottomLeft, glyph.Light), style)
-		canvas.PutBox(y+2, cx, cs.Rune(glyph.Horizontal, glyph.Light), style)
-		canvas.PutBox(y+2, cx+1, cs.Rune(glyph.BottomRight, glyph.Light), style)
+		canvas.Arm(y+1, cx-1, glyph.TopLeft, glyph.Light, false, style)
+		canvas.Arm(y+1, cx, glyph.Horizontal, glyph.Light, false, style)
+		canvas.Arm(y+1, cx+1, glyph.TopRight, glyph.Light, false, style)
+		canvas.Arm(y+2, cx-1, glyph.BottomLeft, glyph.Light, false, style)
+		canvas.Arm(y+2, cx, glyph.Horizontal, glyph.Light, false, style)
+		canvas.Arm(y+2, cx+1, glyph.BottomRight, glyph.Light, false, style)
 	}
 
 	// Label below
@@ -767,19 +766,19 @@ func drawEntity(canvas *renderer.Canvas, cx, y int, label string, cs renderer.Ch
 	style := "node"
 	// Small rounded box
 	if !useASCII {
-		canvas.PutBox(y, cx-1, cs.Round(glyph.TopLeft), style)
-		canvas.PutBox(y, cx, cs.Rune(glyph.Horizontal, glyph.Light), style)
-		canvas.PutBox(y, cx+1, cs.Round(glyph.TopRight), style)
-		canvas.PutBox(y+1, cx-1, cs.Round(glyph.BottomLeft), style)
-		canvas.PutBox(y+1, cx, cs.Rune(glyph.Horizontal, glyph.Light), style)
-		canvas.PutBox(y+1, cx+1, cs.Round(glyph.BottomRight), style)
+		canvas.Arm(y, cx-1, glyph.TopLeft, glyph.Light, true, style)
+		canvas.Arm(y, cx, glyph.Horizontal, glyph.Light, false, style)
+		canvas.Arm(y, cx+1, glyph.TopRight, glyph.Light, true, style)
+		canvas.Arm(y+1, cx-1, glyph.BottomLeft, glyph.Light, true, style)
+		canvas.Arm(y+1, cx, glyph.Horizontal, glyph.Light, false, style)
+		canvas.Arm(y+1, cx+1, glyph.BottomRight, glyph.Light, true, style)
 	} else {
-		canvas.PutBox(y, cx-1, cs.Rune(glyph.TopLeft, glyph.Light), style)
-		canvas.PutBox(y, cx, cs.Rune(glyph.Horizontal, glyph.Light), style)
-		canvas.PutBox(y, cx+1, cs.Rune(glyph.TopRight, glyph.Light), style)
-		canvas.PutBox(y+1, cx-1, cs.Rune(glyph.BottomLeft, glyph.Light), style)
-		canvas.PutBox(y+1, cx, cs.Rune(glyph.Horizontal, glyph.Light), style)
-		canvas.PutBox(y+1, cx+1, cs.Rune(glyph.BottomRight, glyph.Light), style)
+		canvas.Arm(y, cx-1, glyph.TopLeft, glyph.Light, false, style)
+		canvas.Arm(y, cx, glyph.Horizontal, glyph.Light, false, style)
+		canvas.Arm(y, cx+1, glyph.TopRight, glyph.Light, false, style)
+		canvas.Arm(y+1, cx-1, glyph.BottomLeft, glyph.Light, false, style)
+		canvas.Arm(y+1, cx, glyph.Horizontal, glyph.Light, false, style)
+		canvas.Arm(y+1, cx+1, glyph.BottomRight, glyph.Light, false, style)
 	}
 
 	// Underline
@@ -799,43 +798,43 @@ func drawCollections(canvas *renderer.Canvas, cx, y, width int, label string, cs
 
 	// Back rectangle (offset +1 right) — just top and right edges visible
 	for c := bx + 2; c < bx+width+1; c++ {
-		canvas.PutBox(y, c, cs.Rune(glyph.Horizontal, glyph.Light), style)
+		canvas.Arm(y, c, glyph.Horizontal, glyph.Light, false, style)
 	}
-	canvas.PutBox(y, bx+1, cs.Rune(glyph.TopLeft, glyph.Light), style)
-	canvas.PutBox(y, bx+width, cs.Rune(glyph.TopRight, glyph.Light), style)
+	canvas.Arm(y, bx+1, glyph.TopLeft, glyph.Light, false, style)
+	canvas.Arm(y, bx+width, glyph.TopRight, glyph.Light, false, style)
 	// Right edge of back rectangle
-	canvas.PutBox(y+1, bx+width, cs.Rune(glyph.Vertical, glyph.Light), style)
+	canvas.Arm(y+1, bx+width, glyph.Vertical, glyph.Light, false, style)
 
 	// Front rectangle
-	canvas.PutBox(y+1, bx, cs.Rune(glyph.TopLeft, glyph.Light), style)
+	canvas.Arm(y+1, bx, glyph.TopLeft, glyph.Light, false, style)
 	for c := bx + 1; c < bx+width-1; c++ {
-		canvas.PutBox(y+1, c, cs.Rune(glyph.Horizontal, glyph.Light), style)
+		canvas.Arm(y+1, c, glyph.Horizontal, glyph.Light, false, style)
 	}
-	canvas.PutBox(y+1, bx+width-1, cs.Rune(glyph.TopRight, glyph.Light), style)
+	canvas.Arm(y+1, bx+width-1, glyph.TopRight, glyph.Light, false, style)
 
 	// Bottom of back rect merges
-	canvas.PutBox(y+2, bx+width, cs.Rune(glyph.BottomRight, glyph.Light), style)
+	canvas.Arm(y+2, bx+width, glyph.BottomRight, glyph.Light, false, style)
 
 	// Side borders of front
 	for r := y + 2; r < y+h-1; r++ {
-		canvas.PutBox(r, bx, cs.Rune(glyph.Vertical, glyph.Light), style)
-		canvas.PutBox(r, bx+width-1, cs.Rune(glyph.Vertical, glyph.Light), style)
+		canvas.Arm(r, bx, glyph.Vertical, glyph.Light, false, style)
+		canvas.Arm(r, bx+width-1, glyph.Vertical, glyph.Light, false, style)
 	}
 
 	// Bottom border of back rect stub
 	if !useASCII {
-		canvas.PutBox(y+2, bx+width-1, cs.Rune(glyph.TeeLeft, glyph.Light), style)
+		canvas.Arm(y+2, bx+width-1, glyph.TeeLeft, glyph.Light, false, style)
 	} else {
-		canvas.PutBox(y+2, bx+width-1, cs.Rune(glyph.Vertical, glyph.Light), style)
+		canvas.Arm(y+2, bx+width-1, glyph.Vertical, glyph.Light, false, style)
 	}
-	canvas.PutBox(y+2, bx+width, cs.Rune(glyph.BottomRight, glyph.Light), style)
+	canvas.Arm(y+2, bx+width, glyph.BottomRight, glyph.Light, false, style)
 
 	// Bottom border of front
-	canvas.PutBox(y+h-1, bx, cs.Rune(glyph.BottomLeft, glyph.Light), style)
+	canvas.Arm(y+h-1, bx, glyph.BottomLeft, glyph.Light, false, style)
 	for c := bx + 1; c < bx+width-1; c++ {
-		canvas.PutBox(y+h-1, c, cs.Rune(glyph.Horizontal, glyph.Light), style)
+		canvas.Arm(y+h-1, c, glyph.Horizontal, glyph.Light, false, style)
 	}
-	canvas.PutBox(y+h-1, bx+width-1, cs.Rune(glyph.BottomRight, glyph.Light), style)
+	canvas.Arm(y+h-1, bx+width-1, glyph.BottomRight, glyph.Light, false, style)
 
 	// Label centered in front rectangle
 	labelCol := bx + (width-textwidth.String(label))/2

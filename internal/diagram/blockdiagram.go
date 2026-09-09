@@ -767,21 +767,21 @@ func blockDrawGroups(c *renderer.Canvas, blocks []blockNode, positions map[strin
 		style := "subgraph"
 
 		// Draw border using subgraph chars
-		c.PutBox(y, x, cs.Rune(glyph.TopLeft, glyph.Light), style)
+		c.Arm(y, x, glyph.TopLeft, glyph.Light, false, style)
 		for col := x + 1; col < x+w-1; col++ {
-			c.PutBox(y, col, cs.Rune(glyph.Horizontal, glyph.Light), style)
+			c.Arm(y, col, glyph.Horizontal, glyph.Light, false, style)
 		}
-		c.PutBox(y, x+w-1, cs.Rune(glyph.TopRight, glyph.Light), style)
+		c.Arm(y, x+w-1, glyph.TopRight, glyph.Light, false, style)
 
-		c.PutBox(y+h-1, x, cs.Rune(glyph.BottomLeft, glyph.Light), style)
+		c.Arm(y+h-1, x, glyph.BottomLeft, glyph.Light, false, style)
 		for col := x + 1; col < x+w-1; col++ {
-			c.PutBox(y+h-1, col, cs.Rune(glyph.Horizontal, glyph.Light), style)
+			c.Arm(y+h-1, col, glyph.Horizontal, glyph.Light, false, style)
 		}
-		c.PutBox(y+h-1, x+w-1, cs.Rune(glyph.BottomRight, glyph.Light), style)
+		c.Arm(y+h-1, x+w-1, glyph.BottomRight, glyph.Light, false, style)
 
 		for row := y + 1; row < y+h-1; row++ {
-			c.PutBox(row, x, cs.Rune(glyph.Vertical, glyph.Light), style)
-			c.PutBox(row, x+w-1, cs.Rune(glyph.Vertical, glyph.Light), style)
+			c.Arm(row, x, glyph.Vertical, glyph.Light, false, style)
+			c.Arm(row, x+w-1, glyph.Vertical, glyph.Light, false, style)
 		}
 
 		// Draw group label (skip for anonymous groups)
@@ -813,8 +813,6 @@ func blockDrawLink(c *renderer.Canvas, link blockLink, positions map[string][2]i
 	sCX := sx + sw/2
 	tCX := tx + tw/2
 
-	hChar := cs.Rune(glyph.Horizontal, glyph.Light)
-	vChar := cs.Rune(glyph.Vertical, glyph.Light)
 	style := "edge"
 
 	// Determine connection type based on overlap
@@ -841,7 +839,7 @@ func blockDrawLink(c *renderer.Canvas, link blockLink, positions map[string][2]i
 			arrow = cs.ArrowLeft
 		}
 
-		blockDrawRoutedLine(c, r1, c1, r2, c2, hChar, vChar, useASCII, style)
+		blockDrawRoutedLine(c, r1, c1, r2, c2, useASCII, style)
 		c.Put(r2, c2, arrow, style)
 	} else {
 		// Vertical: exit/enter from top/bottom
@@ -865,18 +863,18 @@ func blockDrawLink(c *renderer.Canvas, link blockLink, positions map[string][2]i
 			// Straight vertical
 			rMin, rMax := min(r1, r2), max(r1, r2)
 			for r := rMin; r <= rMax; r++ {
-				c.PutBox(r, c1, vChar, style)
+				c.Arm(r, c1, glyph.Vertical, glyph.Light, false, style)
 			}
 		} else {
 			// L-route: vertical to bend row, then horizontal to target x
 			bendRow := r2
 			rMin, rMax := min(r1, bendRow), max(r1, bendRow)
 			for r := rMin; r <= rMax; r++ {
-				c.PutBox(r, c1, vChar, style)
+				c.Arm(r, c1, glyph.Vertical, glyph.Light, false, style)
 			}
 			cMin, cMax := min(c1, c2), max(c1, c2)
 			for col := cMin; col <= cMax; col++ {
-				c.PutBox(bendRow, col, hChar, style)
+				c.Arm(bendRow, col, glyph.Horizontal, glyph.Light, false, style)
 			}
 			if !useASCII {
 				var corner rune
@@ -915,30 +913,30 @@ func blockDrawLink(c *renderer.Canvas, link blockLink, positions map[string][2]i
 }
 
 // blockDrawRoutedLine draws a Z-shaped or straight line using block routing (different from classdiagram's drawRoutedLine).
-func blockDrawRoutedLine(c *renderer.Canvas, r1, c1, r2, c2 int, hChar, vChar rune, useASCII bool, style string) {
+func blockDrawRoutedLine(c *renderer.Canvas, r1, c1, r2, c2 int, useASCII bool, style string) {
 	if c1 == c2 {
 		rMin, rMax := min(r1, r2), max(r1, r2)
 		for r := rMin; r <= rMax; r++ {
-			c.PutBox(r, c1, vChar, style)
+			c.Arm(r, c1, glyph.Vertical, glyph.Light, false, style)
 		}
 	} else if r1 == r2 {
 		cMin, cMax := min(c1, c2), max(c1, c2)
 		for col := cMin; col <= cMax; col++ {
-			c.PutBox(r1, col, hChar, style)
+			c.Arm(r1, col, glyph.Horizontal, glyph.Light, false, style)
 		}
 	} else {
 		midRow := (r1 + r2) / 2
 		rMin, rMax := min(r1, midRow), max(r1, midRow)
 		for r := rMin; r <= rMax; r++ {
-			c.PutBox(r, c1, vChar, style)
+			c.Arm(r, c1, glyph.Vertical, glyph.Light, false, style)
 		}
 		cMin, cMax := min(c1, c2), max(c1, c2)
 		for col := cMin; col <= cMax; col++ {
-			c.PutBox(midRow, col, hChar, style)
+			c.Arm(midRow, col, glyph.Horizontal, glyph.Light, false, style)
 		}
 		rMin2, rMax2 := min(midRow, r2), max(midRow, r2)
 		for r := rMin2; r <= rMax2; r++ {
-			c.PutBox(r, c2, vChar, style)
+			c.Arm(r, c2, glyph.Vertical, glyph.Light, false, style)
 		}
 		if !useASCII {
 			var corner1 rune

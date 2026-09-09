@@ -390,7 +390,7 @@ func GetTheme(name string) Theme {
 // ToColorString renders the canvas using ANSI colors based on the theme.
 // Each cell's style key is mapped to the theme's ANSI sequence.
 func (c *Canvas) ToColorString(theme Theme) string {
-	c.Resolve(c.cs)
+	c.Resolve()
 	styleMap := map[string]string{
 		"node":           theme.Node,
 		"edge":           theme.Edge,

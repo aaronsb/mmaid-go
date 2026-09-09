@@ -85,26 +85,27 @@ var Unicode = map[Weight]Table{
 // UnicodeRounded overrides the four light corners, indexed by RoundedIndex.
 var UnicodeRounded = [4]rune{'╰', '╯', '╭', '╮'}
 
-// ASCII maps every armed cell of every weight to '-', '|', or '+'.
+// ASCII keeps the stroke distinction on straight runs and draws every
+// junction as '+'.
 var ASCII = map[Weight]Table{
-	Light:  asciiTable(),
-	Heavy:  asciiTable(),
-	Double: asciiTable(),
-	Dashed: asciiTable(),
+	Light:  asciiTable('-', '|'),
+	Heavy:  asciiTable('=', '|'),
+	Double: asciiTable('=', '|'),
+	Dashed: asciiTable('.', ':'),
 }
 
 // ASCIIRounded is '+' at every corner.
 var ASCIIRounded = [4]rune{'+', '+', '+', '+'}
 
-func asciiTable() Table {
+func asciiTable(h, v rune) Table {
 	var t Table
 	t[0] = ' '
 	for a := Arms(1); a < 16; a++ {
 		switch a {
 		case E, W, Horizontal:
-			t[a] = '-'
+			t[a] = h
 		case N, S, Vertical:
-			t[a] = '|'
+			t[a] = v
 		default:
 			t[a] = '+'
 		}

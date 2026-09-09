@@ -66,13 +66,21 @@ func TestOfRejectsText(t *testing.T) {
 	}
 }
 
-func TestASCIIIsThreeRunes(t *testing.T) {
+func TestASCIIStrokes(t *testing.T) {
+	want := map[Weight][2]rune{Light: {'-', '|'}, Heavy: {'=', '|'}, Double: {'=', '|'}, Dashed: {'.', ':'}}
 	for w, t2 := range ASCII {
 		for a := Arms(1); a < 16; a++ {
-			switch t2[a] {
-			case '-', '|', '+':
+			var exp rune
+			switch a {
+			case E, W, Horizontal:
+				exp = want[w][0]
+			case N, S, Vertical:
+				exp = want[w][1]
 			default:
-				t.Errorf("ASCII[%d][%04b] = %c", w, a, t2[a])
+				exp = '+'
+			}
+			if t2[a] != exp {
+				t.Errorf("ASCII[%d][%04b] = %c, want %c", w, a, t2[a], exp)
 			}
 		}
 	}

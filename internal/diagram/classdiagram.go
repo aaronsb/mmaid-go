@@ -609,11 +609,11 @@ func drawClassBox(c *renderer.Canvas, cls *classDef, box *classBoxInfo, cs rende
 	if len(cls.members) > 0 {
 		// Draw divider
 		for col := x + 1; col < x+w-1; col++ {
-			c.PutBox(row, col, cs.Rune(glyph.Horizontal, glyph.Light), "node")
+			c.Arm(row, col, glyph.Horizontal, glyph.Light, false, "node")
 		}
 		// Connect divider to sides
-		c.PutBox(row, x, cs.Rune(glyph.TeeRight, glyph.Light), "node")
-		c.PutBox(row, x+w-1, cs.Rune(glyph.TeeLeft, glyph.Light), "node")
+		c.Arm(row, x, glyph.TeeRight, glyph.Light, false, "node")
+		c.Arm(row, x+w-1, glyph.TeeLeft, glyph.Light, false, "node")
 		row++
 
 		// Members
@@ -755,19 +755,19 @@ func drawRoutedLine(c *renderer.Canvas, x1, y1, x2, y2 int, w glyph.Weight, cs r
 		// Corners
 		if y1 < midY {
 			if x1 < x2 {
-				c.PutBox(midY, x1, cs.Rune(glyph.BottomLeft, glyph.Light), "edge")
-				c.PutBox(midY, x2, cs.Rune(glyph.TopRight, glyph.Light), "edge")
+				c.Arm(midY, x1, glyph.BottomLeft, glyph.Light, false, "edge")
+				c.Arm(midY, x2, glyph.TopRight, glyph.Light, false, "edge")
 			} else {
-				c.PutBox(midY, x1, cs.Rune(glyph.BottomRight, glyph.Light), "edge")
-				c.PutBox(midY, x2, cs.Rune(glyph.TopLeft, glyph.Light), "edge")
+				c.Arm(midY, x1, glyph.BottomRight, glyph.Light, false, "edge")
+				c.Arm(midY, x2, glyph.TopLeft, glyph.Light, false, "edge")
 			}
 		} else {
 			if x1 < x2 {
-				c.PutBox(midY, x1, cs.Rune(glyph.TopLeft, glyph.Light), "edge")
-				c.PutBox(midY, x2, cs.Rune(glyph.BottomRight, glyph.Light), "edge")
+				c.Arm(midY, x1, glyph.TopLeft, glyph.Light, false, "edge")
+				c.Arm(midY, x2, glyph.BottomRight, glyph.Light, false, "edge")
 			} else {
-				c.PutBox(midY, x1, cs.Rune(glyph.TopRight, glyph.Light), "edge")
-				c.PutBox(midY, x2, cs.Rune(glyph.BottomLeft, glyph.Light), "edge")
+				c.Arm(midY, x1, glyph.TopRight, glyph.Light, false, "edge")
+				c.Arm(midY, x2, glyph.BottomLeft, glyph.Light, false, "edge")
 			}
 		}
 	}
