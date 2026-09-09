@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/aaronsb/mmaid-go/internal/renderer"
+	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
 
 // packetField is one bit-range field in a packet diagram. end is inclusive.
@@ -260,7 +261,7 @@ func RenderPacket(source string, useASCII bool, theme *renderer.Theme) *renderer
 			disp := rf.label
 			if runeLen(disp) > avail {
 				cut := max(1, avail-1)
-				disp = string([]rune(rf.label)[:cut]) + "."
+				disp = textwidth.Truncate(rf.label, cut) + "."
 			}
 			lx := xStart + 1 + (avail-runeLen(disp))/2
 			c.PutText(yContent, lx, disp, "label")
@@ -287,7 +288,7 @@ func RenderPacket(source string, useASCII bool, theme *renderer.Theme) *renderer
 		avail := f.bits()*packetBitsPerCol - 2
 		if f.label != "" && avail < runeLen(f.label) {
 			cut := max(1, avail-1)
-			short := string([]rune(f.label)[:cut]) + "."
+			short := textwidth.Truncate(f.label, cut) + "."
 			truncated = append(truncated, truncEntry{short, f.label, f.start, f.end})
 		}
 	}

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/aaronsb/mmaid-go/internal/renderer"
+	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
 
 // ── model ────────────────────────────────────────────────────────
@@ -186,7 +187,7 @@ func tmLayoutRoots(c *renderer.Canvas, cs renderer.CharSet, nodes []treemapNode,
 		if len(nodes[i].children) > 0 {
 			minWidths[i] = tmComputeMinWidth(nodes[i].children) + 2
 		} else {
-			labelW := len(nodes[i].label) + 2
+			labelW := textwidth.String(nodes[i].label) + 2
 			minWidths[i] = max(tmMinBoxW, labelW)
 		}
 	}
@@ -278,7 +279,7 @@ func tmComputeMinWidth(nodes []treemapNode) int {
 			childW := tmComputeMinWidth(nodes[i].children)
 			nodeW = childW + 2
 		} else {
-			labelW := len(nodes[i].label) + tmLabelPad
+			labelW := textwidth.String(nodes[i].label) + tmLabelPad
 			nodeW = max(tmMinBoxW, labelW+2)
 		}
 		total += nodeW
@@ -341,7 +342,7 @@ func tmSliceLayout(c *renderer.Canvas, cs renderer.CharSet, nodes []treemapNode,
 		if len(nodes[i].children) > 0 {
 			minWidths[i] = tmComputeMinWidth(nodes[i].children) + 2
 		} else {
-			labelW := len(nodes[i].label) + 2 // borders
+			labelW := textwidth.String(nodes[i].label) + 2 // borders
 			minWidths[i] = max(tmMinBoxW, labelW)
 		}
 	}
@@ -496,23 +497,23 @@ func tmDrawNode(c *renderer.Canvas, cs renderer.CharSet, node *treemapNode, x, y
 	// Label -- centered on the first inner row
 	label := node.label
 	innerW := w - 2
-	if len(label) > innerW {
+	if textwidth.String(label) > innerW {
 		if innerW > 1 {
-			label = label[:innerW-1] + "\u2026"
+			label = textwidth.Truncate(label, innerW-1) + "\u2026"
 		} else {
-			label = label[:innerW]
+			label = textwidth.Truncate(label, innerW)
 		}
 	}
-	labelCol := x + 1 + max(0, (innerW-len(label))/2)
+	labelCol := x + 1 + max(0, (innerW-textwidth.String(label))/2)
 	c.PutText(y+1, labelCol, label, labelStyle)
 
 	// Value (for leaves only)
 	if !isSection && node.value > 0 && h >= 4 {
 		valStr := fmt.Sprintf("%g", node.value)
-		if len(valStr) > innerW {
-			valStr = valStr[:innerW]
+		if textwidth.String(valStr) > innerW {
+			valStr = textwidth.Truncate(valStr, innerW)
 		}
-		valCol := x + 1 + max(0, (innerW-len(valStr))/2)
+		valCol := x + 1 + max(0, (innerW-textwidth.String(valStr))/2)
 		c.PutText(y+2, valCol, valStr, valueStyle)
 	}
 

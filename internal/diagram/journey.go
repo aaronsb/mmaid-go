@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/aaronsb/mmaid-go/internal/renderer"
+	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
 
 // journeyTask is a single step in a user journey, with a 1-5 satisfaction
@@ -497,8 +498,7 @@ func renderJourneyVertical(jd *journeyData, useASCII bool, theme *renderer.Theme
 	return c
 }
 
-// runeLen returns the display width of s as a count of runes. The canvas is a
-// strict one-rune-per-cell grid, so rune count equals column width here.
+// runeLen returns the display width of s in terminal columns.
 func runeLen(s string) int {
-	return len([]rune(s))
+	return textwidth.String(s)
 }

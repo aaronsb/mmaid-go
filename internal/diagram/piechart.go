@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/aaronsb/mmaid-go/internal/renderer"
+	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
 
 // pieSlice represents a single slice in a pie chart.
@@ -125,8 +126,8 @@ func RenderPieChart(source string, useASCII bool, useColor bool, theme *renderer
 func pieLegendWidth(pc *pieChart, total float64) int {
 	maxLabelW := 0
 	for _, s := range pc.slices {
-		if len(s.label) > maxLabelW {
-			maxLabelW = len(s.label)
+		if textwidth.String(s.label) > maxLabelW {
+			maxLabelW = textwidth.String(s.label)
 		}
 	}
 	maxSuffixW := 0
@@ -136,8 +137,8 @@ func pieLegendWidth(pc *pieChart, total float64) int {
 		if pc.showData {
 			suffix = fmt.Sprintf(" %.1f%% (%.0f)", pct, s.value)
 		}
-		if len(suffix) > maxSuffixW {
-			maxSuffixW = len(suffix)
+		if textwidth.String(suffix) > maxSuffixW {
+			maxSuffixW = textwidth.String(suffix)
 		}
 	}
 	legendInnerW := 1 + 2 + 1 + maxLabelW + maxSuffixW + 1
@@ -208,7 +209,7 @@ func renderPieCircle(pc *pieChart, colors [][3]int) *renderer.Canvas {
 
 	// Draw title
 	if pc.title != "" {
-		titleCol := (canvasWidth - len(pc.title)) / 2
+		titleCol := (canvasWidth - textwidth.String(pc.title)) / 2
 		if titleCol < 0 {
 			titleCol = 0
 		}
@@ -269,14 +270,14 @@ func renderPieCircle(pc *pieChart, colors [][3]int) *renderer.Canvas {
 	// Recompute maxLabelW for legend alignment
 	maxLabelW := 0
 	for _, s := range pc.slices {
-		if len(s.label) > maxLabelW {
-			maxLabelW = len(s.label)
+		if textwidth.String(s.label) > maxLabelW {
+			maxLabelW = textwidth.String(s.label)
 		}
 	}
 
 	// Legend box dimensions
 	legendBoxW := legendW
-	legendBoxH := len(pc.slices) + 2                         // +2 for top/bottom borders
+	legendBoxH := len(pc.slices) + 2 // +2 for top/bottom borders
 	legendBoxTop := legendStartRow
 	legendBoxLeft := legendCol
 
@@ -478,8 +479,8 @@ func renderPieBraille(pc *pieChart) *renderer.Canvas {
 	legendGap := 3
 	maxLabelW := 0
 	for _, s := range pc.slices {
-		if len(s.label) > maxLabelW {
-			maxLabelW = len(s.label)
+		if textwidth.String(s.label) > maxLabelW {
+			maxLabelW = textwidth.String(s.label)
 		}
 	}
 	maxSuffixW := 0
@@ -489,8 +490,8 @@ func renderPieBraille(pc *pieChart) *renderer.Canvas {
 		if pc.showData {
 			suffix = fmt.Sprintf(" %.1f%% (%.0f)", pct, s.value)
 		}
-		if len(suffix) > maxSuffixW {
-			maxSuffixW = len(suffix)
+		if textwidth.String(suffix) > maxSuffixW {
+			maxSuffixW = textwidth.String(suffix)
 		}
 	}
 
@@ -511,7 +512,7 @@ func renderPieBraille(pc *pieChart) *renderer.Canvas {
 
 	// Draw title
 	if pc.title != "" {
-		titleCol := (canvasWidth - len(pc.title)) / 2
+		titleCol := (canvasWidth - textwidth.String(pc.title)) / 2
 		if titleCol < 0 {
 			titleCol = 0
 		}
@@ -624,8 +625,8 @@ func renderPieBarChart(pc *pieChart, useASCII bool) *renderer.Canvas {
 	// Compute max label width for right-alignment
 	maxLabelWidth := 0
 	for _, s := range pc.slices {
-		if len(s.label) > maxLabelWidth {
-			maxLabelWidth = len(s.label)
+		if textwidth.String(s.label) > maxLabelWidth {
+			maxLabelWidth = textwidth.String(s.label)
 		}
 	}
 
@@ -637,8 +638,8 @@ func renderPieBarChart(pc *pieChart, useASCII bool) *renderer.Canvas {
 		if pc.showData {
 			suffix = fmt.Sprintf(" %.1f%% (%.0f)", pct, s.value)
 		}
-		if len(suffix) > maxSuffixWidth {
-			maxSuffixWidth = len(suffix)
+		if textwidth.String(suffix) > maxSuffixWidth {
+			maxSuffixWidth = textwidth.String(suffix)
 		}
 	}
 
@@ -656,7 +657,7 @@ func renderPieBarChart(pc *pieChart, useASCII bool) *renderer.Canvas {
 
 	// Draw title
 	if pc.title != "" {
-		titleCol := (canvasWidth - len(pc.title)) / 2
+		titleCol := (canvasWidth - textwidth.String(pc.title)) / 2
 		if titleCol < 0 {
 			titleCol = 0
 		}
@@ -675,7 +676,7 @@ func renderPieBarChart(pc *pieChart, useASCII bool) *renderer.Canvas {
 		fillChar := fills[i%len(fills)]
 
 		// Right-aligned label
-		padding := maxLabelWidth - len(s.label)
+		padding := maxLabelWidth - textwidth.String(s.label)
 		labelCol := pieMargin + padding
 		c.PutText(row, labelCol, s.label, "default")
 

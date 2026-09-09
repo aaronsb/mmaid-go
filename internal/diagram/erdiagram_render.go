@@ -1,6 +1,9 @@
 package diagram
 
-import "github.com/aaronsb/mmaid-go/internal/renderer"
+import (
+	"github.com/aaronsb/mmaid-go/internal/renderer"
+	"github.com/aaronsb/mmaid-go/internal/textwidth"
+)
 
 // RenderERDiagram parses and renders a Mermaid ER diagram.
 func RenderERDiagram(source string, useASCII bool) *renderer.Canvas {
@@ -142,11 +145,11 @@ func computeERBox(entity *erEntity) *erBoxInfo {
 		displayName = entity.alias
 	}
 
-	minWidth := len(displayName) + 4
+	minWidth := textwidth.String(displayName) + 4
 
 	for _, attr := range entity.attributes {
 		attrStr := formatERAttribute(attr)
-		attrWidth := len(attrStr) + 4
+		attrWidth := textwidth.String(attrStr) + 4
 		if attrWidth > minWidth {
 			minWidth = attrWidth
 		}
@@ -270,7 +273,7 @@ func drawERBox(c *renderer.Canvas, entity *erEntity, box *erBoxInfo, cs renderer
 	}
 
 	row := y + 1
-	nameCol := x + (w-len(displayName))/2
+	nameCol := x + (w-textwidth.String(displayName))/2
 	c.PutText(row, nameCol, displayName, "node")
 	row++
 
@@ -335,8 +338,8 @@ func drawERRelationship(c *renderer.Canvas, rel erRelationship, src, tgt *erBoxI
 		if cardRow < 0 {
 			cardRow = srcY + 1
 		}
-		if cardCol+len(card1Text)+1 > c.Width || cardRow+1 > c.Height {
-			c.Resize(cardCol+len(card1Text)+2, cardRow+2)
+		if cardCol+textwidth.String(card1Text)+1 > c.Width || cardRow+1 > c.Height {
+			c.Resize(cardCol+textwidth.String(card1Text)+2, cardRow+2)
 		}
 		c.PutText(cardRow, cardCol, card1Text, "edge_label")
 	}
@@ -347,8 +350,8 @@ func drawERRelationship(c *renderer.Canvas, rel erRelationship, src, tgt *erBoxI
 		if cardRow < 0 {
 			cardRow = tgtY + 1
 		}
-		if cardCol+len(card2Text)+1 > c.Width || cardRow+1 > c.Height {
-			c.Resize(cardCol+len(card2Text)+2, cardRow+2)
+		if cardCol+textwidth.String(card2Text)+1 > c.Width || cardRow+1 > c.Height {
+			c.Resize(cardCol+textwidth.String(card2Text)+2, cardRow+2)
 		}
 		c.PutText(cardRow, cardCol, card2Text, "edge_label")
 	}
@@ -356,7 +359,7 @@ func drawERRelationship(c *renderer.Canvas, rel erRelationship, src, tgt *erBoxI
 	if rel.label != "" {
 		midX := (srcX + tgtX) / 2
 		midY := (srcY + tgtY) / 2
-		labelCol := midX - len(rel.label)/2
+		labelCol := midX - textwidth.String(rel.label)/2
 		labelRow := midY - 1
 		if labelRow < 0 {
 			labelRow = midY + 1
@@ -364,8 +367,8 @@ func drawERRelationship(c *renderer.Canvas, rel erRelationship, src, tgt *erBoxI
 		if labelCol < 0 {
 			labelCol = 0
 		}
-		if labelCol+len(rel.label)+1 > c.Width || labelRow+1 > c.Height {
-			c.Resize(labelCol+len(rel.label)+2, labelRow+2)
+		if labelCol+textwidth.String(rel.label)+1 > c.Width || labelRow+1 > c.Height {
+			c.Resize(labelCol+textwidth.String(rel.label)+2, labelRow+2)
 		}
 		c.PutText(labelRow, labelCol, rel.label, "edge_label")
 	}

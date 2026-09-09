@@ -12,10 +12,10 @@ import (
 
 // stateParser holds parsing state for a state diagram.
 type stateParser struct {
-	g            *graph.Graph
-	aliases      map[string]string // "state X as Y" mappings
-	stereotypes  map[string]string // node ID -> stereotype (choice, fork, join)
-	idCounter    int               // unique ID counter for start/end pseudo-nodes
+	g           *graph.Graph
+	aliases     map[string]string // "state X as Y" mappings
+	stereotypes map[string]string // node ID -> stereotype (choice, fork, join)
+	idCounter   int               // unique ID counter for start/end pseudo-nodes
 }
 
 func newStateParser() *stateParser {
@@ -73,16 +73,16 @@ func shapeForStereotype(stereotype string) graph.NodeShape {
 
 // Regex patterns for state diagram parsing.
 var (
-	reStateDiagramHeader = regexp.MustCompile(`(?i)^\s*stateDiagram(?:-v2)?\s*$`)
-	reTransition         = regexp.MustCompile(`^\s*(\S+)\s*-->\s*(\S+)\s*(?::\s*(.*))?$`)
-	reStateAlias         = regexp.MustCompile(`(?i)^\s*state\s+"([^"]+)"\s+as\s+(\S+)\s*$`)
-	reStateStereotype    = regexp.MustCompile(`(?i)^\s*state\s+(\S+)\s+<<(\w+)>>\s*$`)
-	reStateCompositeOpen = regexp.MustCompile(`(?i)^\s*state\s+(\S+)\s*\{\s*$`)
+	reStateDiagramHeader  = regexp.MustCompile(`(?i)^\s*stateDiagram(?:-v2)?\s*$`)
+	reTransition          = regexp.MustCompile(`^\s*(\S+)\s*-->\s*(\S+)\s*(?::\s*(.*))?$`)
+	reStateAlias          = regexp.MustCompile(`(?i)^\s*state\s+"([^"]+)"\s+as\s+(\S+)\s*$`)
+	reStateStereotype     = regexp.MustCompile(`(?i)^\s*state\s+(\S+)\s+<<(\w+)>>\s*$`)
+	reStateCompositeOpen  = regexp.MustCompile(`(?i)^\s*state\s+(\S+)\s*\{\s*$`)
 	reStateCompositeAlias = regexp.MustCompile(`(?i)^\s*state\s+"([^"]+)"\s+as\s+(\S+)\s*\{\s*$`)
 	reStateCompositeClose = regexp.MustCompile(`^\s*\}\s*$`)
-	reStateDirection     = regexp.MustCompile(`(?i)^\s*direction\s+(LR|RL|TB|BT|TD)\s*$`)
-	reStateNoteRight     = regexp.MustCompile(`(?i)^\s*note\s+right\s+of\s+(\S+)\s*:\s*(.*)$`)
-	reStateNoteLeft      = regexp.MustCompile(`(?i)^\s*note\s+left\s+of\s+(\S+)\s*:\s*(.*)$`)
+	reStateDirection      = regexp.MustCompile(`(?i)^\s*direction\s+(LR|RL|TB|BT|TD)\s*$`)
+	reStateNoteRight      = regexp.MustCompile(`(?i)^\s*note\s+right\s+of\s+(\S+)\s*:\s*(.*)$`)
+	reStateNoteLeft       = regexp.MustCompile(`(?i)^\s*note\s+left\s+of\s+(\S+)\s*:\s*(.*)$`)
 )
 
 // ParseStateDiagram parses a stateDiagram / stateDiagram-v2 block into a *graph.Graph

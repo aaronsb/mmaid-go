@@ -7,14 +7,15 @@ import (
 	"time"
 
 	"github.com/aaronsb/mmaid-go/internal/renderer"
+	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
 
 type ganttTask struct {
-	label    string
-	id       string
-	start    time.Time
-	end      time.Time
-	section  string
+	label       string
+	id          string
+	start       time.Time
+	end         time.Time
+	section     string
 	isMilestone bool
 }
 
@@ -26,13 +27,13 @@ type ganttData struct {
 }
 
 var (
-	reGanttHeader     = regexp.MustCompile(`(?i)^\s*gantt\s*$`)
-	reGanttTitle      = regexp.MustCompile(`(?i)^\s*title\s+(.+)$`)
-	reGanttDateFormat = regexp.MustCompile(`(?i)^\s*dateFormat\s+(.+)$`)
-	reGanttSection    = regexp.MustCompile(`(?i)^\s*section\s+(.+)$`)
-	reGanttExcludes   = regexp.MustCompile(`(?i)^\s*excludes\s+`)
-	reGanttTodayMarker = regexp.MustCompile(`(?i)^\s*todayMarker\s+`)
-	reGanttAxisFormat = regexp.MustCompile(`(?i)^\s*axisFormat\s+`)
+	reGanttHeader       = regexp.MustCompile(`(?i)^\s*gantt\s*$`)
+	reGanttTitle        = regexp.MustCompile(`(?i)^\s*title\s+(.+)$`)
+	reGanttDateFormat   = regexp.MustCompile(`(?i)^\s*dateFormat\s+(.+)$`)
+	reGanttSection      = regexp.MustCompile(`(?i)^\s*section\s+(.+)$`)
+	reGanttExcludes     = regexp.MustCompile(`(?i)^\s*excludes\s+`)
+	reGanttTodayMarker  = regexp.MustCompile(`(?i)^\s*todayMarker\s+`)
+	reGanttAxisFormat   = regexp.MustCompile(`(?i)^\s*axisFormat\s+`)
 	reGanttTickInterval = regexp.MustCompile(`(?i)^\s*tickInterval\s+`)
 )
 
@@ -128,9 +129,9 @@ func parseGanttTask(line, dateFormat, section string, taskMap map[string]*ganttT
 	}
 
 	task := &ganttTask{
-		label:   label,
-		id:      id,
-		section: section,
+		label:       label,
+		id:          id,
+		section:     section,
 		isMilestone: isMilestone,
 	}
 
@@ -250,8 +251,8 @@ func RenderGantt(source string, useASCII bool, theme *renderer.Theme) *renderer.
 	// Layout
 	labelW := 0
 	for _, t := range gd.tasks {
-		if len(t.label) > labelW {
-			labelW = len(t.label)
+		if textwidth.String(t.label) > labelW {
+			labelW = textwidth.String(t.label)
 		}
 	}
 	labelW += 2
@@ -289,7 +290,7 @@ func RenderGantt(source string, useASCII bool, theme *renderer.Theme) *renderer.
 
 	// Title
 	if gd.title != "" {
-		titleCol := (canvasWidth - len(gd.title)) / 2
+		titleCol := (canvasWidth - textwidth.String(gd.title)) / 2
 		c.PutText(0, titleCol, gd.title, "bold_label")
 	}
 
@@ -313,7 +314,7 @@ func RenderGantt(source string, useASCII bool, theme *renderer.Theme) *renderer.
 	startLabel := minTime.Format("Jan 02")
 	endLabel := maxTime.Format("Jan 02")
 	c.PutText(row, barStartCol, startLabel, "default")
-	c.PutText(row, barStartCol+barW-len(endLabel), endLabel, "default")
+	c.PutText(row, barStartCol+barW-textwidth.String(endLabel), endLabel, "default")
 	row++
 
 	// Header line
@@ -353,7 +354,7 @@ func RenderGantt(source string, useASCII bool, theme *renderer.Theme) *renderer.
 		if useRegion && sectionIdx >= 0 {
 			labelStyle = "_ansi:" + theme.RegionTextStyle(sectionIdx, 1)
 		}
-		padding := labelW - len(t.label) - 1
+		padding := labelW - textwidth.String(t.label) - 1
 		c.PutText(row, padding, t.label, labelStyle)
 		c.Put(row, labelW+1, vLine, false, "edge")
 
@@ -423,7 +424,7 @@ func RenderGantt(source string, useASCII bool, theme *renderer.Theme) *renderer.
 				}
 				// Label above
 				label := "today"
-				labelCol := todayCol - len(label)/2
+				labelCol := todayCol - textwidth.String(label)/2
 				if labelCol < barStartCol {
 					labelCol = barStartCol
 				}

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/aaronsb/mmaid-go/internal/renderer"
+	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
 
 // timelineEvent holds one or more items at a time point.
@@ -88,12 +89,12 @@ func getTimelineChars(useASCII bool) timelineChars {
 func computeTimelineColWidth(td *timelineData) int {
 	colWidth := 0
 	for _, e := range td.events {
-		if len(e.period) > colWidth {
-			colWidth = len(e.period)
+		if textwidth.String(e.period) > colWidth {
+			colWidth = textwidth.String(e.period)
 		}
 		for _, item := range e.items {
-			if len(item)+4 > colWidth {
-				colWidth = len(item) + 4
+			if textwidth.String(item)+4 > colWidth {
+				colWidth = textwidth.String(item) + 4
 			}
 		}
 	}
@@ -154,7 +155,7 @@ func renderTimelineHorizontal(td *timelineData, useASCII bool, theme *renderer.T
 	}
 
 	if td.title != "" {
-		titleCol := (canvasWidth - len(td.title)) / 2
+		titleCol := (canvasWidth - textwidth.String(td.title)) / 2
 		if titleCol < 0 {
 			titleCol = 0
 		}
@@ -175,14 +176,14 @@ func renderTimelineHorizontal(td *timelineData, useASCII bool, theme *renderer.T
 		if useRegion {
 			periodStyle = "_ansi:" + theme.RegionTextStyle(i, 0)
 		}
-		labelX := centerX - len(e.period)/2
+		labelX := centerX - textwidth.String(e.period)/2
 		if labelX < 0 {
 			labelX = 0
 		}
 		c.PutText(periodRow, labelX, e.period, periodStyle)
 
 		for j, item := range e.items {
-			boxW := len(item) + 2
+			boxW := textwidth.String(item) + 2
 			boxX := centerX - boxW/2
 			if boxX < 0 {
 				boxX = 0
@@ -242,12 +243,12 @@ func renderTimelineVertical(td *timelineData, useASCII bool, theme *renderer.The
 	maxPeriodW := 0
 	maxItemW := 0
 	for _, e := range td.events {
-		if len(e.period) > maxPeriodW {
-			maxPeriodW = len(e.period)
+		if textwidth.String(e.period) > maxPeriodW {
+			maxPeriodW = textwidth.String(e.period)
 		}
 		for _, item := range e.items {
-			if len(item) > maxItemW {
-				maxItemW = len(item)
+			if textwidth.String(item) > maxItemW {
+				maxItemW = textwidth.String(item)
 			}
 		}
 	}
@@ -257,7 +258,7 @@ func renderTimelineVertical(td *timelineData, useASCII bool, theme *renderer.The
 	periodCol := maxPeriodW // right edge of period labels
 	axisCol := periodCol + 2
 	boxStartCol := axisCol + 2
-	boxInnerW := maxItemW + 2 // +2 for padding spaces inside box
+	boxInnerW := maxItemW + 2                  // +2 for padding spaces inside box
 	canvasWidth := boxStartCol + boxInnerW + 2 // +2 for box borders
 
 	// Height: title + each event takes 3 rows (box height) * max(1, items) + 1 gap
@@ -287,7 +288,7 @@ func renderTimelineVertical(td *timelineData, useASCII bool, theme *renderer.The
 	}
 
 	if td.title != "" {
-		titleX := (canvasWidth - len(td.title)) / 2
+		titleX := (canvasWidth - textwidth.String(td.title)) / 2
 		if titleX < 0 {
 			titleX = 0
 		}
@@ -320,7 +321,7 @@ func renderTimelineVertical(td *timelineData, useASCII bool, theme *renderer.The
 		if useRegion {
 			periodStyle = "_ansi:" + theme.RegionTextStyle(i, 0)
 		}
-		labelX := periodCol - len(e.period)
+		labelX := periodCol - textwidth.String(e.period)
 		if labelX < 0 {
 			labelX = 0
 		}
@@ -330,7 +331,7 @@ func renderTimelineVertical(td *timelineData, useASCII bool, theme *renderer.The
 		for j, item := range e.items {
 			boxTop := row + j*3
 			boxX := boxStartCol
-			boxW := len(item) + 2
+			boxW := textwidth.String(item) + 2
 
 			borderStyle := "node"
 			labelStyle := "label"
