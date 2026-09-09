@@ -83,6 +83,27 @@ and the outside. A crossing never resolves to `┼`.
 
 - The compound-node rewrite is the standard approach to clustered
   layered layout and matches what Mermaid's dagre does.
+- A border port is the cell where the crossing run meets the border. A
+  run whose cell another edge holds moves to the nearest free cell of
+  the same gap that keeps its neighbours' directions and lies on no other
+  edge's line; a run that starts or ends at a node port keeps the node's
+  port. Sorting from the side's centre as ADR-102 does for nodes would
+  pull every crossing of a wide box toward its middle.
+- The tee's stem points toward the edge's target: the line stops one cell
+  before the border, where its free end resolves to a half glyph, and
+  starts again at the border cell. With the stem this way an arrowhead may
+  sit directly inside the border.
+- An edge that starts or ends at a subgraph starts at the border cell it
+  leaves through and ends with its arrowhead just outside the border it
+  enters. Before, it ran from the member node nearest the box's centre.
+- Every gap column and row is sized from the borders in it so that the
+  corridor an edge follows never lies on a border line. The corridor of a
+  gap row holding one opening top border lies on the box's label row.
+  Cross-axis gaps take `SGGapPerLevel` per border instead of a flat 8.
+- Two edges that share a grid corridor still share its draw cells, as
+  ADR-102 notes; `subgraph-cross` shows it between B and C.
+- A subgraph's `direction` is normalized inside its block; `BT` and `RL`
+  reverse only at the top level, as before.
 
 ## Alternatives Considered
 
