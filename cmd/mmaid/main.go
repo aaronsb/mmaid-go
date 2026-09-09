@@ -448,6 +448,10 @@ func printUsage() {
 		{"requirementDiagram", "SysML requirements and elements"},
 		{"C4Context", "C4 context, container, component, deployment"},
 		{"usecase-beta", "UML actors, use cases and boundaries"},
+		{"radar-beta", "Multi-axis radar charts"},
+		{"venn-beta", "Set overlaps as filled circles"},
+		{"wardley-beta", "Value chain over evolution"},
+		{"cynefin-beta", "Sense-making across five domains"},
 	}
 	maxKW := 0
 	for _, t := range types {

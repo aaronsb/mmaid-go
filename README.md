@@ -8,7 +8,7 @@
 
 ## Features
 
-- **23 diagram types:** flowcharts, sequence, class, ER, state, block, git graphs, pie charts, treemaps, tree views, gantt, timeline, kanban, mindmap, quadrant, XY charts, user journey, packet, event modeling, ishikawa, requirement, C4, use case
+- **27 diagram types:** flowcharts, sequence, class, ER, state, block, git graphs, pie charts, treemaps, tree views, gantt, timeline, kanban, mindmap, quadrant, XY charts, user journey, packet, event modeling, ishikawa, requirement, C4, use case, radar, venn, Wardley maps, Cynefin
 - **Zero dependencies:** pure Go, single portable binary
 - **11 color themes:** including 5 solid-background themes with depth-based region coloring
 - **Anti-aliased pie charts:** circular rendering with half-block characters and supersampled edges
@@ -131,6 +131,10 @@ Every type below has a rendered example in the [gallery](docs/gallery/README.md)
 | Requirement | `requirementDiagram` | SysML requirements, elements, traceability |
 | C4 | `C4Context` / `C4Container` / `C4Component` / `C4Dynamic` / `C4Deployment` | Context, container, component and deployment views |
 | Use Case | `usecase-beta` | UML actors, use cases and system boundaries |
+| Radar | `radar-beta` | Multi-axis curves over a graticule |
+| Venn | `venn-beta` | Two or three sets as overlapping filled circles |
+| Wardley | `wardley-beta` | Value chain over an evolution axis |
+| Cynefin | `cynefin-beta` | Five sense-making domains with items and transitions |
 
 ### Node shapes
 
