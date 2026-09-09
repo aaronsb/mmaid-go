@@ -177,3 +177,59 @@ func TestStyle(t *testing.T) {
 		t.Errorf("expected myStyle, got %s", s)
 	}
 }
+
+func TestPutTextWideRune(t *testing.T) {
+	c := NewCanvas(10, 1)
+	c.PutText(0, 0, "日a", "node")
+	if ch := c.Get(0, 0); ch != '日' {
+		t.Errorf("col 0 = %q, want 日", ch)
+	}
+	if ch := c.Get(0, 1); ch != Continuation {
+		t.Errorf("col 1 = %q, want continuation", ch)
+	}
+	if ch := c.Get(0, 2); ch != 'a' {
+		t.Errorf("col 2 = %q, want a", ch)
+	}
+	if got := c.ToString(); got != "日a" {
+		t.Errorf("ToString = %q, want 日a", got)
+	}
+}
+
+func TestPutOverContinuationClearsWideRune(t *testing.T) {
+	c := NewCanvas(10, 1)
+	c.PutText(0, 0, "日", "")
+	c.Put(0, 1, 'x', false, "")
+	if ch := c.Get(0, 0); ch != ' ' {
+		t.Errorf("col 0 = %q, want space", ch)
+	}
+	if got := c.ToString(); got != " x" {
+		t.Errorf("ToString = %q, want %q", got, " x")
+	}
+}
+
+func TestPutOverWideRuneClearsContinuation(t *testing.T) {
+	c := NewCanvas(10, 1)
+	c.PutText(0, 0, "日", "")
+	c.Put(0, 0, 'x', false, "")
+	if ch := c.Get(0, 1); ch != ' ' {
+		t.Errorf("col 1 = %q, want space", ch)
+	}
+	if got := c.ToString(); got != "x" {
+		t.Errorf("ToString = %q, want x", got)
+	}
+}
+
+func TestFlipHorizontalRepairsWideRunes(t *testing.T) {
+	c := NewCanvas(4, 1)
+	c.PutText(0, 0, "日", "")
+	c.FlipHorizontal()
+	if ch := c.Get(0, 2); ch != '日' {
+		t.Errorf("col 2 = %q, want 日", ch)
+	}
+	if ch := c.Get(0, 3); ch != Continuation {
+		t.Errorf("col 3 = %q, want continuation", ch)
+	}
+	if got := c.ToString(); got != "  日" {
+		t.Errorf("ToString = %q, want %q", got, "  日")
+	}
+}
