@@ -32,7 +32,7 @@ int`. The width of a rune is 0 for combining marks, zero-width joiners,
 and variation selectors; 2 for East Asian Wide and Fullwidth characters
 and for emoji presentation characters; and 1 otherwise. The ranges come
 from `EastAsianWidth.txt` and `emoji-data.txt` of Unicode 16 and are
-emitted by `tools/gen-widths.go` as sorted `[2]rune` range tables in a
+emitted by `tools/gen-widths/main.go` as sorted `[2]rune` range tables in a
 generated file that records the Unicode version. Regenerating is
 `go generate ./internal/textwidth`.
 
