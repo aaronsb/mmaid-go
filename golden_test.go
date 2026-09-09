@@ -30,6 +30,7 @@ type fixture struct {
 	opts        []Option
 	width       int
 	orientation string
+	ascii       bool
 }
 
 // loadFixtures reads every .mmd file in the fixture directory, in name order.
@@ -100,6 +101,7 @@ func newFixture(name, source string) (fixture, error) {
 			}
 			i++
 		case "-a", "--ascii":
+			f.ascii = true
 			f.opts = append(f.opts, WithASCII())
 		case "--sharp-edges":
 			f.opts = append(f.opts, WithSharpEdges())
@@ -259,6 +261,14 @@ func TestFixturesLint(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, fx := range loadFixtures(t) {
+		if fx.ascii {
+			t.Logf("%s: skipped, the lint reads Unicode box-drawing glyphs only", fx.name)
+			if bad[fx.name] {
+				t.Errorf("%s lists %s, whose ASCII frame the lint skips", knownBad, fx.name)
+			}
+			delete(bad, fx.name)
+			continue
+		}
 		frame, err := fx.frame()
 		if err != nil {
 			t.Errorf("%s: %v", fx.name, err)

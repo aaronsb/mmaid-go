@@ -351,64 +351,17 @@ func TestLintPassesACleanBoxWithAnEdgeAndArrow(t *testing.T) {
 	}
 }
 
-func TestLintTreatsASCIIArrowheadsAsTextWithoutAnArm(t *testing.T) {
-	// "over" contains a 'v' with nothing above it.
+func TestLintReadsASCIIAsText(t *testing.T) {
+	// Every glyph here is text to the lint, dangling edge end included.
 	f := frameOf(
-		"+---+      ",
-		"|over|     ",
-		"+---+      ",
-	)
-	for _, fd := range Lint(f) {
-		if fd.Glyph == 'v' {
-			t.Errorf("a 'v' in label text was read as an arrowhead: %s", fd)
-		}
-	}
-}
-
-func TestLintReadsASCIIArrowheadsFedByAnArm(t *testing.T) {
-	f := frameOf(
-		"+---+",
-		"| A |",
-		"+-+-+",
-		"  |  ",
-		"  v  ",
-		"+---+",
-		"| B |",
-		"+---+",
+		"+---+          ",
+		"| A +--->  a.b ",
+		"+-+-+          ",
+		"  |            ",
+		"  v            ",
 	)
 	if found := Lint(f); len(found) != 0 {
-		t.Errorf("a fed ASCII arrowhead produced findings:\n%s", show(found))
-	}
-}
-
-// An ASCII rule carries an arm only where a neighbour feeds it, so text that
-// happens to contain one of these glyphs is not a dangling arm.
-
-func TestLintReadsAnASCIIRuleInTextAsText(t *testing.T) {
-	if found := Lint(frameOf("a.b")); len(found) != 0 {
-		t.Errorf("a period in a label produced findings:\n%s", show(found))
-	}
-}
-
-func TestLintPassesAnASCIIBox(t *testing.T) {
-	f := frameOf(
-		"+--+",
-		"|  |",
-		"+--+",
-	)
-	if found := Lint(f); len(found) != 0 {
-		t.Errorf("an ASCII box produced findings:\n%s", show(found))
-	}
-}
-
-func TestLintPassesAnASCIIEdgeOffABoxSide(t *testing.T) {
-	f := frameOf(
-		"+--+",
-		"|  +--->",
-		"+--+",
-	)
-	if found := Lint(f); len(found) != 0 {
-		t.Errorf("an ASCII edge produced findings:\n%s", show(found))
+		t.Errorf("ASCII output produced findings:\n%s", show(found))
 	}
 }
 

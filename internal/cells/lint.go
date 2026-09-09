@@ -59,8 +59,11 @@ func (d dir) step(row, col int) (int, int) {
 	}
 }
 
-// unicodeArms maps each box-drawing glyph mmaid draws to the arms it extends.
-var unicodeArms = map[rune]int{
+// boxArms maps each box-drawing glyph mmaid draws to the arms it extends.
+// ASCII rules are absent: '-', '|', '+', '.' and ':' are as often text as
+// they are lines, so the lint reads them as text and leaves ASCII output to
+// the goldens.
+var boxArms = map[rune]int{
 	// Light.
 	'─': armE | armW, '│': armN | armS,
 	'┌': armS | armE, '┐': armS | armW, '└': armN | armE, '┘': armN | armW,
@@ -78,21 +81,8 @@ var unicodeArms = map[rune]int{
 	'╔': armS | armE, '╗': armS | armW, '╚': armN | armE, '╝': armN | armW,
 }
 
-// asciiArms maps each ASCII rule to the arms it may extend. These glyphs are
-// also ordinary text, so one carries an arm only on a side where a neighbour
-// feeds it, and a glyph with no fed side is text.
-var asciiArms = map[rune]int{
-	'-': armE | armW, '|': armN | armS,
-	'+': armN | armS | armE | armW,
-	'.': armE | armW, ':': armN | armS,
-}
-
-// arrowTails maps each Unicode arrowhead to the side its tail is on.
+// arrowTails maps each arrowhead to the side its tail is on.
 var arrowTails = map[rune]dir{'▲': south, '▼': north, '◄': east, '►': west}
-
-// asciiArrowTails maps the ASCII arrowheads to their tail sides. These are
-// text too, so one counts as an arrowhead only when an arm feeds its tail.
-var asciiArrowTails = map[rune]dir{'^': south, 'v': north, '<': east, '>': west}
 
 // glyphAt returns the glyph at (row, col); outside the frame it is a space.
 func glyphAt(f *Frame, row, col int) rune {
@@ -102,73 +92,11 @@ func glyphAt(f *Frame, row, col int) rune {
 	return f.At(row, col).Cp
 }
 
-// candidateArms returns the arms a glyph may extend and whether the glyph is
-// an ASCII rule, whose arms depend on its neighbours.
-func candidateArms(g rune) (int, bool) {
-	if arms, ok := unicodeArms[g]; ok {
-		return arms, false
-	}
-	if arms, ok := asciiArms[g]; ok {
-		return arms, true
-	}
-	return 0, false
-}
-
-// accepts reports whether the glyph at (row, col) would meet an arm arriving
-// on its side d, either with an arm of its own or as an arrowhead whose tail
-// is on that side. It reads candidate arms, so it never recurses.
-func accepts(f *Frame, row, col int, d dir) bool {
-	g := glyphAt(f, row, col)
-	if arms, _ := candidateArms(g); arms != 0 {
-		return arms&d.bit() != 0
-	}
-	if t, ok := arrowTails[g]; ok {
-		return t == d
-	}
-	if t, ok := asciiArrowTails[g]; ok {
-		return t == d
-	}
-	return false
-}
-
-// armsAt returns the arms the glyph at (row, col) extends. An ASCII rule keeps
-// only the arms a neighbour feeds; zero arms means the glyph reads as text.
-func armsAt(f *Frame, row, col int) int {
-	arms, ambiguous := candidateArms(glyphAt(f, row, col))
-	if !ambiguous {
-		return arms
-	}
-	fed := 0
-	for _, d := range dirs {
-		if arms&d.bit() == 0 {
-			continue
-		}
-		nr, nc := d.step(row, col)
-		if accepts(f, nr, nc, d.opposite()) {
-			fed |= d.bit()
-		}
-	}
-	return fed
-}
-
 // fedFrom reports whether the neighbour on side d of (row, col) extends an arm
 // back toward it.
 func fedFrom(f *Frame, row, col int, d dir) bool {
 	nr, nc := d.step(row, col)
-	return armsAt(f, nr, nc)&d.opposite().bit() != 0
-}
-
-// arrowhead reports whether (row, col) holds an arrowhead and which side its
-// tail is on.
-func arrowhead(f *Frame, row, col int) (dir, bool) {
-	g := glyphAt(f, row, col)
-	if t, ok := arrowTails[g]; ok {
-		return t, true
-	}
-	if t, ok := asciiArrowTails[g]; ok && fedFrom(f, row, col, t) {
-		return t, true
-	}
-	return north, false
+	return boxArms[glyphAt(f, nr, nc)]&d.opposite().bit() != 0
 }
 
 // Lint walks the glyph grid and reports every arm that does not meet
@@ -181,12 +109,12 @@ func Lint(f *Frame) []Finding {
 			g := glyphAt(f, row, col)
 
 			for _, d := range dirs {
-				if armsAt(f, row, col)&d.bit() == 0 {
+				if boxArms[g]&d.bit() == 0 {
 					continue
 				}
 				nr, nc := d.step(row, col)
 				ng := glyphAt(f, nr, nc)
-				if tail, isArrow := arrowhead(f, nr, nc); isArrow {
+				if tail, isArrow := arrowTails[ng]; isArrow {
 					if tail != d.opposite() {
 						out = append(out, Finding{row, col, g, 3, fmt.Sprintf(
 							"%s arm meets arrowhead %c on its %s side, not its tail",
@@ -194,7 +122,7 @@ func Lint(f *Frame) []Finding {
 					}
 					continue
 				}
-				if narms := armsAt(f, nr, nc); narms != 0 {
+				if narms, isBox := boxArms[ng]; isBox {
 					if narms&d.opposite().bit() == 0 {
 						out = append(out, Finding{row, col, g, 1, fmt.Sprintf(
 							"%s arm meets %c, which has no %s arm back",
@@ -208,11 +136,9 @@ func Lint(f *Frame) []Finding {
 				}
 			}
 
-			if tail, isArrow := arrowhead(f, row, col); isArrow {
-				if !fedFrom(f, row, col, tail) {
-					out = append(out, Finding{row, col, g, 2, fmt.Sprintf(
-						"no arm feeds arrowhead %c from the %s", g, tail.name())})
-				}
+			if tail, isArrow := arrowTails[g]; isArrow && !fedFrom(f, row, col, tail) {
+				out = append(out, Finding{row, col, g, 2, fmt.Sprintf(
+					"no arm feeds arrowhead %c from the %s", g, tail.name())})
 			}
 		}
 	}

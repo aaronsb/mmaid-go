@@ -112,8 +112,8 @@ returns one finding per violation, each with row, column, glyph, and rule:
 2. An arrowhead must have an arm feeding it from its tail side.
 3. An arm may meet an arrowhead only from the tail side.
 
-ASCII line glyphs are ambiguous with text and carry an arm only on a side
-where a neighbour feeds it.
+The lint reads Unicode box-drawing glyphs only. ASCII output is ambiguous
+with text and is covered by the goldens.
 
 Rule 2 flags `╮►`. Rule 1 flags `─╭─`. Rule 3 flags `▼` over `┴`. The
 lint knows nothing about layout: a `┼` where an edge crosses a subgraph
