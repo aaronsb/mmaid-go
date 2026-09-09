@@ -455,6 +455,7 @@ func printUsage() {
 		{"swimlane-beta", "Flowchart in lanes across the flow"},
 		{"sankey-beta", "Flows between nodes, sized by value"},
 		{"zenuml", "Sequences in ZenUML's syntax"},
+		{"architecture-beta", "Services and groups placed by direction hints"},
 	}
 	maxKW := 0
 	for _, t := range types {
@@ -761,6 +762,19 @@ Electricity,"Losses, grid",15`,
         C[Take payment]
     end
     A --> B --> C --> D --> E`,
+	"architecture": `architecture-beta
+    group api(cloud)[API]
+
+    service db(database)[Database] in api
+    service server(server)[Server] in api
+    junction split in api
+    service disk1(disk)[Storage] in api
+    service disk2(disk)[Storage] in api
+
+    db:L -- R:server
+    db:B -- T:split
+    split:L -- R:disk1
+    split:R -- L:disk2`,
 }
 
 var demoTypes = []struct{ name, key string }{
@@ -794,6 +808,7 @@ var demoTypes = []struct{ name, key string }{
 	{"Swimlane", "swimlane"},
 	{"Sankey Diagram", "sankey"},
 	{"ZenUML Sequence", "zenuml"},
+	{"Architecture", "architecture"},
 }
 
 func runDemo(w io.Writer, themeName, diagramType string, opts ...mmaid.Option) {
@@ -827,12 +842,13 @@ func runDemo(w io.Writer, themeName, diagramType string, opts ...mmaid.Option) {
 			"treeview-beta": "treeview", "tree": "treeview",
 			"eventmodel": "eventmodeling", "em": "eventmodeling",
 			"ishikawa-beta": "ishikawa", "fishbone": "ishikawa",
-			"radar-beta":   "radar",
-			"venn-beta":    "venn",
-			"wardley-beta": "wardley",
-			"cynefin-beta": "cynefin",
-			"sankey-beta":  "sankey",
-			"zen":          "zenuml",
+			"radar-beta":        "radar",
+			"venn-beta":         "venn",
+			"wardley-beta":      "wardley",
+			"cynefin-beta":      "cynefin",
+			"sankey-beta":       "sankey",
+			"zen":               "zenuml",
+			"architecture-beta": "architecture", "arch": "architecture",
 		}
 		if mapped, ok2 := aliases[strings.ToLower(diagramType)]; ok2 {
 			source = demoSamples[mapped]
