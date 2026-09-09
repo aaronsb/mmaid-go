@@ -453,6 +453,7 @@ func printUsage() {
 		{"wardley-beta", "Value chain over evolution"},
 		{"cynefin-beta", "Sense-making across five domains"},
 		{"sankey-beta", "Flows between nodes, sized by value"},
+		{"zenuml", "Sequences in ZenUML's syntax"},
 	}
 	maxKW := 0
 	for _, t := range types {
@@ -670,6 +671,22 @@ Solar,Electricity,15
 Electricity,Homes,40
 Electricity,Industry,35
 Electricity,"Losses, grid",15`,
+	"zenuml": `zenuml
+    title Order checkout
+    @Actor Customer
+    Cart
+    @Database Inventory
+    Customer->Cart: add item
+    // reserve stock, then charge
+    receipt = Cart.checkout(token) {
+      Inventory.reserve(sku)
+      if (inStock) {
+        Payments.charge(token)
+        return receipt
+      } else {
+        return backorder
+      }
+    }`,
 	"ishikawa": `ishikawa-beta
     Late Delivery
         Process
@@ -761,6 +778,7 @@ var demoTypes = []struct{ name, key string }{
 	{"Wardley Map", "wardley"},
 	{"Cynefin Framework", "cynefin"},
 	{"Sankey Diagram", "sankey"},
+	{"ZenUML Sequence", "zenuml"},
 }
 
 func runDemo(w io.Writer, themeName, diagramType string, opts ...mmaid.Option) {
@@ -799,6 +817,7 @@ func runDemo(w io.Writer, themeName, diagramType string, opts ...mmaid.Option) {
 			"wardley-beta": "wardley",
 			"cynefin-beta": "cynefin",
 			"sankey-beta":  "sankey",
+			"zen":          "zenuml",
 		}
 		if mapped, ok2 := aliases[strings.ToLower(diagramType)]; ok2 {
 			source = demoSamples[mapped]

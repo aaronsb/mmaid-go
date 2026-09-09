@@ -154,6 +154,8 @@ func detectDiagramType(source string) string {
 			return "packet"
 		case strings.HasPrefix(lower, "sankey"):
 			return "sankey"
+		case strings.HasPrefix(lower, "zenuml"):
+			return "zenuml"
 		case strings.HasPrefix(lower, "eventmodeling"):
 			return "eventmodeling"
 		case strings.HasPrefix(lower, "ishikawa"):
@@ -243,6 +245,8 @@ func Render(source string, opts ...Option) (result string) {
 		canvas = diagram.RenderPacket(source, cs, getThemePtr(cfg.theme))
 	case "sankey":
 		canvas = diagram.RenderSankey(source, cs, getThemePtr(cfg.theme))
+	case "zenuml":
+		canvas = diagram.RenderZenUML(source, cs)
 	case "eventmodeling":
 		canvas = diagram.RenderEventModeling(source, cs, getThemePtr(cfg.theme))
 	case "ishikawa":

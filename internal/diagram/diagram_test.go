@@ -1703,3 +1703,210 @@ func TestSankeyEmpty(t *testing.T) {
 	c := RenderSankey("sankey-beta", renderer.UNICODE, nil)
 	assertCanvasContains(t, c, "[sankey] no links")
 }
+
+// ── ZenUML ──────────────────────────────────────────────────────────────────
+
+// zenMessages lists the arrows a parsed ZenUML source draws, in order, as
+// "source>target:label" with a leading "~" on a dotted one.
+func zenMessages(t *testing.T, source string) []string {
+	t.Helper()
+	var out []string
+	for _, ev := range flattenEvents(parseZenUML(source).events, 0) {
+		if m, ok := ev.(*message); ok {
+			prefix := ""
+			if m.lineType == "dotted" {
+				prefix = "~"
+			}
+			out = append(out, prefix+m.source+">"+m.target+":"+m.label)
+		}
+	}
+	return out
+}
+
+// A sync call is an arrow, an activation on the callee, the statements of its
+// body, and the reply its `return` asks for.
+func TestZenUMLSyncCallReturnsToItsCaller(t *testing.T) {
+	got := zenMessages(t, `zenuml
+    Client->A.method() {
+      B.method() {
+        return inner
+      }
+      return outer
+    }`)
+	want := []string{
+		"Client>A:method()",
+		"A>B:method()",
+		"~B>A:inner",
+		"~A>Client:outer",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("messages =\n%v\nwant\n%v", got, want)
+	}
+}
+
+// An assignment replies with the variable's name, and only when the body did
+// not reply for itself.
+func TestZenUMLAssignmentReplies(t *testing.T) {
+	got := zenMessages(t, "zenuml\nStarter\nresult = A.get()\nSomeType typed = A.get2()")
+	want := []string{"Starter>A:get()", "~A>Starter:result", "Starter>A:get2()", "~A>Starter:typed"}
+	if !slices.Equal(got, want) {
+		t.Errorf("messages = %v, want %v", got, want)
+	}
+
+	got = zenMessages(t, "zenuml\nStarter\nresult = A.get() {\n  return actual\n}")
+	want = []string{"Starter>A:get()", "~A>Starter:actual"}
+	if !slices.Equal(got, want) {
+		t.Errorf("messages = %v, want %v", got, want)
+	}
+}
+
+// A call raises an activation on its callee and drops it when the body ends.
+func TestZenUMLCallActivatesTheCallee(t *testing.T) {
+	events := flattenEvents(parseZenUML("zenuml\nStarter\nA.method() {\n  B.method()\n}").events, 0)
+	var got []string
+	for _, ev := range events {
+		if a, ok := ev.(*activateEvent); ok {
+			state := "off"
+			if a.active {
+				state = "on"
+			}
+			got = append(got, a.participant+":"+state)
+		}
+	}
+	want := []string{"A:on", "B:on", "B:off", "A:off"}
+	if !slices.Equal(got, want) {
+		t.Errorf("activations = %v, want %v", got, want)
+	}
+}
+
+// The starter is the declared one, else the first statement's sender, else
+// the first declared participant, else a lane of its own.
+func TestZenUMLStarterResolution(t *testing.T) {
+	cases := []struct{ source, want string }{
+		{"zenuml\n@Starter(Bob)\nAlice->John: hi", "Bob"},
+		{"zenuml\nBob\nAlice\nAlice->Bob: Hi Bob", "Alice"},
+		{"zenuml\nBookService\nBookService.getBook()", "BookService"},
+		{"zenuml\nA.method()", "Starter"},
+	}
+	for _, c := range cases {
+		if got := zenStarter(zenLines(c.source)); got != c.want {
+			t.Errorf("starter of %q = %q, want %q", c.source, got, c.want)
+		}
+	}
+}
+
+// An annotator picks the participant's shape and `as` its label.
+func TestZenUMLAnnotatorsAndAliases(t *testing.T) {
+	d := parseZenUML("zenuml\n@Actor Customer\n@Database Inventory\n@Lambda Fn\nA as Alice\nCustomer->A: hi")
+	want := []struct{ id, label, kind string }{
+		{"Customer", "Customer", "actor"},
+		{"Inventory", "Inventory", "database"},
+		{"Fn", "Fn", "participant"},
+		{"A", "Alice", "participant"},
+	}
+	if len(d.participants) != len(want) {
+		t.Fatalf("participants = %+v", d.participants)
+	}
+	for i, w := range want {
+		p := d.participants[i]
+		if p.id != w.id || p.label != w.label || p.kind != w.kind {
+			t.Errorf("participant %d = %q/%q/%q, want %q/%q/%q", i, p.id, p.label, p.kind, w.id, w.label, w.kind)
+		}
+	}
+}
+
+// Each fragment keyword maps to the frame the sequence renderer draws for it.
+func TestZenUMLFragmentsMapToFrames(t *testing.T) {
+	d := parseZenUML(`zenuml
+    Starter
+    if (a) {
+      A.one()
+    } else if (b) {
+      A.two()
+    } else {
+      A.three()
+    }
+    while (more) {
+      A.four()
+    }
+    opt {
+      A.five()
+    }
+    par {
+      A.six()
+    }
+    try {
+      A.seven()
+    } catch (Boom) {
+      A.eight()
+    } finally {
+      A.nine()
+    }`)
+
+	var kinds []string
+	var sections []string
+	for _, ev := range d.events {
+		blk, ok := ev.(*block)
+		if !ok {
+			continue
+		}
+		kinds = append(kinds, blk.kind)
+		for _, s := range blk.sections {
+			sections = append(sections, s.label)
+		}
+	}
+	if want := []string{"alt", "loop", "opt", "par", "critical"}; !slices.Equal(kinds, want) {
+		t.Errorf("frames = %v, want %v", kinds, want)
+	}
+	if want := []string{"else b", "else", "catch Boom", "finally"}; !slices.Equal(sections, want) {
+		t.Errorf("sections = %v, want %v", sections, want)
+	}
+}
+
+// A comment above a message becomes a note over the participant it reaches.
+func TestZenUMLCommentBecomesANote(t *testing.T) {
+	d := parseZenUML("zenuml\nBookService\n// a comment on a message.\n// **Markdown** is supported.\nBookService.getBook()")
+	n, ok := d.events[0].(*note)
+	if !ok {
+		t.Fatalf("first event = %T, want a note", d.events[0])
+	}
+	if n.position != "over" || len(n.participants) != 1 || n.participants[0] != "BookService" {
+		t.Errorf("note = %+v", n)
+	}
+	if want := "a comment on a message.\n**Markdown** is supported."; n.text != want {
+		t.Errorf("note text = %q, want %q", n.text, want)
+	}
+}
+
+// A comment on a participant is not rendered.
+func TestZenUMLCommentOnAParticipantIsDropped(t *testing.T) {
+	d := parseZenUML("zenuml\n// a comment on a participant\nBookService\nA->B: hi")
+	for _, ev := range d.events {
+		if _, ok := ev.(*note); ok {
+			t.Errorf("events = %+v, want no note", d.events)
+		}
+	}
+}
+
+// The @return annotator makes the async message that follows it a reply.
+func TestZenUMLReturnAnnotator(t *testing.T) {
+	got := zenMessages(t, "zenuml\n@return\nA->Client: x11\nA->Client: x12")
+	want := []string{"~A>Client:x11", "A>Client:x12"}
+	if !slices.Equal(got, want) {
+		t.Errorf("messages = %v, want %v", got, want)
+	}
+}
+
+// A title is a sequence-model field, and both syntaxes render through it.
+func TestZenUMLTitle(t *testing.T) {
+	c := RenderZenUML("zenuml\ntitle Demo\nAlice->John: Hello", renderer.UNICODE)
+	assertCanvasContains(t, c, "Demo")
+	assertCanvasContains(t, c, "Hello")
+	if got := parseSequenceDiagram("sequenceDiagram\n  A->>B: x").title; got != "" {
+		t.Errorf("a sequence diagram has title %q, want none", got)
+	}
+}
+
+func TestZenUMLEmpty(t *testing.T) {
+	assertCanvasNotEmpty(t, RenderZenUML("zenuml\nAlice->Bob: hi", renderer.UNICODE))
+}
