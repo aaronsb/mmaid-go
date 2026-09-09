@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aaronsb/mmaid-go/internal/graph"
 	"github.com/aaronsb/mmaid-go/internal/renderer"
 )
 
@@ -358,4 +359,87 @@ func TestTreemapBasic(t *testing.T) {
 	assertCanvasContains(t, c, "Section")
 	assertCanvasContains(t, c, "Item")
 	assertCanvasContains(t, c, "100")
+}
+
+// ── Requirement Diagram ─────────────────────────────────────────────────────
+
+const reqSrc = `requirementDiagram
+    requirement checkout_req {
+    id: 1
+    text: Orders must be payable online.
+    risk: high
+    verifymethod: test
+    }
+
+    functionalRequirement payment_req {
+    id: 1.1
+    text: Card payments must be authorised.
+    risk: high
+    verifymethod: test
+    }
+
+    element checkout_service {
+    type: service
+    docref: docs/checkout.md
+    }
+
+    checkout_req - contains -> payment_req
+    checkout_service - satisfies -> payment_req`
+
+func TestRequirementNodesAndShapes(t *testing.T) {
+	g := ParseRequirementDiagram(reqSrc)
+	if len(g.Nodes) != 3 {
+		t.Fatalf("expected 3 nodes, got %d", len(g.Nodes))
+	}
+	if got := g.Nodes["checkout_req"].Shape; got != graph.ShapeRectangle {
+		t.Errorf("requirement shape = %v, want rectangle", got)
+	}
+	if got := g.Nodes["checkout_service"].Shape; got != graph.ShapeRounded {
+		t.Errorf("element shape = %v, want rounded", got)
+	}
+	if g.Direction != graph.DirTB {
+		t.Errorf("direction = %v, want TB", g.Direction)
+	}
+}
+
+func TestRequirementLabelLines(t *testing.T) {
+	g := ParseRequirementDiagram(reqSrc)
+	label := g.Nodes["checkout_req"].Label
+	for _, want := range []string{"checkout_req", "id: 1", "Orders must be payable online.", "risk: high | verify: test"} {
+		if !strings.Contains(label, want) {
+			t.Errorf("requirement label missing %q\n%s", want, label)
+		}
+	}
+	elem := g.Nodes["checkout_service"].Label
+	for _, want := range []string{"[service]", "checkout_service", "docs/checkout.md"} {
+		if !strings.Contains(elem, want) {
+			t.Errorf("element label missing %q\n%s", want, elem)
+		}
+	}
+}
+
+func TestRequirementEdgeLabels(t *testing.T) {
+	g := ParseRequirementDiagram(reqSrc)
+	if len(g.Edges) != 2 {
+		t.Fatalf("expected 2 edges, got %d", len(g.Edges))
+	}
+	if g.Edges[0].Source != "checkout_req" || g.Edges[0].Target != "payment_req" || g.Edges[0].Label != "contains" {
+		t.Errorf("edge 0 = %+v", g.Edges[0])
+	}
+	if g.Edges[1].Label != "satisfies" {
+		t.Errorf("edge 1 label = %q, want satisfies", g.Edges[1].Label)
+	}
+}
+
+func TestRequirementReverseRelationAndDirection(t *testing.T) {
+	g := ParseRequirementDiagram("requirementDiagram\ndirection LR\nrequirement a {\nid: 1\n}\nelement b {\ntype: sim\n}\na <- copies - b")
+	if g.Direction != graph.DirLR || !g.DirectionExplicit {
+		t.Errorf("direction = %v (explicit %v), want LR", g.Direction, g.DirectionExplicit)
+	}
+	if len(g.Edges) != 1 {
+		t.Fatalf("expected 1 edge, got %d", len(g.Edges))
+	}
+	if g.Edges[0].Source != "b" || g.Edges[0].Target != "a" || g.Edges[0].Label != "copies" {
+		t.Errorf("reverse edge = %+v, want b -> a copies", g.Edges[0])
+	}
 }

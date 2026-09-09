@@ -114,6 +114,8 @@ func detectDiagramType(source string) string {
 			return "journey"
 		case strings.HasPrefix(lower, "packet"):
 			return "packet"
+		case strings.HasPrefix(lower, "requirementdiagram"):
+			return "requirement"
 		default:
 			return "flowchart"
 		}
@@ -178,6 +180,9 @@ func Render(source string, opts ...Option) (result string) {
 		canvas = diagram.RenderJourney(source, cfg.useASCII, getThemePtr(cfg.theme))
 	case "packet":
 		canvas = diagram.RenderPacket(source, cfg.useASCII, getThemePtr(cfg.theme))
+	case "requirement":
+		g := diagram.ParseRequirementDiagram(source)
+		canvas = renderer.RenderGraphCanvas(g, cfg.useASCII, cfg.paddingX, cfg.paddingY, cfg.roundedEdges, diagram.UsableWidth())
 	default:
 		g := parser.ParseFlowchart(source)
 		canvas = renderer.RenderGraphCanvas(g, cfg.useASCII, cfg.paddingX, cfg.paddingY, cfg.roundedEdges, diagram.UsableWidth())

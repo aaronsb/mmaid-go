@@ -416,6 +416,7 @@ func printUsage() {
 		{"treemap-beta", "Proportional treemaps"},
 		{"journey", "User journey maps"},
 		{"packet-beta", "Network packet layouts"},
+		{"requirementDiagram", "SysML requirements and elements"},
 	}
 	maxKW := 0
 	for _, t := range types {
@@ -506,6 +507,28 @@ var demoSamples = map[string]string{
     96-99: "Data Offset"
     100-111: "Flags"
     112-127: "Window"`,
+	"requirement": `requirementDiagram
+    requirement checkout_req {
+    id: 1
+    text: Orders must be payable online.
+    risk: high
+    verifymethod: test
+    }
+
+    functionalRequirement payment_req {
+    id: 1.1
+    text: Card payments must be authorised.
+    risk: high
+    verifymethod: test
+    }
+
+    element checkout_service {
+    type: service
+    docref: docs/checkout.md
+    }
+
+    checkout_req - contains -> payment_req
+    checkout_service - satisfies -> payment_req`,
 	"quadrant": `quadrantChart
     title Priority Matrix
     x-axis Low Effort --> High Effort
@@ -583,6 +606,7 @@ var demoTypes = []struct{ name, key string }{
 	{"Treemap", "treemap"},
 	{"User Journey", "journey"},
 	{"Packet Diagram", "packet"},
+	{"Requirement Diagram", "requirement"},
 }
 
 func runDemo(w io.Writer, themeName, diagramType string) {
