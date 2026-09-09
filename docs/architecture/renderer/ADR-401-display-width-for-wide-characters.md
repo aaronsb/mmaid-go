@@ -76,6 +76,13 @@ The `wide-label` fixture of ADR-101 is re-recorded; its borders align.
 - Grapheme clusters are not handled: a flag emoji made of two regional
   indicators is measured as 4. Terminals disagree on that case as well.
 - Ambiguous width is a per-terminal fact the table cannot know.
+- Combining marks are dropped from the canvas; a label renders its base
+  characters only.
+- `MMAID_AMBIGUOUS_WIDE` changes label measurement only. Box-drawing glyphs
+  are East Asian Ambiguous and always occupy one canvas cell, so on a
+  terminal that renders them wide the borders are wrong regardless of the
+  flag. ADR-500's advance-width probe reports that terminal; fixing it needs
+  the canvas to store those glyphs as wide, which is out of scope here.
 
 ### Neutral
 
