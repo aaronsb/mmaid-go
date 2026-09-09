@@ -169,6 +169,9 @@ func FromEnv() Tolerance {
 // Passes reports whether a report clears the tolerance. Glyphs must all match
 // even outside strict mode.
 func (t Tolerance) Passes(r Report) bool {
+	if r.Expected != r.Actual {
+		return false
+	}
 	if t.Strict {
 		return len(r.Diffs) == 0
 	}

@@ -389,3 +389,16 @@ func show(fs []Finding) string {
 	}
 	return b.String()
 }
+
+func TestSizeChangeFailsEveryTolerance(t *testing.T) {
+	a := NewFrame(4, 2)
+	b := NewFrame(5, 2)
+	r := Compare(a, b)
+	if r.Expected == r.Actual {
+		t.Fatal("sizes should differ")
+	}
+	loose := Tolerance{MinIdentical: 0, MaxDistance: 1e9}
+	if loose.Passes(r) {
+		t.Fatal("a size change passed a tolerance that accepts everything else")
+	}
+}
