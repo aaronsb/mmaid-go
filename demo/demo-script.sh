@@ -246,6 +246,28 @@ show "echo 'treemap-beta
             \"Queue\": 15' | $MMAID -t sunset"
 
 # ═══════════════════════════════════════════════════════
+# TOUR — every remaining diagram type, one screen each
+# ═══════════════════════════════════════════════════════
+
+TOUR=(
+  "class:blueprint" "block:slate" "timeline:gruvbox" "journey:sunset"
+  "packet:monokai" "mindmap:amber" "quadrant:neon" "requirement:blueprint"
+  "c4:slate" "usecase:gruvbox" "swimlane:blueprint" "architecture:monokai"
+  "radar:sunset" "venn:slate" "wardley:amber" "cynefin:blueprint"
+  "treeview:gruvbox" "eventmodeling:monokai" "ishikawa:slate"
+  "sankey:sunset" "zenuml:blueprint"
+)
+DELAY=2.5
+for item in "${TOUR[@]}"; do
+  type="${item%%:*}"
+  theme="${item##*:}"
+  clear
+  header "$type — $theme"
+  show "$MMAID --demo $type -t $theme"
+done
+DELAY=3.5
+
+# ═══════════════════════════════════════════════════════
 # JSON INGEST — real data, no Mermaid syntax needed
 # ═══════════════════════════════════════════════════════
 
@@ -263,5 +285,5 @@ run "echo '{\"Go\":45,\"Rust\":30,\"Python\":25}' | $MMAID --json pie -t phospho
 
 # ═══════════════════════════════════════════════════════
 sleep 1
-printf '\n\033[1;37m  15 diagram types. 11 themes. JSON ingest. One binary.\033[0m\n\n'
+printf '\n\033[1;37m  31 diagram types. 11 themes. JSON ingest. One binary.\033[0m\n\n'
 sleep 3
