@@ -31,6 +31,8 @@ type fixture struct {
 	width       int
 	orientation string
 	ascii       bool
+	glyphs      string // the set --glyphs names
+	sample      bool   // --glyphs-sample: the sheet instead of a render
 }
 
 // loadFixtures reads every .mmd file in the fixture directory, in name order.
@@ -102,19 +104,34 @@ func newFixture(name, source string) (fixture, error) {
 			i++
 		case "-a", "--ascii":
 			f.ascii = true
-			f.opts = append(f.opts, WithASCII())
+			f.glyphs = "ascii"
+		case "--glyphs":
+			if f.glyphs, err = next(i, flag); err != nil {
+				return f, err
+			}
+			f.ascii = f.glyphs == "ascii"
+			i++
+		case "--glyphs-sample":
+			f.sample = true
 		case "--sharp-edges":
 			f.opts = append(f.opts, WithSharpEdges())
 		default:
 			return f, fmt.Errorf("unknown flag %q in the mmaid directive", flag)
 		}
 	}
+	if f.glyphs != "" {
+		f.opts = append(f.opts, WithGlyphs(f.glyphs, nil))
+	}
 	f.opts = append(f.opts, WithTheme(theme))
 	return f, nil
 }
 
-// frame renders the fixture and interprets the resulting stream.
+// frame renders the fixture and interprets the resulting stream. A
+// --glyphs-sample fixture is the sheet the flag prints.
 func (f fixture) frame() (*cells.Frame, error) {
+	if f.sample {
+		return cells.Interpret(GlyphSheet(f.glyphs, nil))
+	}
 	diagram.SetWidthOverride(f.width)
 	defer diagram.SetWidthOverride(0)
 	if f.orientation != "" {
@@ -255,10 +272,14 @@ func TestFixturesLint(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, fx := range loadFixtures(t) {
-		if fx.ascii {
-			t.Logf("%s: skipped, the lint reads Unicode box-drawing glyphs only", fx.name)
+		if fx.ascii || fx.sample {
+			why := "the lint reads Unicode box-drawing glyphs only"
+			if fx.sample {
+				why = "a glyph sheet is a specimen, not a diagram"
+			}
+			t.Logf("%s: skipped, %s", fx.name, why)
 			if bad[fx.name] {
-				t.Errorf("%s lists %s, whose ASCII frame the lint skips", knownBad, fx.name)
+				t.Errorf("%s lists %s, whose frame the lint skips", knownBad, fx.name)
 			}
 			delete(bad, fx.name)
 			continue

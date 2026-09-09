@@ -174,6 +174,26 @@ gitGraph
 
 ![gitgraph](gitgraph.png)
 
+## glyph-samples
+
+Rendered with `--glyphs-sample`.
+
+```mermaid
+
+```
+
+![glyph-samples](glyph-samples.png)
+
+## glyph-samples-legacy
+
+Rendered with `--glyphs-sample --glyphs legacy`.
+
+```mermaid
+
+```
+
+![glyph-samples-legacy](glyph-samples-legacy.png)
+
 ## journey
 
 Rendered with `-t default -w 120`.

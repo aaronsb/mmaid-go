@@ -157,6 +157,10 @@ clearing the screen between renders, polling at 250 ms.
   keys the profile to the wrong terminal. `mmaid config show` makes
   that visible.
 - Five resolution sources for each setting is a debugging surface.
+- A render keys its profile by `TERM_PROGRAM` or `TERM` and never queries
+  the terminal, so a profile the tester keyed by a DA1 name (a terminal
+  that sets no `TERM_PROGRAM`) is not found by a render. The tester prints
+  the key a render will use when the two differ.
 
 ### Neutral
 
@@ -165,6 +169,18 @@ clearing the screen between renders, polling at 250 ms.
 - The CLI grows a `config` subcommand beside its flags.
 - Theme colours are unchanged by this ADR; base16 scheme files are a
   separate decision.
+- A failure reaches up its chain: a family whose fallback failed is drawn
+  from the failed family's own fallback, so a failed `blocks` sends braille,
+  sextants, octants and legacy-fills to ASCII, and a failed `box-light` sends
+  every box family there.
+- The `legacy` set binds the fills role to `legacy-fills`: bars and shades
+  from the U+1FB9x fills, and the pie's half-cell circle from the U+1FB8E
+  and U+1FB8F medium-shade halves, so it dithers. Everything else is the
+  unicode set.
+- The diamond and hexagon indicators belong to `diagonals` with the chamfers
+  they accompany; the circle markers belong to `arrows` with the endpoints.
+- The sample sheet is a specimen, not a diagram: the structural lint skips
+  it, as it skips ASCII frames.
 
 ## Alternatives Considered
 
