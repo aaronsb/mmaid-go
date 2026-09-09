@@ -1904,7 +1904,7 @@ func TestZenUMLFragmentsMapToFrames(t *testing.T) {
 	if want := []string{"alt", "loop", "opt", "par", "critical"}; !slices.Equal(kinds, want) {
 		t.Errorf("frames = %v, want %v", kinds, want)
 	}
-	if want := []string{"else b", "else", "catch Boom", "finally"}; !slices.Equal(sections, want) {
+	if want := []string{"b", "else", "Boom", "finally"}; !slices.Equal(sections, want) {
 		t.Errorf("sections = %v, want %v", sections, want)
 	}
 }
@@ -2047,5 +2047,42 @@ func TestSankeyValueFormat(t *testing.T) {
 		if got := sankeyValue(v); got != want {
 			t.Errorf("sankeyValue(%v) = %q, want %q", v, got, want)
 		}
+	}
+}
+
+// A keyword is a keyword only as upstream's lexer spells it, so a capitalised
+// participant name that starts with one is still a participant.
+func TestZenUMLKeywordsAreCaseSensitive(t *testing.T) {
+	got := zenMessages(t, "zenuml\nClient\nIf.check(x)\nLoop.next()\nReturn.value()")
+	want := []string{"Client>If:check(x)", "Client>Loop:next()", "Client>Return:value()"}
+	if !slices.Equal(got, want) {
+		t.Errorf("messages = %v, want %v", got, want)
+	}
+	d := parseZenUML("zenuml\nClient\nIf.check(x)\nLoop.next()\nReturn.value()")
+	if len(d.events) == 0 {
+		t.Fatal("no events")
+	}
+	for _, ev := range d.events {
+		if blk, ok := ev.(*block); ok {
+			t.Errorf("a capitalised name opened a %q frame", blk.kind)
+		}
+	}
+
+	// `Title` alone is a participant, not an empty title.
+	d = parseZenUML("zenuml\nTitle\nTitle->B: hi")
+	if d.title != "" {
+		t.Errorf("title = %q, want none", d.title)
+	}
+	if len(d.participants) != 2 || d.participants[0].id != "Title" {
+		t.Errorf("participants = %+v, want Title first", d.participants)
+	}
+}
+
+// The reply annotation binds to the line after it and to nothing further.
+func TestZenUMLReturnAnnotatorBindsToTheNextLine(t *testing.T) {
+	got := zenMessages(t, "zenuml\nA\n@return\nB.sync()\nB->A: late")
+	want := []string{"A>B:sync()", "B>A:late"}
+	if !slices.Equal(got, want) {
+		t.Errorf("messages = %v, want the late arrow solid: %v", got, want)
 	}
 }

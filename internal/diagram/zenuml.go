@@ -39,6 +39,8 @@ import (
 //   - a comment above a fragment or a participant. Upstream renders the
 //     first and ignores the second; here both are dropped, the model having
 //     nowhere to hang a note that is not over a message.
+//   - a `return` outside a call, which the grammar allows as a statement of
+//     its own. There is no caller for it to reply to.
 //
 // Divergences:
 //   - An async message draws the arrowhead a sync call draws. The two are
@@ -50,23 +52,26 @@ import (
 // string.
 const zenName = `(?:"[^"]*"|[A-Za-z_][A-Za-z_0-9]*)`
 
+// The keywords are case-sensitive, as `sequenceLexer.g4` writes them: a
+// participant named If or Return is a participant. Only the two
+// annotations have alternate spellings.
 var (
-	reZenTitle   = regexp.MustCompile(`(?i)^title(?:\s+(.*))?$`)
+	reZenTitle   = regexp.MustCompile(`^title(?:\s+(.*))?$`)
 	reZenStarter = regexp.MustCompile(`(?i)^@starter\s*\(\s*(` + zenName + `)?\s*\)$`)
 	reZenReplyAt = regexp.MustCompile(`(?i)^@(?:return|reply)$`)
 	reZenAnnot   = regexp.MustCompile(`^@([A-Za-z_][A-Za-z_0-9]*)\s+(.+)$`)
 	reZenAlias   = regexp.MustCompile(`^(` + zenName + `)\s+as\s+(.+)$`)
-	reZenGroup   = regexp.MustCompile(`(?i)^group\b\s*(?:` + zenName + `)?\s*\{?$`)
-	reZenIf      = regexp.MustCompile(`(?i)^if\b\s*\(?\s*(.*?)\s*\)?\s*\{?$`)
-	reZenElseIf  = regexp.MustCompile(`(?i)^else\s+if\b\s*\(?\s*(.*?)\s*\)?\s*\{?$`)
-	reZenElse    = regexp.MustCompile(`(?i)^else\s*\{?$`)
-	reZenLoop    = regexp.MustCompile(`(?i)^(?:while|for|foreach|loop)\b\s*\(?\s*(.*?)\s*\)?\s*\{?$`)
-	reZenOpt     = regexp.MustCompile(`(?i)^(opt|par)\b\s*\{?$`)
-	reZenTry     = regexp.MustCompile(`(?i)^try\s*\{?$`)
-	reZenCatch   = regexp.MustCompile(`(?i)^catch\b\s*\(?\s*(.*?)\s*\)?\s*\{?$`)
-	reZenFinally = regexp.MustCompile(`(?i)^finally\s*\{?$`)
-	reZenReturn  = regexp.MustCompile(`(?i)^return\b\s*(.*)$`)
-	reZenNew     = regexp.MustCompile(`(?i)^(?:(?:` + zenName + `\s+)?(` + zenName + `)\s*=\s*)?new\s+(` + zenName + `)\s*(\(.*\))?\s*\{?$`)
+	reZenGroup   = regexp.MustCompile(`^group\b\s*(?:` + zenName + `)?\s*\{?$`)
+	reZenIf      = regexp.MustCompile(`^if\b\s*\(?\s*(.*?)\s*\)?\s*\{?$`)
+	reZenElseIf  = regexp.MustCompile(`^else\s+if\b\s*\(?\s*(.*?)\s*\)?\s*\{?$`)
+	reZenElse    = regexp.MustCompile(`^else\s*\{?$`)
+	reZenLoop    = regexp.MustCompile(`^(?:while|forEach|foreach|for|loop)\b\s*\(?\s*(.*?)\s*\)?\s*\{?$`)
+	reZenOpt     = regexp.MustCompile(`^(opt|par)\b\s*\{?$`)
+	reZenTry     = regexp.MustCompile(`^try\s*\{?$`)
+	reZenCatch   = regexp.MustCompile(`^catch\b\s*\(?\s*(.*?)\s*\)?\s*\{?$`)
+	reZenFinally = regexp.MustCompile(`^finally\s*\{?$`)
+	reZenReturn  = regexp.MustCompile(`^return\b\s*(.*)$`)
+	reZenNew     = regexp.MustCompile(`^(?:(?:` + zenName + `\s+)?(` + zenName + `)\s*=\s*)?new\s+(` + zenName + `)\s*(\(.*\))?\s*\{?$`)
 	reZenAsync   = regexp.MustCompile(`^(?:(` + zenName + `)\s*->\s*)?(` + zenName + `)\s*:\s*(.*)$`)
 	reZenBare    = regexp.MustCompile(`^(` + zenName + `)\s*(?:->\s*(` + zenName + `))?$`)
 	reZenSync    = regexp.MustCompile(`^(?:(?:` + zenName + `\s+)?(` + zenName + `)\s*=\s*)?(?:(` + zenName + `)\s*->\s*)?(` + zenName + `)\s*\.\s*(.+)$`)
@@ -255,15 +260,20 @@ func (p *zenParser) statement(sink *[]any, line, self, invoker string) bool {
 		p.pending = append(p.pending, strings.TrimSpace(strings.TrimPrefix(line, "//")))
 		return false
 	}
+	if reZenReplyAt.MatchString(line) {
+		p.reply = true
+		return false
+	}
+	// The annotation binds to the async message on the next line and to
+	// nothing else, as `ret: ANNOTATION_RET asyncMessage` binds it.
+	reply := p.reply
+	p.reply = false
+
 	if m := reZenTitle.FindStringSubmatch(line); m != nil {
 		p.d.title = strings.TrimSpace(m[1])
 		return false
 	}
 	if reZenStarter.MatchString(line) {
-		return false
-	}
-	if reZenReplyAt.MatchString(line) {
-		p.reply = true
 		return false
 	}
 
@@ -304,8 +314,8 @@ func (p *zenParser) statement(sink *[]any, line, self, invoker string) bool {
 			from = self
 		}
 		lineType := "solid"
-		if p.reply {
-			lineType, p.reply = "dotted", false
+		if reply {
+			lineType = "dotted"
 		}
 		p.note(sink, from, zenUnquote(m[2]))
 		p.message(sink, from, zenUnquote(m[2]), strings.TrimSpace(m[3]), lineType)
@@ -438,16 +448,24 @@ func (p *zenParser) fragment(sink *[]any, kind, label, self, invoker string) boo
 }
 
 // zenSection reads the keyword that continues a fragment into its next
-// section.
+// section. The label is the text the keyword carries and not the keyword
+// itself, which is how `parseSequenceDiagram` stores an `else` or an
+// `option`; a keyword carrying nothing labels the section itself.
 func zenSection(line string) (string, bool) {
 	body, _ := opensBlock(line)
+	label := func(text, keyword string) (string, bool) {
+		if text = strings.TrimSpace(text); text != "" {
+			return text, true
+		}
+		return keyword, true
+	}
 	switch {
 	case reZenElseIf.MatchString(body):
-		return "else " + reZenElseIf.FindStringSubmatch(body)[1], true
+		return label(reZenElseIf.FindStringSubmatch(body)[1], "else")
 	case reZenElse.MatchString(body):
 		return "else", true
 	case reZenCatch.MatchString(body):
-		return strings.TrimSpace("catch " + reZenCatch.FindStringSubmatch(body)[1]), true
+		return label(reZenCatch.FindStringSubmatch(body)[1], "catch")
 	case reZenFinally.MatchString(body):
 		return "finally", true
 	}
