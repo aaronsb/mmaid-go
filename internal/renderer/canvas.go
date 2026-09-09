@@ -176,9 +176,16 @@ func (c *Canvas) PutText(row, col int, text string, style string) {
 }
 
 // putWide writes one rune and, when it is two columns wide, its continuation
-// cell. It returns the number of columns consumed.
+// cell. A rune of no width leaves no cell. It returns the columns consumed.
 func (c *Canvas) putWide(row, col int, ch rune, style string) int {
 	w := textwidth.Rune(ch)
+	if w == 0 {
+		return 0
+	}
+	// A wide rune in the last column needs one more for its continuation.
+	if w == 2 && row >= 0 && row < c.Height && col == c.Width-1 {
+		c.Resize(c.Width+1, c.Height)
+	}
 	c.Put(row, col, ch, false, style)
 	if w == 2 {
 		c.Put(row, col+1, Continuation, false, style)
@@ -203,11 +210,14 @@ type StyledSegment struct {
 	Style string
 }
 
-// ClearCell sets a cell back to a space with default style.
+// ClearCell sets a cell back to a space with default style. Clearing either
+// half of a wide rune clears both.
 func (c *Canvas) ClearCell(row, col int) {
 	if row < 0 || row >= c.Height || col < 0 || col >= c.Width {
 		return
 	}
+	c.clearRightHalf(row, col)
+	c.clearLeftHalf(row, col)
 	c.grid[row][col] = ' '
 	c.styleGrid[row][col] = "default"
 }

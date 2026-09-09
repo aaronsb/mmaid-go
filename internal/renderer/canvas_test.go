@@ -219,6 +219,86 @@ func TestPutOverWideRuneClearsContinuation(t *testing.T) {
 	}
 }
 
+func TestClearCellClearsBothHalves(t *testing.T) {
+	for _, half := range []int{0, 1} {
+		c := NewCanvas(10, 1)
+		c.PutText(0, 0, "日本", "")
+		c.ClearCell(0, half)
+		c.Put(0, 4, 'x', false, "")
+		if got := c.ToString(); got != "  本x" {
+			t.Errorf("clearing column %d gave %q, want %q", half, got, "  本x")
+		}
+	}
+	for _, half := range []int{2, 3} {
+		c := NewCanvas(10, 1)
+		c.PutText(0, 0, "日本", "")
+		c.ClearCell(0, half)
+		c.Put(0, 4, 'x', false, "")
+		if got := c.ToString(); got != "日  x" {
+			t.Errorf("clearing column %d gave %q, want %q", half, got, "日  x")
+		}
+	}
+}
+
+func TestPutTextSkipsZeroWidthRunes(t *testing.T) {
+	c := NewCanvas(10, 1)
+	c.Put(0, 5, '│', false, "")
+	c.PutText(0, 0, "Café", "") // e followed by a combining acute
+	if got := c.ToString(); got != "Cafe │" {
+		t.Errorf("ToString = %q, want %q", got, "Cafe │")
+	}
+
+	c = NewCanvas(10, 1)
+	c.PutText(0, 0, "éx", "")
+	if got := c.ToString(); got != "ex" {
+		t.Errorf("ToString = %q, want %q", got, "ex")
+	}
+}
+
+func TestPutTextResizesForAWideRuneInTheLastColumn(t *testing.T) {
+	c := NewCanvas(3, 1)
+	c.PutText(0, 2, "日", "")
+	if c.Width != 4 {
+		t.Errorf("width %d, want 4", c.Width)
+	}
+	if ch := c.Get(0, 3); ch != Continuation {
+		t.Errorf("col 3 = %q, want continuation", ch)
+	}
+	c.Put(0, 3, 'x', false, "")
+	if got := c.ToString(); got != "   x" {
+		t.Errorf("ToString = %q, want %q", got, "   x")
+	}
+}
+
+func TestPutStyledTextWideRune(t *testing.T) {
+	c := NewCanvas(10, 1)
+	c.PutStyledText(0, 0, []StyledSegment{{Text: "日", Style: "node"}, {Text: "b", Style: "label"}})
+	if ch := c.Get(0, 1); ch != Continuation {
+		t.Errorf("col 1 = %q, want continuation", ch)
+	}
+	if s := c.GetStyle(0, 1); s != "node" {
+		t.Errorf("continuation style %q, want node", s)
+	}
+	if ch := c.Get(0, 2); ch != 'b' {
+		t.Errorf("col 2 = %q, want b", ch)
+	}
+	if s := c.GetStyle(0, 2); s != "label" {
+		t.Errorf("second segment style %q, want label", s)
+	}
+}
+
+func TestPutTextWideOverWide(t *testing.T) {
+	c := NewCanvas(10, 1)
+	c.PutText(0, 0, "日本", "")
+	c.PutText(0, 1, "語", "")
+	if got := c.ToString(); got != " 語" {
+		t.Errorf("ToString = %q, want %q", got, " 語")
+	}
+	if ch := c.Get(0, 3); ch != ' ' {
+		t.Errorf("col 3 = %q, want space", ch)
+	}
+}
+
 func TestFlipHorizontalRepairsWideRunes(t *testing.T) {
 	c := NewCanvas(4, 1)
 	c.PutText(0, 0, "日", "")
