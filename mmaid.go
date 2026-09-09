@@ -152,6 +152,8 @@ func detectDiagramType(source string) string {
 			return "journey"
 		case strings.HasPrefix(lower, "packet"):
 			return "packet"
+		case strings.HasPrefix(lower, "eventmodeling"):
+			return "eventmodeling"
 		case strings.HasPrefix(lower, "requirementdiagram"):
 			return "requirement"
 		case strings.HasPrefix(lower, "c4context"), strings.HasPrefix(lower, "c4container"),
@@ -227,6 +229,8 @@ func Render(source string, opts ...Option) (result string) {
 		canvas = diagram.RenderJourney(source, cs, getThemePtr(cfg.theme))
 	case "packet":
 		canvas = diagram.RenderPacket(source, cs, getThemePtr(cfg.theme))
+	case "eventmodeling":
+		canvas = diagram.RenderEventModeling(source, cs, getThemePtr(cfg.theme))
 	case "requirement":
 		g := diagram.ParseRequirementDiagram(source)
 		canvas = renderer.RenderGraphCanvas(g, cs, cfg.paddingX, cfg.paddingY, cfg.roundedEdges, diagram.UsableWidth())

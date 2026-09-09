@@ -443,6 +443,7 @@ func printUsage() {
 		{"treeView-beta", "Indented file and folder trees"},
 		{"journey", "User journey maps"},
 		{"packet-beta", "Network packet layouts"},
+		{"eventmodeling", "Event-model swimlanes over time"},
 		{"requirementDiagram", "SysML requirements and elements"},
 		{"C4Context", "C4 context, container, component, deployment"},
 		{"usecase-beta", "UML actors, use cases and boundaries"},
@@ -648,6 +649,12 @@ var demoSamples = map[string]string{
             diagram/  ## one file per type
             renderer/
         README.md`,
+	"eventmodeling": `eventmodeling
+    tf 01 ui CartUI
+    tf 02 cmd AddItem ->> 01
+    tf 03 evt ItemAdded ->> 02
+    tf 04 rmo CartView ->> 03
+    tf 05 ui CartScreen ->> 04`,
 }
 
 var demoTypes = []struct{ name, key string }{
@@ -669,6 +676,7 @@ var demoTypes = []struct{ name, key string }{
 	{"Tree View", "treeview"},
 	{"User Journey", "journey"},
 	{"Packet Diagram", "packet"},
+	{"Event Modeling", "eventmodeling"},
 	{"Requirement Diagram", "requirement"},
 	{"C4 Diagram", "c4"},
 	{"Use Case Diagram", "usecase"},
@@ -703,6 +711,7 @@ func runDemo(w io.Writer, themeName, diagramType string, opts ...mmaid.Option) {
 			"xy": "xychart", "xychart-beta": "xychart",
 			"quadrantchart": "quadrant",
 			"treeview-beta": "treeview", "tree": "treeview",
+			"eventmodel": "eventmodeling", "em": "eventmodeling",
 		}
 		if mapped, ok2 := aliases[strings.ToLower(diagramType)]; ok2 {
 			source = demoSamples[mapped]

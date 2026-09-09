@@ -958,3 +958,82 @@ func TestTreeViewRenderGuides(t *testing.T) {
 	assertCanvasContains(t, c, "├──a.txt")
 	assertCanvasContains(t, c, "└──b.txt")
 }
+
+// ── Event Modeling ──────────────────────────────────────────────────────────
+
+// Entity-type aliases collapse onto one kind and `->>` records the frames a
+// frame is fed from.
+func TestEventModelingFramesAndSources(t *testing.T) {
+	ed := parseEventModeling(`eventmodeling
+    tf 01 ui CartUI
+    tf 02 command AddItem
+    tf 03 readmodel CartView
+    tf 04 event ItemChanged ->> 02 ->> 03
+    rf 05 processor Rebuild`)
+
+	wantKind := []string{"ui", "cmd", "rmo", "evt", "pcr"}
+	if len(ed.frames) != len(wantKind) {
+		t.Fatalf("frames = %d, want %d", len(ed.frames), len(wantKind))
+	}
+	for i, k := range wantKind {
+		if ed.frames[i].kind != k {
+			t.Errorf("frame %s kind = %q, want %q", ed.frames[i].id, ed.frames[i].kind, k)
+		}
+	}
+	if got := ed.frames[3].sources; len(got) != 2 || got[0] != "02" || got[1] != "03" {
+		t.Errorf("sources = %v, want [02 03]", got)
+	}
+	if !ed.frames[4].reset {
+		t.Error("rf 05 is not marked a reset frame")
+	}
+}
+
+// A namespace owns one lane wherever it first appears, so a command and the
+// event it produces share it.
+func TestEventModelingNamespaceSharesOneLane(t *testing.T) {
+	ed := parseEventModeling(`eventmodeling
+    tf 01 ui CartUI
+    tf 02 cmd Inventory.AddItem
+    tf 03 evt Inventory.ItemAdded
+    tf 04 evt Shipped`)
+
+	lanes, laneOf := emAssignLanes(ed.frames)
+	if laneOf["02"] != laneOf["03"] {
+		t.Errorf("Inventory frames on lanes %d and %d, want one lane", laneOf["02"], laneOf["03"])
+	}
+	if laneOf["03"] == laneOf["04"] {
+		t.Error("the namespaced lane and the plain event stream are the same lane")
+	}
+	if lanes[laneOf["02"]].label != "C/RM: Inventory" {
+		t.Errorf("namespace lane label = %q", lanes[laneOf["02"]].label)
+	}
+	if lanes[0].label != "UI/Automation" {
+		t.Errorf("first lane = %q, want the automation band on top", lanes[0].label)
+	}
+}
+
+// A data block's body is not a frame.
+func TestEventModelingDataBlockIsNotAFrame(t *testing.T) {
+	ed := parseEventModeling(`eventmodeling
+    tf 01 cmd AddItem
+    tf 02 evt ItemAdded [[ItemAddedData]]
+
+data ItemAddedData
+{
+  productId: 7
+}`)
+	if len(ed.frames) != 2 {
+		t.Fatalf("frames = %d, want the two tf lines", len(ed.frames))
+	}
+	if ed.frames[1].name != "ItemAdded" {
+		t.Errorf("name = %q, want the payload reference dropped", ed.frames[1].name)
+	}
+}
+
+func TestEventModelingRendersLanesAndFrames(t *testing.T) {
+	c := RenderEventModeling("eventmodeling\n  tf 01 ui CartUI\n  tf 02 cmd AddItem ->> 01", renderer.UNICODE, nil)
+	assertCanvasContains(t, c, "UI/Automation")
+	assertCanvasContains(t, c, "Command/Read Model")
+	assertCanvasContains(t, c, "CartUI")
+	assertCanvasContains(t, c, "AddItem")
+}
