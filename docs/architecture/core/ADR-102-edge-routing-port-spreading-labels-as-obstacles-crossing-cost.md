@@ -36,8 +36,9 @@ A node side offers ports at every cell between its corners, excluding the
 corner cells. Edges attached to a side are sorted by the position of their
 other endpoint along that side's axis and assigned distinct ports from the
 centre outward. A side with more edges than ports assigns the centre to
-the overflow. `getAttachPoint` takes the port index; the layout grid gains
-a per-node port count on each side so that gap sizing accounts for it.
+the overflow. The port offset is applied when the grid path is converted
+to draw coordinates; the layout grid gains a per-node port count on each
+side so that node sizing accounts for it.
 
 Ports are the reason two edges never share a segment at the node.
 
@@ -81,6 +82,9 @@ moved. `TestFixturesLint` stays clean.
 - Labels as obstacles can push a later edge onto a longer path.
 - Three numbers (6, 3, 4) are tuned by eye on the fixture set and are
   the kind of constant a later diagram will want to move.
+- Routing runs on a grid whose cells are a node wide, so two edges that
+  share one grid cell share up to a node's width of draw cells; ports
+  separate them only at the node.
 
 ### Neutral
 
