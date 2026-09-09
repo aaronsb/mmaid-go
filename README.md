@@ -150,6 +150,8 @@ FLAGS
       --padding-x N    Horizontal node padding (default: 4)
       --padding-y N    Vertical node padding (default: 2)
       --sharp-edges    Sharp corners on edge routing
+      --cells FILE     Write the rendered frame as a .cells dump (- is stdout)
+      --cells-lint     With --cells, print structural lint findings to stderr
 ```
 
 ## Themes
@@ -183,6 +185,30 @@ Pie charts render in three modes depending on context:
 | Color circle | Any `--theme` | Half-block chars with 4x4 supersampled anti-aliasing |
 | Braille circle | No theme | Braille dot patterns per slice, bordered legend |
 | Bar chart | `--ascii` | Horizontal bars with fill characters |
+
+## Snapshots and goldens
+
+`mmaid --cells FILE` interprets the ANSI stream it would have printed and
+writes the resulting grid as a text frame: a `W H` header, then one line per
+cell holding a codepoint and its foreground and background. `--cells-lint`
+adds a structural check of the glyph grid on stderr, one line per dangling
+arm, unfed arrowhead, or arm meeting an arrowhead from the wrong side.
+
+```
+make snap FILE=diagram.mmd ARGS="-t blueprint -w 100"
+```
+
+writes `.snap/diagram.cells` and `.snap/diagram.png`, prints the lint
+findings, and ends with the PNG path. The PNG step needs Python 3, Pillow,
+and a bitmap font; `MMAID_SNAP_FONT` overrides the default Unscii path.
+
+`testdata/fixtures/*.mmd` render at width 120 and are compared against the
+reference frames in `testdata/golden/`. `make golden` runs that comparison
+and the lint; `make golden-record` rewrites the references, and the commit
+that does so says which frames changed and why. `testdata/fixtures/known-bad.txt`
+lists the fixtures whose frames trip the lint today.
+
+See ADR-101 for the format and the comparator's tolerances.
 
 ## Acknowledgements
 
