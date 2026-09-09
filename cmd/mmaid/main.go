@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	mmaid "github.com/aaronsb/mmaid-go"
+	"github.com/aaronsb/mmaid-go/internal/cells"
 	"github.com/aaronsb/mmaid-go/internal/diagram"
 	"github.com/aaronsb/mmaid-go/internal/ingest"
 	"github.com/aaronsb/mmaid-go/internal/renderer"
@@ -37,16 +38,16 @@ const (
 func main() {
 	// GNU-style: both short (-a) and long (--ascii) forms
 	var (
-		ascii      bool
-		paddingX   int
-		paddingY   int
-		sharpEdges bool
-		theme      string
-		showVer    bool
-		listThemes bool
-		demo       string
-		markdown   bool
-		insert     string
+		ascii       bool
+		paddingX    int
+		paddingY    int
+		sharpEdges  bool
+		theme       string
+		showVer     bool
+		listThemes  bool
+		demo        string
+		markdown    bool
+		insert      string
 		width       int
 		jsonMode    string
 		showTmpl    bool
@@ -54,6 +55,8 @@ func main() {
 		valueKey    string
 		childrenKey string
 		orientation string
+		cellsPath   string
+		cellsLint   bool
 	)
 
 	flag.BoolVar(&ascii, "ascii", false, "")
@@ -78,6 +81,8 @@ func main() {
 	flag.StringVar(&valueKey, "value-key", "", "")
 	flag.StringVar(&childrenKey, "children-key", "", "")
 	flag.StringVar(&orientation, "orientation", "", "")
+	flag.StringVar(&cellsPath, "cells", "", "")
+	flag.BoolVar(&cellsLint, "cells-lint", false, "")
 
 	flag.Usage = func() { printUsage() }
 	flag.Parse()
@@ -147,7 +152,7 @@ func main() {
 		}
 
 		// Render the generated Mermaid syntax.
-		renderAndOutput(mermaidSrc, ascii, paddingX, paddingY, sharpEdges, theme, markdown, insert)
+		renderAndOutput(mermaidSrc, ascii, paddingX, paddingY, sharpEdges, theme, markdown, insert, cellsPath, cellsLint)
 		os.Exit(0)
 	}
 
@@ -157,10 +162,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	renderAndOutput(input, ascii, paddingX, paddingY, sharpEdges, theme, markdown, insert)
+	renderAndOutput(input, ascii, paddingX, paddingY, sharpEdges, theme, markdown, insert, cellsPath, cellsLint)
 }
 
-func renderAndOutput(source string, ascii bool, paddingX, paddingY int, sharpEdges bool, theme string, markdown bool, insert string) {
+func renderAndOutput(source string, ascii bool, paddingX, paddingY int, sharpEdges bool, theme string, markdown bool, insert, cellsPath string, cellsLint bool) {
 	var opts []mmaid.Option
 	if ascii {
 		opts = append(opts, mmaid.WithASCII())
@@ -177,6 +182,11 @@ func renderAndOutput(source string, ascii bool, paddingX, paddingY int, sharpEdg
 
 	result := mmaid.Render(source, opts...)
 
+	if cellsPath != "" {
+		writeCells(result, cellsPath, cellsLint)
+		return
+	}
+
 	if markdown {
 		result = "```\n" + result + "\n```"
 	}
@@ -188,6 +198,39 @@ func renderAndOutput(source string, ascii bool, paddingX, paddingY int, sharpEdg
 		}
 	} else {
 		fmt.Println(result)
+	}
+}
+
+// writeCells interprets the rendered stream as a frame and writes it to path
+// ("-" is stdout), optionally printing the structural lint's findings.
+func writeCells(result, path string, lint bool) {
+	fail := func(err error) {
+		fmt.Fprintf(os.Stderr, "%smmaid:%s cells: %v\n", ansiBold+ansiCyan, ansiReset, err)
+		os.Exit(1)
+	}
+
+	frame, err := cells.Interpret(result)
+	if err != nil {
+		fail(err)
+	}
+
+	out := os.Stdout
+	if path != "-" {
+		f, err := os.Create(path)
+		if err != nil {
+			fail(err)
+		}
+		defer f.Close()
+		out = f
+	}
+	if err := cells.Write(out, frame); err != nil {
+		fail(err)
+	}
+
+	if lint {
+		for _, finding := range cells.Lint(frame) {
+			fmt.Fprintln(os.Stderr, finding)
+		}
 	}
 }
 
@@ -211,6 +254,9 @@ func printUsage() {
 	fmt.Fprintf(w, "    %s-w%s, %s--width%s %sN%s      Override diagram width (columns)\n", ansiYellow, ansiReset, ansiYellow, ansiReset, ansiDim, ansiReset)
 	fmt.Fprintf(w, "        %s--orientation%s %sTB|LR%s  Force layout orientation (overrides 'direction')\n", ansiYellow, ansiReset, ansiDim, ansiReset)
 	fmt.Fprintf(w, "        %s--sharp-edges%s    Sharp corners on edge routing\n\n", ansiYellow, ansiReset)
+	fmt.Fprintf(w, "  %sOUTPUT%s\n", ansiBold+ansiWhite, ansiReset)
+	fmt.Fprintf(w, "        %s--cells%s %sFILE%s     Write the rendered frame as a .cells dump (- is stdout)\n", ansiYellow, ansiReset, ansiDim, ansiReset)
+	fmt.Fprintf(w, "        %s--cells-lint%s     With %s--cells%s, print structural lint findings to stderr\n\n", ansiYellow, ansiReset, ansiYellow, ansiReset)
 	fmt.Fprintf(w, "  %sJSON INGEST%s\n", ansiBold+ansiWhite, ansiReset)
 	fmt.Fprintf(w, "        %s--json%s %sMODE%s     Read JSON from stdin, render as MODE (treemap, pie)\n", ansiYellow, ansiReset, ansiDim, ansiReset)
 	fmt.Fprintf(w, "        %s--template%s       Print minimum valid JSON for the given --json mode\n", ansiYellow, ansiReset)
