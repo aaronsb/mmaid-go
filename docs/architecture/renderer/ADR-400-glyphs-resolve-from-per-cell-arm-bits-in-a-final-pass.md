@@ -28,9 +28,11 @@ a bend cell receives the path's own horizontal and vertical runs, which
 merge to `┼`, and the corner glyph then replaces `┼` because that pair is
 not listed. Any arm another edge had through the cell is lost. Two edges
 leaving one port render `├──╮►│`, and a rounded corner crossing a
-horizontal run renders `╭` inside `───`. The third defect is an edge
-whose last segment runs one cell past its arrowhead into the target's
-top border, where (─, │) merges to `┴`.
+horizontal run renders `╭` inside `───`. The third finding is not a
+merging defect: an outgoing edge's source tee and an incoming edge's
+arrowhead share one port cell on the node border, so the tee's arm meets
+the arrowhead's tip (`┴` under `▼`). ADR-102's port spreading is the fix
+for that one.
 
 `getCornerChar` in `draw.go` lines 322 to 407 carries a reasoning
 transcript in its comments. `DrawDiamond` uses U+27CB and U+27CD from the
@@ -125,6 +127,15 @@ junction is expected.
 - `Put` loses its `merge` parameter.
 - Visual output of `├──┬►│` for two edges sharing a port is structurally
   sound and still ugly. ADR-102 spreads the ports.
+- A port that one edge leaves through and another enters keeps a rule 3
+  finding: the source tee's arm meets the incoming arrowhead's tip, and
+  both are what this decision draws. `flowchart-cross` has three such
+  ports and stays in `known-bad.txt` until ADR-102 spreads them; `flowchart`
+  and `subgraph-cross` leave.
+- A line's free end resolves to a half glyph. Renderers that ran a rune
+  up to a corner they wrote themselves now run the segment through the
+  corner cell, whose arms close it; the class and ER routers, whose
+  endpoints sit one cell past a border, join that cell to the border.
 
 ## Alternatives Considered
 
