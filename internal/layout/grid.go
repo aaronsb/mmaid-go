@@ -40,6 +40,13 @@ const (
 	SGLabelHeight = 2
 	// SGGapPerLevel is the gap per nesting level.
 	SGGapPerLevel = SGBorderPad + SGLabelHeight + 1
+
+	// GapWidth and GapHeight are the draw size of a gap column and row. A
+	// gap holds a port's stub, the corridor centre line an edge turns or
+	// jogs on, and the arrowhead cell before the far border, so neither
+	// can go below 3.
+	GapWidth  = 4
+	GapHeight = 3
 )
 
 // GridCoord represents a position on the logical grid.
@@ -56,6 +63,9 @@ type NodePlacement struct {
 	DrawY      int
 	DrawWidth  int
 	DrawHeight int
+	// PortCount is the number of edge ends expected on each side, indexed
+	// by Side; node sizing keeps room for that many ports.
+	PortCount [4]int
 }
 
 // SubgraphBounds stores the drawing bounds of a subgraph.
@@ -69,10 +79,13 @@ type SubgraphBounds struct {
 
 // GridLayout is the result of the layout process.
 type GridLayout struct {
-	Placements     map[string]*NodePlacement
-	ColWidths      map[int]int
-	RowHeights     map[int]int
-	GridOccupied   map[GridCoord]string
+	Placements   map[string]*NodePlacement
+	ColWidths    map[int]int
+	RowHeights   map[int]int
+	GridOccupied map[GridCoord]string
+	// Reserved holds cells edge labels have claimed; IsFree treats them as
+	// occupied.
+	Reserved       map[GridCoord]bool
 	CanvasWidth    int
 	CanvasHeight   int
 	SubgraphBounds []SubgraphBounds
@@ -90,12 +103,16 @@ func NewGridLayout() *GridLayout {
 	}
 }
 
-// IsFree reports whether a grid cell is not occupied by any node's 3x3 block.
+// IsFree reports whether a grid cell is neither in a node's 3x3 block nor
+// reserved by an edge label.
 func (l *GridLayout) IsFree(col, row int, exclude map[string]bool) bool {
 	if col < 0 || row < 0 {
 		return false
 	}
 	key := GridCoord{col, row}
+	if l.Reserved[key] {
+		return false
+	}
 	occupant, ok := l.GridOccupied[key]
 	if !ok {
 		return true
@@ -104,6 +121,19 @@ func (l *GridLayout) IsFree(col, row int, exclude map[string]bool) bool {
 		return true
 	}
 	return false
+}
+
+// Extent returns the draw width and height of every column and row the
+// layout defines, gap columns past the last node included.
+func (l *GridLayout) Extent() (w, h int) {
+	w, h = l.OffsetX, l.OffsetY
+	for _, cw := range l.ColWidths {
+		w += cw
+	}
+	for _, rh := range l.RowHeights {
+		h += rh
+	}
+	return w, h
 }
 
 // GridToDraw converts grid coordinates to drawing (character) coordinates.
@@ -160,6 +190,9 @@ func ComputeLayout(g *graph.Graph, paddingX, paddingY, maxWidth int) *GridLayout
 
 	// Step 3: Place nodes on the grid
 	placeNodes(g, layout, layerOrder, direction)
+
+	// Step 3b: Count the edge ends each node side expects
+	countPorts(g, layout)
 
 	// Step 4: Compute column widths and row heights (with word wrapping)
 	computeSizes(g, layout, paddingX, paddingY)
@@ -260,7 +293,6 @@ func scaleNodeColumns(layout *GridLayout, targetWidth int) {
 		layout.ColWidths[c] += share
 	}
 }
-
 
 // edgeKey is a source-target pair used as a map key.
 type edgeKey struct{ src, tgt string }
@@ -742,7 +774,7 @@ func computeSizes(
 		}
 		textHeight := len(wrappedLines)
 
-		contentWidth := textWidth + paddingX  // padding on each side
+		contentWidth := textWidth + paddingX   // padding on each side
 		contentHeight := textHeight + paddingY // padding top/bottom
 
 		// Start/end state markers are single-character — use minimal sizing
@@ -753,14 +785,11 @@ func computeSizes(
 			contentHeight = 1
 		}
 
-		// Ensure minimum sizes (but not for point markers)
+		// Ensure minimum sizes, and a cell per port on the busiest side
+		// (but not for point markers)
 		if !isMarker {
-			if contentWidth < 3 {
-				contentWidth = 3
-			}
-			if contentHeight < 3 {
-				contentHeight = 3
-			}
+			contentWidth = max(contentWidth, 3, placement.PortCount[Top], placement.PortCount[Bottom])
+			contentHeight = max(contentHeight, 3, placement.PortCount[Left], placement.PortCount[Right])
 		}
 
 		col := placement.Grid.Col
@@ -824,12 +853,12 @@ func computeSizes(
 	}
 	for c := 0; c < maxCol+2; c++ {
 		if _, ok := layout.ColWidths[c]; !ok {
-			layout.ColWidths[c] = 4 // gap columns
+			layout.ColWidths[c] = GapWidth
 		}
 	}
 	for r := 0; r < maxRow+2; r++ {
 		if _, ok := layout.RowHeights[r]; !ok {
-			layout.RowHeights[r] = 3 // gap rows
+			layout.RowHeights[r] = GapHeight
 		}
 	}
 

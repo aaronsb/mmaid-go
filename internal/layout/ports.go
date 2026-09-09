@@ -1,0 +1,249 @@
+package layout
+
+import (
+	"sort"
+
+	"github.com/aaronsb/mmaid-go/internal/graph"
+)
+
+// Side is a side of a node an edge attaches to.
+type Side int
+
+const (
+	Top Side = iota
+	Bottom
+	Left
+	Right
+)
+
+// Vertical reports whether the side runs vertically, so its ports spread
+// along rows.
+func (s Side) Vertical() bool {
+	return s == Left || s == Right
+}
+
+// AttachCell returns the grid cell on a node's border for a side.
+func (s Side) AttachCell(gc GridCoord) GridCoord {
+	switch s {
+	case Top:
+		return GridCoord{gc.Col, gc.Row - 1}
+	case Bottom:
+		return GridCoord{gc.Col, gc.Row + 1}
+	case Left:
+		return GridCoord{gc.Col - 1, gc.Row}
+	default:
+		return GridCoord{gc.Col + 1, gc.Row}
+	}
+}
+
+// PreferredSides returns the pair of sides an edge from src to tgt prefers to
+// leave and enter through, and the alternative pair, from their relative
+// grid positions and the flow direction.
+func PreferredSides(src, tgt GridCoord, direction graph.Direction) (preferred, alt [2]Side) {
+	sc, sr := src.Col, src.Row
+	tc, tr := tgt.Col, tgt.Row
+
+	if direction.IsHorizontal() {
+		switch {
+		case tc > sc:
+			preferred = [2]Side{Right, Left}
+		case tc < sc:
+			// Back-edge: leave from the bottom to stay clear of the
+			// back-edges entering at the top.
+			return [2]Side{Bottom, Bottom}, [2]Side{Bottom, Top}
+		case tr > sr:
+			preferred = [2]Side{Bottom, Top}
+		default:
+			preferred = [2]Side{Top, Bottom}
+		}
+		switch {
+		case tr > sr:
+			alt = [2]Side{Bottom, Top}
+		case tr < sr:
+			alt = [2]Side{Top, Bottom}
+		default:
+			alt = preferred
+		}
+		return preferred, alt
+	}
+
+	switch {
+	case tr > sr:
+		preferred = [2]Side{Bottom, Top}
+	case tr < sr:
+		// Back-edge: leave from the right to stay clear of the back-edges
+		// entering at the left.
+		return [2]Side{Right, Right}, [2]Side{Right, Left}
+	case tc > sc:
+		preferred = [2]Side{Right, Left}
+	default:
+		preferred = [2]Side{Left, Right}
+	}
+	switch {
+	case tc > sc:
+		alt = [2]Side{Right, Left}
+	case tc < sc:
+		alt = [2]Side{Left, Right}
+	default:
+		alt = preferred
+	}
+	return preferred, alt
+}
+
+// PortRange returns the offsets, in draw cells from the side's centre, at
+// which a port may sit: every border cell between the corners.
+func (l *GridLayout) PortRange(p *NodePlacement, side Side) (lo, hi int) {
+	cx, cy := l.GridToDrawCenter(side.AttachCell(p.Grid).Col, side.AttachCell(p.Grid).Row)
+	if side.Vertical() {
+		return p.DrawY + 1 - cy, p.DrawY + p.DrawHeight - 2 - cy
+	}
+	return p.DrawX + 1 - cx, p.DrawX + p.DrawWidth - 2 - cx
+}
+
+// PortRequest is one edge end on a node side. Other is the other endpoint's
+// centre along the side's axis, in draw cells.
+type PortRequest struct {
+	Node  string
+	Side  Side
+	Other int
+}
+
+// AssignPorts returns a port offset for each request. The requests on one
+// side are sorted by Other; the one nearest the side's centre takes the
+// centre port and the rest spread outward in sorted order. A block that
+// runs past a corner slides back inside; when the side has fewer ports than
+// requests, the requests past the corners take the centre.
+func (l *GridLayout) AssignPorts(reqs []PortRequest) []int {
+	type key struct {
+		node string
+		side Side
+	}
+	groups := make(map[key][]int)
+	var order []key
+	for i, r := range reqs {
+		k := key{r.Node, r.Side}
+		if _, ok := groups[k]; !ok {
+			order = append(order, k)
+		}
+		groups[k] = append(groups[k], i)
+	}
+
+	out := make([]int, len(reqs))
+	for _, k := range order {
+		idx := groups[k]
+		p, ok := l.Placements[k.node]
+		if !ok || len(idx) == 1 {
+			continue
+		}
+		sort.SliceStable(idx, func(a, b int) bool {
+			return reqs[idx[a]].Other < reqs[idx[b]].Other
+		})
+
+		ac := k.side.AttachCell(p.Grid)
+		cx, cy := l.GridToDrawCenter(ac.Col, ac.Row)
+		centre := cx
+		if k.side.Vertical() {
+			centre = cy
+		}
+		nearest := 0
+		for i, ri := range idx {
+			if abs(reqs[ri].Other-centre) < abs(reqs[idx[nearest]].Other-centre) {
+				nearest = i
+			}
+		}
+
+		lo, hi := l.PortRange(p, k.side)
+		n := len(idx)
+		shift := 0
+		if n <= hi-lo+1 {
+			if -nearest < lo {
+				shift = lo + nearest
+			} else if n-1-nearest > hi {
+				shift = hi - (n - 1 - nearest)
+			}
+		}
+		for i, ri := range idx {
+			off := i - nearest + shift
+			if off < lo || off > hi {
+				off = 0
+			}
+			out[ri] = off
+		}
+	}
+	return out
+}
+
+// Reserve marks a grid cell as an obstacle for later edges.
+func (l *GridLayout) Reserve(col, row int) {
+	if l.Reserved == nil {
+		l.Reserved = make(map[GridCoord]bool)
+	}
+	l.Reserved[GridCoord{col, row}] = true
+}
+
+// ReserveDraw reserves every grid cell whose draw rectangle meets the draw
+// rectangle (x0, y0)-(x1, y1), inclusive.
+func (l *GridLayout) ReserveDraw(x0, y0, x1, y1 int) {
+	c0, r0 := l.DrawToGrid(x0, y0)
+	c1, r1 := l.DrawToGrid(x1, y1)
+	for c := c0; c <= c1; c++ {
+		for r := r0; r <= r1; r++ {
+			l.Reserve(c, r)
+		}
+	}
+}
+
+// DrawToGrid returns the grid cell containing a draw coordinate. Coordinates
+// before the layout's offset map to -1.
+func (l *GridLayout) DrawToGrid(x, y int) (col, row int) {
+	return l.axisToGrid(x-l.OffsetX, l.ColWidths), l.axisToGrid(y-l.OffsetY, l.RowHeights)
+}
+
+func (l *GridLayout) axisToGrid(v int, sizes map[int]int) int {
+	if v < 0 {
+		return -1
+	}
+	acc := 0
+	for i := 0; ; i++ {
+		size := 1
+		if s, ok := sizes[i]; ok {
+			size = s
+		}
+		if v < acc+size {
+			return i
+		}
+		acc += size
+	}
+}
+
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
+// countPorts records, per node and side, the edge ends the preferred sides
+// would put there. Routing may choose the alternative side for an edge, so
+// the count is the estimate node sizing works from.
+func countPorts(g *graph.Graph, layout *GridLayout) {
+	direction := g.Direction.Normalized()
+	for _, e := range g.Edges {
+		if e.SourceIsSubgraph || e.TargetIsSubgraph {
+			continue
+		}
+		src, ok1 := layout.Placements[e.Source]
+		tgt, ok2 := layout.Placements[e.Target]
+		if !ok1 || !ok2 {
+			continue
+		}
+		if e.IsSelfReference() {
+			src.PortCount[Top]++
+			src.PortCount[Right]++
+			continue
+		}
+		pref, _ := PreferredSides(src.Grid, tgt.Grid, direction)
+		src.PortCount[pref[0]]++
+		tgt.PortCount[pref[1]]++
+	}
+}
