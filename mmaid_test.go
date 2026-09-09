@@ -1,6 +1,9 @@
 package mmaid
 
 import (
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -600,6 +603,31 @@ func TestWideParticipantLifelineCentred(t *testing.T) {
 	}
 	if lifelines[0] < centre-1 || lifelines[0] > centre+1 {
 		t.Errorf("lifeline at column %d, box centre %d\n---\n%s\n---", lifelines[0], centre, out)
+	}
+}
+
+func TestNoByteLengthLabelsInLayoutAndRenderer(t *testing.T) {
+	pattern := regexp.MustCompile(`len\([A-Za-z_.\[\]]*([Ll]abel|[Tt]itle|[Tt]ext|[Nn]ame)\)`)
+	for _, dir := range []string{"internal/layout", "internal/renderer"} {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range entries {
+			if !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
+				continue
+			}
+			path := filepath.Join(dir, e.Name())
+			src, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i, line := range strings.Split(string(src), "\n") {
+				if m := pattern.FindString(line); m != "" {
+					t.Errorf("%s:%d measures a label by bytes: %s", path, i+1, m)
+				}
+			}
+		}
 	}
 }
 
