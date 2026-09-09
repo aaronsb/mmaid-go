@@ -150,18 +150,36 @@ func figureAt(x0 int) *Frame {
 
 func TestCompareScoresIdenticalFramesPerfectly(t *testing.T) {
 	a := figureAt(50)
-	r, err := Compare(a, a)
-	if err != nil {
-		t.Fatal(err)
-	}
+	r := Compare(a, a)
 	if r.Identical != 100 || r.Glyph != 100 || r.Distance != 0 || len(r.Diffs) != 0 {
 		t.Fatalf("%s", r.Summary())
 	}
 	if !(Tolerance{MinIdentical: 100, MaxDistance: 0, Strict: true}).Passes(r) {
 		t.Error("an identical frame failed strict tolerance")
 	}
-	if _, err := Compare(a, NewFrame(testW, testH-1)); err == nil {
-		t.Error("a size mismatch was accepted")
+	if strings.Contains(r.Summary(), "size ") {
+		t.Errorf("equal sizes should not be mentioned: %s", r.Summary())
+	}
+}
+
+func TestComparePadsFramesOfDifferentSizes(t *testing.T) {
+	a := frameOf("ab", "cd")
+	b := frameOf("abX", "cd")
+	r := Compare(a, b)
+	if !strings.HasPrefix(r.Summary(), "size 2x2 vs 3x2; ") {
+		t.Errorf("summary does not lead with the sizes: %s", r.Summary())
+	}
+	// The extra column is a blank in the reference and an 'X' in the frame;
+	// every other cell matches.
+	if len(r.Diffs) != 1 {
+		t.Fatalf("%d diffs, want 1:\n%s", len(r.Diffs), r.Listing())
+	}
+	d := r.Diffs[0]
+	if d.Row != 0 || d.Col != 2 || d.Expected != Blank() || d.Actual.Cp != 'X' {
+		t.Errorf("diff %+v", d)
+	}
+	if (Tolerance{MinIdentical: DefaultMinIdentical, MaxDistance: DefaultMaxDistance}).Passes(r) {
+		t.Error("a new glyph in the widened column should fail the default tolerance")
 	}
 }
 
@@ -170,10 +188,7 @@ func TestCompareScoresOneChangedCell(t *testing.T) {
 	b := figureAt(50)
 	// Only the background of one cell moves, by 12 on one channel.
 	b.Set(7, 3, Cell{Cp: ' ', Fg: [3]uint8{0, 0, 0}, Bg: [3]uint8{52, 60, 30}})
-	r, err := Compare(a, b)
-	if err != nil {
-		t.Fatal(err)
-	}
+	r := Compare(a, b)
 	cells := float64(testW * testH)
 	if want := 4799 * 100 / cells; abs(r.Identical-want) > 1e-9 {
 		t.Errorf("identical %v, want %v", r.Identical, want)
@@ -200,10 +215,7 @@ func TestCompareScoresOneChangedCell(t *testing.T) {
 	// A glyph change in the same cell counts against the glyph score and
 	// fails the default tolerance.
 	b.Set(7, 3, Cell{Cp: '#', Fg: [3]uint8{0, 0, 0}, Bg: [3]uint8{40, 60, 30}})
-	r, err = Compare(a, b)
-	if err != nil {
-		t.Fatal(err)
-	}
+	r = Compare(a, b)
 	if want := 4799 * 100 / cells; abs(r.Glyph-want) > 1e-9 {
 		t.Errorf("glyph %v, want %v", r.Glyph, want)
 	}
@@ -216,10 +228,7 @@ func TestCompareScoresOneChangedCell(t *testing.T) {
 }
 
 func TestCompareReportsAShiftedFigure(t *testing.T) {
-	r, err := Compare(figureAt(50), figureAt(51))
-	if err != nil {
-		t.Fatal(err)
-	}
+	r := Compare(figureAt(50), figureAt(51))
 	// Three cells of the figure and the one it vacated.
 	var where [][2]int
 	for _, d := range r.Diffs {
@@ -259,10 +268,7 @@ func TestListingTruncatesAtTen(t *testing.T) {
 	for c := 0; c < 15; c++ {
 		b.Set(0, c, Cell{Cp: '#', Fg: DefaultFg, Bg: DefaultBg})
 	}
-	r, err := Compare(a, b)
-	if err != nil {
-		t.Fatal(err)
-	}
+	r := Compare(a, b)
 	if !strings.Contains(r.Listing(), "... and 5 more") {
 		t.Errorf("listing does not truncate:\n%s", r.Listing())
 	}

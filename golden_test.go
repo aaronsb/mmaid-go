@@ -176,20 +176,14 @@ func TestGolden(t *testing.T) {
 			allIdentical = false
 			continue
 		}
-		report, err := cells.Compare(reference, frame)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "golden: %-16s %v  FAIL\n", fx.name, err)
-			fmt.Fprintf(&failures, "  %s: %v\n", fx.name, err)
-			allIdentical = false
-			continue
-		}
+		report := cells.Compare(reference, frame)
 		ok := tol.Passes(report)
 		mark := ""
 		if !ok {
 			mark = "  FAIL"
 		}
 		fmt.Fprintf(os.Stderr, "golden: %-16s %s%s\n", fx.name, report.Summary(), mark)
-		if len(report.Diffs) > 0 {
+		if len(report.Diffs) > 0 || report.Expected != report.Actual {
 			allIdentical = false
 		}
 		if !ok {

@@ -23,6 +23,9 @@ type Diff struct {
 	Actual   Cell
 }
 
+// Size is a frame's dimensions.
+type Size struct{ W, H int }
+
 // Report says how close a rendered frame is to its reference.
 type Report struct {
 	// Identical is the percentage of cells with the same glyph and colours.
@@ -33,19 +36,23 @@ type Report struct {
 	Distance float64
 	// Diffs lists every differing cell in row-major order.
 	Diffs []Diff
+	// Expected and Actual are the two frames' sizes before padding.
+	Expected, Actual Size
 }
 
-// Compare matches two frames of the same size cell by cell.
-func Compare(expected, actual *Frame) (Report, error) {
-	if expected.W != actual.W || expected.H != actual.H {
-		return Report{}, fmt.Errorf("reference is %dx%d but the frame is %dx%d",
-			expected.W, expected.H, actual.W, actual.H)
-	}
-	n := len(expected.Cells)
+// Compare matches two frames cell by cell. Frames of different sizes are both
+// padded with blank cells to the larger of each dimension, so a one-column
+// widening still reports the cells that moved.
+func Compare(expected, actual *Frame) Report {
+	size := Size{max(expected.W, actual.W), max(expected.H, actual.H)}
+	e := pad(expected, size)
+	a := pad(actual, size)
+
+	n := len(e.Cells)
 	identical, glyph, distance := 0, 0, uint64(0)
 	var diffs []Diff
-	for i, e := range expected.Cells {
-		a := actual.Cells[i]
+	for i, e := range e.Cells {
+		a := a.Cells[i]
 		if e == a {
 			identical++
 			glyph++
@@ -55,7 +62,7 @@ func Compare(expected, actual *Frame) (Report, error) {
 			glyph++
 		}
 		distance += uint64(channelDistance(e.Fg, a.Fg) + channelDistance(e.Bg, a.Bg))
-		diffs = append(diffs, Diff{Row: i / expected.W, Col: i % expected.W, Expected: e, Actual: a})
+		diffs = append(diffs, Diff{Row: i / size.W, Col: i % size.W, Expected: e, Actual: a})
 	}
 	pct := func(k int) float64 {
 		if n == 0 {
@@ -67,7 +74,26 @@ func Compare(expected, actual *Frame) (Report, error) {
 	if n != 0 {
 		mean = float64(distance) / float64(n)
 	}
-	return Report{Identical: pct(identical), Glyph: pct(glyph), Distance: mean, Diffs: diffs}, nil
+	return Report{
+		Identical: pct(identical),
+		Glyph:     pct(glyph),
+		Distance:  mean,
+		Diffs:     diffs,
+		Expected:  Size{expected.W, expected.H},
+		Actual:    Size{actual.W, actual.H},
+	}
+}
+
+// pad returns f grown to size with blank cells, or f itself if it already fits.
+func pad(f *Frame, size Size) *Frame {
+	if f.W == size.W && f.H == size.H {
+		return f
+	}
+	out := NewFrame(size.W, size.H)
+	for row := 0; row < f.H; row++ {
+		copy(out.Cells[row*size.W:row*size.W+f.W], f.Cells[row*f.W:(row+1)*f.W])
+	}
+	return out
 }
 
 func channelDistance(a, b [3]uint8) int {
@@ -82,9 +108,15 @@ func channelDistance(a, b [3]uint8) int {
 	return d
 }
 
-// Summary is the one-line score of a comparison.
+// Summary is the one-line score of a comparison, led by the sizes when the
+// two frames were not the same shape.
 func (r Report) Summary() string {
-	return fmt.Sprintf("identical %.3f%%  glyph %.3f%%  distance %.4f  (%d cells differ)",
+	size := ""
+	if r.Expected != r.Actual {
+		size = fmt.Sprintf("size %dx%d vs %dx%d; ",
+			r.Expected.W, r.Expected.H, r.Actual.W, r.Actual.H)
+	}
+	return size + fmt.Sprintf("identical %.3f%%  glyph %.3f%%  distance %.4f  (%d cells differ)",
 		r.Identical, r.Glyph, r.Distance, len(r.Diffs))
 }
 
