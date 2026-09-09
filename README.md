@@ -192,14 +192,17 @@ Pie charts render in three modes depending on context:
 writes the resulting grid as a text frame: a `W H` header, then one line per
 cell holding a codepoint and its foreground and background. `--cells-lint`
 adds a structural check of the glyph grid on stderr, one line per dangling
-arm, unfed arrowhead, or arm meeting an arrowhead from the wrong side.
+arm, unfed arrowhead, or arm meeting an arrowhead from the wrong side. Without
+`-w` a `--cells` render is 120 columns wide rather than the terminal's, so the
+same source always gives the same frame.
 
 ```
 make snap FILE=diagram.mmd ARGS="-t blueprint -w 100"
 ```
 
 writes `.snap/diagram.cells` and `.snap/diagram.png`, prints the lint
-findings, and ends with the PNG path. The PNG step needs Python 3, Pillow,
+findings, and ends with the PNG path. `ARGS` defaults to `-t default`, so a
+bare `make snap` still produces a coloured frame. The PNG step needs Python 3, Pillow,
 and a bitmap font; `MMAID_SNAP_FONT` overrides the default Unscii path.
 
 `testdata/fixtures/*.mmd` render at width 120 and are compared against the

@@ -26,6 +26,8 @@ vet:
 # --- Snapshots and goldens ---
 
 # make snap FILE=path.mmd [ARGS="-t blueprint -w 100"]
+ARGS ?= -t default
+
 snap: build ## Render FILE=path.mmd to .snap/<stem>.png with lint findings
 	@if [ -z "$(FILE)" ]; then echo 'usage: make snap FILE=path.mmd [ARGS="-t blueprint -w 100"]'; exit 1; fi
 	@mkdir -p $(SNAP_DIR)

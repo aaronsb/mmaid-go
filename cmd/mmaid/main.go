@@ -24,6 +24,10 @@ import (
 
 const version = "0.5.0"
 
+// cellsWidth is the width --cells renders at when -w is absent. It matches the
+// golden harness so a snapshot and its reference are the same frame.
+const cellsWidth = 120
+
 // ANSI helpers for CLI output
 const (
 	ansiReset  = "\033[0m"
@@ -89,6 +93,10 @@ func main() {
 
 	if width > 0 {
 		diagram.SetWidthOverride(width)
+	} else if cellsPath != "" {
+		// A frame is a comparable artifact, so it never tracks the window the
+		// command happens to run in.
+		diagram.SetWidthOverride(cellsWidth)
 	}
 	if orientation != "" && !diagram.SetOrientationOverride(orientation) {
 		fmt.Fprintf(os.Stderr, "%smmaid:%s unknown orientation %q (use TB or LR)\n", ansiBold+ansiCyan, ansiReset, orientation)
