@@ -95,9 +95,41 @@ func fedFrom(f *Frame, row, col int, d dir) bool {
 	return a&d.opposite().bit() != 0
 }
 
+// openSide returns the side a half-line glyph is open on: the opposite of
+// its one arm. ok is false for any other arm pattern.
+func openSide(a glyph.Arms) (dir, bool) {
+	for _, d := range dirs {
+		if a == d.bit() {
+			return d.opposite(), true
+		}
+	}
+	return 0, false
+}
+
+// closes reports whether the cell on side d of a half-line glyph ends the
+// line: text, a marker, an arrowhead, or a tee whose stem points away from
+// the stub, which is what a subgraph border looks like where an edge
+// crosses it.
+func closes(f *Frame, row, col int, d dir) bool {
+	nr, nc := d.step(row, col)
+	ng := glyphAt(f, nr, nc)
+	if ng == ' ' {
+		return false
+	}
+	if _, isArrow := arrowTail(ng); isArrow {
+		return true
+	}
+	narms, isBox := boxArms(ng)
+	if !isBox {
+		return true
+	}
+	return narms&d.opposite().bit() == 0 && narms&d.bit() != 0
+}
+
 // Lint walks the glyph grid and reports every arm that does not meet
-// something, every arrowhead with no arm feeding its tail, and every arm that
-// meets an arrowhead from the wrong side.
+// something, every arrowhead with no arm feeding its tail, every arm that
+// meets an arrowhead from the wrong side, and every half-line glyph whose
+// open side is not closed.
 func Lint(f *Frame) []Finding {
 	var out []Finding
 	for row := 0; row < f.H; row++ {
@@ -136,6 +168,11 @@ func Lint(f *Frame) []Finding {
 			if tail, isArrow := arrowTail(g); isArrow && !fedFrom(f, row, col, tail) {
 				out = append(out, Finding{row, col, g, 2, fmt.Sprintf(
 					"no arm feeds arrowhead %c from the %s", g, tail.name())})
+			}
+
+			if open, isStub := openSide(arms); isStub && !closes(f, row, col, open) {
+				out = append(out, Finding{row, col, g, 4, fmt.Sprintf(
+					"open end: the %s side meets neither text, a marker, nor a tee pointing away", open.name())})
 			}
 		}
 	}

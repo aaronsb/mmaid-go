@@ -234,7 +234,11 @@ func RenderIshikawa(source string, cs renderer.CharSet, theme *renderer.Theme) *
 	// border's weight and colour: the heavy run stops one column short and
 	// reaches in with a light arm, and the border resolves to a light tee.
 	ishikawaDrawEffect(c, root.text, spineRow, boxLeft, boxW, theme, useRegion)
-	c.Segment(spineRow, 0, spineRow, boxLeft-1, glyph.Heavy, false, "edge")
+	// The spine's tail is a dot, so its west end is closed rather than a
+	// half glyph open to the canvas edge.
+	c.Put(spineRow, 0, cs.Dot, "edge")
+	c.Segment(spineRow, 1, spineRow, boxLeft-1, glyph.Heavy, false, "edge")
+	c.Arm(spineRow, 1, glyph.W, glyph.Heavy, false, "edge")
 	c.Arm(spineRow, boxLeft-1, glyph.E, glyph.Light, false, "edge")
 	c.Arm(spineRow, boxLeft, glyph.W, glyph.Light, false, "edge")
 
