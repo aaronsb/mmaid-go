@@ -127,7 +127,7 @@ Every type below has a rendered example in the [gallery](docs/gallery/README.md)
 | Packet | `packet-beta` | Bit-field network packet layouts |
 | Requirement | `requirementDiagram` | SysML requirements, elements, traceability |
 | C4 | `C4Context` / `C4Container` / `C4Component` / `C4Dynamic` / `C4Deployment` | Context, container, component and deployment views |
-| Use Case | `usecaseDiagram` | UML actors, use cases and system boundaries |
+| Use Case | `usecase-beta` | UML actors, use cases and system boundaries |
 
 ### Node shapes
 

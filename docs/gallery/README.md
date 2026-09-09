@@ -410,7 +410,7 @@ treemap-beta
 Rendered with `-t default -w 120`.
 
 ```mermaid
-usecaseDiagram
+usecase-beta
     actor Customer("Customer")
     actor Agent("Support Agent")
     systemBoundary Storefront

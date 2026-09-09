@@ -418,7 +418,7 @@ func printUsage() {
 		{"packet-beta", "Network packet layouts"},
 		{"requirementDiagram", "SysML requirements and elements"},
 		{"C4Context", "C4 context, container, component, deployment"},
-		{"usecaseDiagram", "UML actors, use cases and boundaries"},
+		{"usecase-beta", "UML actors, use cases and boundaries"},
 	}
 	maxKW := 0
 	for _, t := range types {
@@ -543,7 +543,7 @@ var demoSamples = map[string]string{
     Rel(customer, banking, "Uses")
     Rel(staff, banking, "Administers")
     Rel(banking, email, "Sends mail", "SMTP")`,
-	"usecase": `usecaseDiagram
+	"usecase": `usecase-beta
     actor Customer("Customer")
     actor Agent("Support Agent")
     systemBoundary Storefront
