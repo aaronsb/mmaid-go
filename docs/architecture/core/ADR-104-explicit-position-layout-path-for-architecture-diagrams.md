@@ -90,11 +90,31 @@ recorded and pass `TestFixturesLint`.
   groups.
 - Direction hints are a constraint system and the breadth-first walk is
   a first-fit solver; contradictory hints are reported, not solved.
+- An edge between two groups whose blocks are adjacent is dropped. The
+  attach cells outside their facing borders are the same cell, and a path
+  of one cell draws nothing. Positioned blocks are adjacent by
+  construction, so `{group}` on both ends of one edge asks for a gap the
+  syntax cannot express; the flowchart engine drops the same edge between
+  two sibling subgraphs.
 
 ### Neutral
 
 - `Positions` is available to any parser; `block-beta` may adopt it
   later for its explicit columns.
+- `GridCoord` is defined in `internal/graph`, which `internal/layout`
+  names through a type alias, since `graph` cannot import `layout`.
+  `go vet`'s composite check then reads every `GridCoord{c, r}` in the
+  layout as a literal of an imported type, so those literals carry field
+  names.
+- The parser emits each edge from its left end, arrowheads travelling
+  with the ends. `PreferredSides` reads an edge whose target lies left of
+  its source as a back edge and sends it around the bottom, which is the
+  layered path's convention and not a positioned graph's.
+- A hint pair across the two axes places the far node diagonally.
+  Upstream reads the far node's letter as a direction on the column axis
+  and as its opposite on the row axis, so its bend resolves differently
+  depending on which end the walk reaches first; here both letters name
+  the side of their own node the line leaves through.
 
 ## Alternatives Considered
 
