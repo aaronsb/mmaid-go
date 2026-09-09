@@ -14,15 +14,21 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	mmaid "github.com/aaronsb/mmaid-go"
 	"github.com/aaronsb/mmaid-go/internal/cells"
+	"github.com/aaronsb/mmaid-go/internal/config"
 	"github.com/aaronsb/mmaid-go/internal/diagram"
 	"github.com/aaronsb/mmaid-go/internal/ingest"
 	"github.com/aaronsb/mmaid-go/internal/renderer"
+	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
 
 const version = "0.5.0"
+
+// watchInterval is how often --watch stats the file it renders.
+const watchInterval = 250 * time.Millisecond
 
 // cellsWidth is the width --cells renders at when -w is absent. It matches the
 // golden harness so a snapshot and its reference are the same frame.
@@ -40,6 +46,12 @@ const (
 )
 
 func main() {
+	// The config subcommand takes no flags and is dispatched before flag.Parse.
+	if len(os.Args) > 1 && os.Args[1] == "config" {
+		runConfig(os.Args[2:])
+		return
+	}
+
 	// GNU-style: both short (-a) and long (--ascii) forms
 	var (
 		ascii       bool
@@ -61,6 +73,8 @@ func main() {
 		orientation string
 		cellsPath   string
 		cellsLint   bool
+		output      string
+		watch       bool
 	)
 
 	flag.BoolVar(&ascii, "ascii", false, "")
@@ -87,6 +101,8 @@ func main() {
 	flag.StringVar(&orientation, "orientation", "", "")
 	flag.StringVar(&cellsPath, "cells", "", "")
 	flag.BoolVar(&cellsLint, "cells-lint", false, "")
+	flag.StringVar(&output, "output", "", "")
+	flag.BoolVar(&watch, "watch", false, "")
 
 	flag.Usage = func() { printUsage() }
 	flag.Parse()
@@ -98,17 +114,42 @@ func main() {
 	if cellsLint && cellsPath == "" {
 		fmt.Fprintf(os.Stderr, "%smmaid:%s --cells-lint has no effect without --cells\n", ansiBold+ansiCyan, ansiReset)
 	}
+	if output != "" && insert != "" {
+		fmt.Fprintf(os.Stderr, "%smmaid:%s --output cannot be combined with --insert\n", ansiBold+ansiCyan, ansiReset)
+		os.Exit(1)
+	}
+	if watch && (insert != "" || cellsPath != "" || output != "") {
+		fmt.Fprintf(os.Stderr, "%smmaid:%s --watch cannot be combined with --insert, --cells or --output\n", ansiBold+ansiCyan, ansiReset)
+		os.Exit(1)
+	}
 
-	if width > 0 {
-		diagram.SetWidthOverride(width)
+	// Resolution order: flag, MMAID_*, the terminal's profile, the file's
+	// default section, the built-in default (ADR-500).
+	res, _, err := resolveSettings()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%smmaid:%s config: %v\n", ansiBold+ansiCyan, ansiReset, err)
+		os.Exit(1)
+	}
+	for _, w := range res.Warnings {
+		fmt.Fprintf(os.Stderr, "%smmaid:%s config: %s\n", ansiBold+ansiCyan, ansiReset, w)
+	}
+	theme = res.Theme
+	ascii = res.Glyphs == "ascii"
+	paddingX, paddingY = res.PaddingX, res.PaddingY
+	sharpEdges = res.SharpEdges
+
+	if res.Width > 0 {
+		diagram.SetWidthOverride(res.Width)
 	} else if cellsPath != "" {
 		// A frame is a comparable artifact, so it never tracks the window the
 		// command happens to run in.
 		diagram.SetWidthOverride(cellsWidth)
 	}
-	if orientation != "" && !diagram.SetOrientationOverride(orientation) {
-		fmt.Fprintf(os.Stderr, "%smmaid:%s unknown orientation %q (use TB or LR)\n", ansiBold+ansiCyan, ansiReset, orientation)
+	if res.Orientation != "" && !diagram.SetOrientationOverride(res.Orientation) {
+		fmt.Fprintf(os.Stderr, "%smmaid:%s unknown orientation %q (use TB or LR)\n", ansiBold+ansiCyan, ansiReset, res.Orientation)
 	}
+	renderer.SetTruecolor(res.Truecolor)
+	textwidth.SetAmbiguousWide(res.AmbiguousWide)
 
 	if showVer {
 		fmt.Printf("%smmaid%s %s%s%s\n", ansiBold+ansiCyan, ansiReset, ansiYellow, version, ansiReset)
@@ -126,6 +167,20 @@ func main() {
 		}
 		runDemo(theme, demo)
 		os.Exit(0)
+	}
+
+	out := outputSpec{
+		ascii:      ascii,
+		paddingX:   paddingX,
+		paddingY:   paddingY,
+		sharpEdges: sharpEdges,
+		theme:      theme,
+		hyperlinks: res.Hyperlinks,
+		markdown:   markdown,
+		insert:     insert,
+		cellsPath:  cellsPath,
+		cellsLint:  cellsLint,
+		output:     output,
 	}
 
 	// JSON ingest mode
@@ -168,8 +223,13 @@ func main() {
 		}
 
 		// Render the generated Mermaid syntax.
-		renderAndOutput(mermaidSrc, ascii, paddingX, paddingY, sharpEdges, theme, markdown, insert, cellsPath, cellsLint)
+		renderAndOutput(mermaidSrc, out)
 		os.Exit(0)
+	}
+
+	if watch {
+		runWatch(flag.Args(), out)
+		return
 	}
 
 	input, err := readInput(flag.Args())
@@ -178,42 +238,205 @@ func main() {
 		os.Exit(1)
 	}
 
-	renderAndOutput(input, ascii, paddingX, paddingY, sharpEdges, theme, markdown, insert, cellsPath, cellsLint)
+	renderAndOutput(input, out)
 }
 
-func renderAndOutput(source string, ascii bool, paddingX, paddingY int, sharpEdges bool, theme string, markdown bool, insert, cellsPath string, cellsLint bool) {
+// flagSettings reads the settings the command line actually named. A flag left
+// at its default is silent, so the layers below it can speak.
+func flagSettings() config.Settings {
+	var s config.Settings
+	flag.Visit(func(f *flag.Flag) {
+		value := f.Value.String()
+		switch f.Name {
+		case "a", "ascii":
+			ascii := "ascii"
+			s.Glyphs = &ascii
+		case "t", "theme":
+			s.Theme = &value
+		case "w", "width":
+			if n, err := strconv.Atoi(value); err == nil {
+				s.Width = &n
+			}
+		case "orientation":
+			s.Orientation = &value
+		case "padding-x":
+			if n, err := strconv.Atoi(value); err == nil {
+				s.PaddingX = &n
+			}
+		case "padding-y":
+			if n, err := strconv.Atoi(value); err == nil {
+				s.PaddingY = &n
+			}
+		case "sharp-edges":
+			on := value == "true"
+			s.SharpEdges = &on
+		}
+	})
+	return s
+}
+
+// resolveSettings loads the configuration file and resolves every setting
+// against it, reporting the path it read.
+func resolveSettings() (config.Resolved, string, error) {
+	path := config.Path()
+	file, err := config.Load(path)
+	if err != nil {
+		return config.Resolved{}, path, err
+	}
+	return config.Resolve(flagSettings(), os.Getenv, file, config.TerminalIdentity()), path, nil
+}
+
+// runConfig handles the `config` subcommand.
+func runConfig(args []string) {
+	if len(args) == 0 {
+		printConfigUsage()
+		os.Exit(2)
+	}
+	switch args[0] {
+	case "show":
+		printConfigShow()
+	case "init":
+		fmt.Fprintln(os.Stderr, "not implemented yet: see ADR-500")
+		os.Exit(2)
+	default:
+		fmt.Fprintf(os.Stderr, "%smmaid:%s config: unknown subcommand %q\n", ansiBold+ansiCyan, ansiReset, args[0])
+		printConfigUsage()
+		os.Exit(2)
+	}
+}
+
+func printConfigUsage() {
+	w := os.Stderr
+	fmt.Fprintf(w, "\n  %smmaid config%s\n\n", ansiBold+ansiCyan, ansiReset)
+	fmt.Fprintf(w, "    %sshow%s   Print every setting with its resolved value and source\n", ansiYellow, ansiReset)
+	fmt.Fprintf(w, "    %sinit%s   Probe the terminal and write its profile (not implemented yet)\n\n", ansiYellow, ansiReset)
+}
+
+// printConfigShow prints the resolved value and the source of every setting.
+func printConfigShow() {
+	res, path, err := resolveSettings()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%smmaid:%s config: %v\n", ansiBold+ansiCyan, ansiReset, err)
+		os.Exit(1)
+	}
+
+	if _, err := os.Stat(path); err != nil {
+		fmt.Printf("file      %s (no config file)\n", path)
+	} else {
+		fmt.Printf("file      %s\n", path)
+	}
+	identity := config.TerminalIdentity()
+	if identity == "" {
+		identity = "(unknown)"
+	}
+	fmt.Printf("identity  %s\n\n", identity)
+
+	nameWidth, valueWidth := 0, 0
+	for _, key := range config.Keys {
+		nameWidth = max(nameWidth, len(key))
+		valueWidth = max(valueWidth, len(res.Value(key)))
+	}
+	for _, key := range config.Keys {
+		fmt.Printf("%-*s  %-*s  (%s)\n", nameWidth, key, valueWidth, res.Value(key), res.Source[key])
+	}
+	for _, warning := range res.Warnings {
+		fmt.Fprintf(os.Stderr, "%smmaid:%s config: %s\n", ansiBold+ansiCyan, ansiReset, warning)
+	}
+}
+
+// outputSpec is what the render pass needs after the settings are resolved.
+type outputSpec struct {
+	ascii      bool
+	paddingX   int
+	paddingY   int
+	sharpEdges bool
+	theme      string
+	hyperlinks bool
+	markdown   bool
+	insert     string
+	cellsPath  string
+	cellsLint  bool
+	output     string
+}
+
+func render(source string, o outputSpec) string {
 	var opts []mmaid.Option
-	if ascii {
+	if o.ascii {
 		opts = append(opts, mmaid.WithASCII())
 	}
-	if paddingX != 4 || paddingY != 2 {
-		opts = append(opts, mmaid.WithPadding(paddingX, paddingY))
+	if o.paddingX != 4 || o.paddingY != 2 {
+		opts = append(opts, mmaid.WithPadding(o.paddingX, o.paddingY))
 	}
-	if sharpEdges {
+	if o.sharpEdges {
 		opts = append(opts, mmaid.WithSharpEdges())
 	}
-	if theme != "" {
-		opts = append(opts, mmaid.WithTheme(theme))
+	if o.theme != "" {
+		opts = append(opts, mmaid.WithTheme(o.theme))
 	}
+	if o.hyperlinks {
+		opts = append(opts, mmaid.WithHyperlinks())
+	}
+	return mmaid.Render(source, opts...)
+}
 
-	result := mmaid.Render(source, opts...)
+func renderAndOutput(source string, o outputSpec) {
+	result := render(source, o)
 
-	if cellsPath != "" {
-		writeCells(result, cellsPath, cellsLint)
+	if o.cellsPath != "" {
+		writeCells(result, o.cellsPath, o.cellsLint)
 		return
 	}
 
-	if markdown {
+	if o.markdown {
 		result = "```\n" + result + "\n```"
 	}
 
-	if insert != "" {
-		if err := insertIntoFile(insert, result); err != nil {
+	if o.insert != "" {
+		if err := insertIntoFile(o.insert, result); err != nil {
 			fmt.Fprintf(os.Stderr, "%smmaid:%s %v\n", ansiBold+ansiCyan, ansiReset, err)
 			os.Exit(1)
 		}
-	} else {
-		fmt.Println(result)
+		return
+	}
+
+	if o.output != "" {
+		if err := os.WriteFile(o.output, []byte(result+"\n"), 0o644); err != nil {
+			fmt.Fprintf(os.Stderr, "%smmaid:%s writing %s: %v\n", ansiBold+ansiCyan, ansiReset, o.output, err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	fmt.Println(result)
+}
+
+// runWatch renders the file, then re-renders it whenever its modification time
+// changes. Ctrl-C ends it.
+func runWatch(args []string, o outputSpec) {
+	if len(args) == 0 {
+		fmt.Fprintf(os.Stderr, "%smmaid:%s --watch needs a file to watch\n", ansiBold+ansiCyan, ansiReset)
+		os.Exit(1)
+	}
+	path := args[0]
+
+	var last time.Time
+	for {
+		info, err := os.Stat(path)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%smmaid:%s %v\n", ansiBold+ansiCyan, ansiReset, err)
+			os.Exit(1)
+		}
+		if mtime := info.ModTime(); !mtime.Equal(last) {
+			last = mtime
+			data, err := os.ReadFile(path)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%smmaid:%s %v\n", ansiBold+ansiCyan, ansiReset, err)
+				os.Exit(1)
+			}
+			fmt.Print("\x1b[2J\x1b[H")
+			fmt.Println(render(string(data), o))
+		}
+		time.Sleep(watchInterval)
 	}
 }
 
@@ -275,8 +498,16 @@ func printUsage() {
 	fmt.Fprintf(w, "        %s--orientation%s %sTB|LR%s  Force layout orientation (overrides 'direction')\n", ansiYellow, ansiReset, ansiDim, ansiReset)
 	fmt.Fprintf(w, "        %s--sharp-edges%s    Sharp corners on edge routing\n\n", ansiYellow, ansiReset)
 	fmt.Fprintf(w, "  %sOUTPUT%s\n", ansiBold+ansiWhite, ansiReset)
+	fmt.Fprintf(w, "        %s--output%s %sFILE%s    Write what would go to stdout to FILE\n", ansiYellow, ansiReset, ansiDim, ansiReset)
+	fmt.Fprintf(w, "        %s--watch%s          Re-render the file whenever it changes (Ctrl-C to stop)\n", ansiYellow, ansiReset)
 	fmt.Fprintf(w, "        %s--cells%s %sFILE%s     Write the rendered frame as a .cells dump (- is stdout)\n", ansiYellow, ansiReset, ansiDim, ansiReset)
 	fmt.Fprintf(w, "        %s--cells-lint%s     With %s--cells%s, print structural lint findings to stderr\n\n", ansiYellow, ansiReset, ansiYellow, ansiReset)
+	fmt.Fprintf(w, "  %sCONFIG%s\n", ansiBold+ansiWhite, ansiReset)
+	fmt.Fprintf(w, "    %smmaid config show%s  Every setting with its resolved value and source\n", ansiYellow, ansiReset)
+	fmt.Fprintf(w, "    %smmaid config init%s  Probe the terminal and write its profile (not implemented yet)\n", ansiYellow, ansiReset)
+	fmt.Fprintf(w, "    %sFile%s      %s$XDG_CONFIG_HOME/mmaid/config.json%s, else ~/.config/mmaid/config.json\n", ansiDim, ansiReset, ansiDim, ansiReset)
+	fmt.Fprintf(w, "    %sOrder%s     flag, %sMMAID_*%s, the terminal's profile, the file's default, built in\n", ansiDim, ansiReset, ansiDim, ansiReset)
+	fmt.Fprintf(w, "    %sColour%s    %sNO_COLOR%s disables a theme that came from the file or the environment\n\n", ansiDim, ansiReset, ansiDim, ansiReset)
 	fmt.Fprintf(w, "  %sJSON INGEST%s\n", ansiBold+ansiWhite, ansiReset)
 	fmt.Fprintf(w, "        %s--json%s %sMODE%s     Read JSON from stdin, render as MODE (treemap, pie)\n", ansiYellow, ansiReset, ansiDim, ansiReset)
 	fmt.Fprintf(w, "        %s--template%s       Print minimum valid JSON for the given --json mode\n", ansiYellow, ansiReset)
