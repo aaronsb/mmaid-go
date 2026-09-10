@@ -155,7 +155,8 @@ func RenderXYChart(source string, cs renderer.CharSet, theme *renderer.Theme) *r
 	}
 
 	canvasWidth := yLabelW + plotW + 2
-	canvasHeight := titleRows + plotH + 4
+	// +1 for the row the y axis points into
+	canvasHeight := titleRows + 1 + plotH + 4
 
 	c := renderer.NewCanvas(canvasWidth, canvasHeight)
 	c.SetCharSet(cs)
@@ -176,15 +177,19 @@ func RenderXYChart(source string, cs renderer.CharSet, theme *renderer.Theme) *r
 	}
 
 	plotX := yLabelW
-	plotY := titleRows
+	plotY := titleRows + 1
 	plotBottom := plotY + plotH
 
 	barCh := cs.Fills.Dark
 	lineDot := cs.Dot
 
-	// Axes: two segments meeting at the origin.
-	c.Segment(plotY, plotX-1, plotBottom, plotX-1, glyph.Light, false, "edge")
-	c.Segment(plotBottom, plotX-1, plotBottom, plotX+plotW-1, glyph.Light, false, "edge")
+	// Axes: two segments meeting at the origin, each far end an arrowhead
+	// the axis feeds (ADR-402).
+	axisTip := plotY - 1
+	c.Segment(axisTip, plotX-1, plotBottom, plotX-1, glyph.Light, false, "edge")
+	c.Segment(plotBottom, plotX-1, plotBottom, plotX+plotW, glyph.Light, false, "edge")
+	c.Put(axisTip, plotX-1, cs.ArrowUp, "edge")
+	c.Put(plotBottom, plotX+plotW, cs.ArrowRight, "edge")
 
 	// Fill plot area background
 	useRegion := theme != nil && theme.HasDepthColors()
