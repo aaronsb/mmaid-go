@@ -1,5 +1,5 @@
 ---
-status: Proposed
+status: Accepted
 date: 2026-09-09
 deciders:
   - aaronsb
@@ -31,7 +31,7 @@ A line end is closed by what it meets: another arm, an arrowhead fed from
 its tail, or text. No lint exception is added for any renderer.
 
 - **Axes** (quadrant, xychart): the origin is a corner; each axis ends in
-  an arrowhead from the arrows family, `▸` and `▴`, fed by the axis line.
+  an arrowhead from the arrows family, `►` and `▲`, fed by the axis line.
 - **Separator rules** (gantt section and day rules, eventmodeling lane
   rules): a rule runs from the row's label text to the right-hand text
   when there is one, and otherwise ends one cell short at a `·` marker.

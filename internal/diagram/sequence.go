@@ -1130,6 +1130,11 @@ func drawMessage(
 		tail = srcCol + step
 	}
 	canvas.Segment(row, tail, row, head, w, false, "edge")
+	// A destroyed participant has no lifeline here, so the tail would be an
+	// open end; a middot closes it.
+	if msg.arrowType != "bidirectional" && canvas.Arms(row, tail)&(glyph.N|glyph.S) == 0 {
+		canvas.Put(row, tail, cs.Middot, "edge")
+	}
 
 	ahead, aback := cs.ArrowRight, cs.ArrowLeft
 	async := ')'

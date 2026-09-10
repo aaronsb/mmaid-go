@@ -40,6 +40,7 @@ _Canvas, glyph selection, character sets, ANSI serialization_
 |-----|-------|--------|
 | [ADR-400](./renderer/ADR-400-glyphs-resolve-from-per-cell-arm-bits-in-a-final-pass.md) | Glyphs resolve from per-cell arm bits in a final pass | Accepted |
 | [ADR-401](./renderer/ADR-401-display-width-for-wide-characters.md) | Display width for wide characters | Accepted |
+| [ADR-402](./renderer/ADR-402-every-line-end-is-closed.md) | Every line end is closed | Accepted |
 
 ## Config
 _Terminal capability, profiles, glyph sets, user configuration_
