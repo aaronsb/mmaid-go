@@ -24,7 +24,7 @@ import (
 	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
 
-const version = "0.5.0"
+const version = "0.6.0"
 
 // cellsWidth is the width --cells renders at when -w is absent. It matches the
 // golden harness so a snapshot and its reference are the same frame.
