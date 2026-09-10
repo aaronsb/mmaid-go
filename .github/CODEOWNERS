@@ -1,0 +1,15 @@
+# Default owner for everything.
+*                       @aaronsb
+
+# Decisions and their index.
+/docs/architecture/     @aaronsb
+
+# The rendering core: canvas, glyph tables, routing, layout.
+/internal/renderer/     @aaronsb
+/internal/glyph/        @aaronsb
+/internal/routing/      @aaronsb
+/internal/layout/       @aaronsb
+
+# Reference frames: a change here is a visual change and gets a look.
+/testdata/golden/       @aaronsb
+/docs/gallery/          @aaronsb

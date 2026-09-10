@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security report
+    url: https://github.com/aaronsb/mmaid-go/security/advisories/new
+    about: Report a way to make mmaid emit an unintended escape sequence privately.
+  - name: Question
+    url: https://github.com/aaronsb/mmaid-go/discussions
+    about: Ask how to do something or discuss a rendering choice.

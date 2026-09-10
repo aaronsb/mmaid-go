@@ -36,6 +36,12 @@ domains:
     description: Terminal capability, profiles, glyph sets, user configuration
     folder: config
 
+  project:
+    range: [600, 699]
+    name: Project
+    description: Repository practices, contribution flow, CI, release
+    folder: project
+
 # Valid ADR statuses
 statuses:
   - Draft

@@ -3,6 +3,14 @@
 <p align="center">Render Mermaid diagrams in your terminal. Single binary, zero dependencies.</p>
 
 <p align="center">
+  <a href="https://github.com/aaronsb/mmaid-go/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/aaronsb/mmaid-go/ci.yml?branch=main&label=ci" alt="CI"></a>
+  <a href="https://github.com/aaronsb/mmaid-go/releases/latest"><img src="https://img.shields.io/github/v/release/aaronsb/mmaid-go?label=release" alt="Release"></a>
+  <a href="https://aur.archlinux.org/packages/mmaid"><img src="https://img.shields.io/aur/version/mmaid?label=aur" alt="AUR"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT"></a>
+  <img src="https://img.shields.io/badge/dependencies-0-brightgreen" alt="zero dependencies">
+</p>
+
+<p align="center">
   <img src="demo/mmaid-demo.gif" alt="mmaid demo" width="800">
 </p>
 
@@ -291,6 +299,10 @@ reference frame. `make gallery` rebuilds it, and `make golden-record` rebuilds
 it after re-recording.
 
 See ADR-101 for the format and the comparator's tolerances.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md): the snapshot loop, the rules the code keeps, and how to add a diagram type. Issues and pull requests use the templates under `.github/`.
 
 ## Acknowledgements
 
