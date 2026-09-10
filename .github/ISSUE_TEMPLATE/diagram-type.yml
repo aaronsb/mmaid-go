@@ -1,0 +1,30 @@
+name: Diagram type gap
+description: A Mermaid construct that renders wrong or is not parsed
+labels: [enhancement, diagram-type]
+body:
+  - type: input
+    id: type
+    attributes:
+      label: Diagram type
+      description: The Mermaid keyword, for example `sequenceDiagram` or `radar-beta`.
+    validations:
+      required: true
+  - type: textarea
+    id: construct
+    attributes:
+      label: Construct
+      description: The syntax from the Mermaid docs, with a link to the page or the grammar file.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: today
+    attributes:
+      label: What mmaid does today
+      description: The output, or "not parsed" if the parser's `// Skipped:` block lists it.
+      render: text
+  - type: textarea
+    id: expected
+    attributes:
+      label: How it should look in a terminal
+      description: A sketch is fine. Mermaid's SVG is the reference, not the target.

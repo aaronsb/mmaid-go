@@ -1,6 +1,9 @@
 MIT License
 
-Copyright (c) 2026 Fabio Souto
+Copyright (c) 2026 Aaron Bockelie
+
+The journey and packet renderers were ported from termaid,
+Copyright (c) 2026 Fabio Souto, also under the MIT License.
 Copyright (c) 2026 Aaron Bockelie (Go rewrite)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy

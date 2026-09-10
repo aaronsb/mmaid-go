@@ -48,3 +48,10 @@ _Terminal capability, profiles, glyph sets, user configuration_
 | ADR | Title | Status |
 |-----|-------|--------|
 | [ADR-500](./config/ADR-500-glyph-families-with-fallback-guided-terminal-tester-xdg-profiles.md) | Glyph families with fallback, guided terminal tester, XDG profiles | Accepted |
+
+## Project
+_Repository practices, contribution flow, CI, release_
+
+| ADR | Title | Status |
+|-----|-------|--------|
+| [ADR-600](./project/ADR-600-repository-practices-for-community-participation.md) | Repository practices for community participation | Accepted |

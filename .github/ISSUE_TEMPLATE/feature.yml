@@ -1,0 +1,21 @@
+name: Feature request
+description: A flag, a rendering option, a config setting
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What you are trying to do and what stops you.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What you would add or change. Sketch the flag or syntax if you have one.
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: How we would know it works
+      description: A source and the output you would expect, or a check that would pass.
