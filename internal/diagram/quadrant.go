@@ -120,7 +120,8 @@ func RenderQuadrantChart(source string, cs renderer.CharSet, theme *renderer.The
 	}
 
 	canvasWidth := yLabelW + plotW + 2
-	canvasHeight := titleRows + plotH + 4 // +4 for x-axis labels and axis line
+	// +1 for the row the y axis points into, +4 for x-axis labels and axis line
+	canvasHeight := titleRows + 1 + plotH + 4
 
 	c := renderer.NewCanvas(canvasWidth, canvasHeight)
 	c.SetCharSet(cs)
@@ -141,7 +142,7 @@ func RenderQuadrantChart(source string, cs renderer.CharSet, theme *renderer.The
 	}
 
 	plotStartX := yLabelW
-	plotStartY := titleRows
+	plotStartY := titleRows + 1
 	plotEndY := plotStartY + plotH - 1
 
 	dot := '●'
@@ -150,17 +151,24 @@ func RenderQuadrantChart(source string, cs renderer.CharSet, theme *renderer.The
 	}
 
 	// Axes: the y axis runs down to the x axis row and the x axis starts
-	// under it, so the origin is a corner.
+	// under it, so the origin is a corner. Each far end is an arrowhead the
+	// axis feeds (ADR-402).
 	axisRow := plotEndY + 1
 	plotEndX := plotStartX + plotW - 1
-	c.Segment(plotStartY, plotStartX-1, axisRow, plotStartX-1, glyph.Light, false, "edge")
-	c.Segment(axisRow, plotStartX-1, axisRow, plotEndX, glyph.Light, false, "edge")
+	axisTip := plotStartY - 1
+	c.Segment(axisTip, plotStartX-1, axisRow, plotStartX-1, glyph.Light, false, "edge")
+	c.Segment(axisRow, plotStartX-1, axisRow, plotEndX+1, glyph.Light, false, "edge")
+	c.Put(axisTip, plotStartX-1, cs.ArrowUp, "edge")
+	c.Put(axisRow, plotEndX+1, cs.ArrowRight, "edge")
 
-	// Dashed centre lines from the axes, crossing at the centre.
+	// Dashed centre lines, teeing into their axis at one end and stopping a
+	// cell short of the plot's far side at a marker.
 	midY := plotStartY + plotH/2
 	midX := plotStartX + plotW/2
-	c.Segment(midY, plotStartX-1, midY, plotEndX, glyph.Dashed, false, "edge")
-	c.Segment(plotStartY, midX, axisRow, midX, glyph.Dashed, false, "edge")
+	c.Segment(midY, plotStartX-1, midY, plotEndX-1, glyph.Dashed, false, "edge")
+	c.Put(midY, plotEndX, cs.Middot, "edge")
+	c.Segment(plotStartY+1, midX, axisRow, midX, glyph.Dashed, false, "edge")
+	c.Put(plotStartY, midX, cs.Middot, "edge")
 	c.Arm(midY, midX, glyph.Cross, glyph.Light, false, "edge")
 
 	// Quadrant labels and fills

@@ -35,6 +35,9 @@ type CharSet struct {
 	Ring       rune
 	DoubleRing rune
 
+	// Middot closes a separator rule that reaches no text (ADR-402).
+	Middot rune
+
 	// Chamfers and the indicators of the shapes they cut.
 	Slash         rune
 	Backslash     rune
@@ -160,10 +163,12 @@ func CharSetFor(set glyph.Set) CharSet {
 		cs.ArrowRight, cs.ArrowLeft, cs.ArrowDown, cs.ArrowUp = '>', '<', 'v', '^'
 		cs.CircleEndpoint, cs.CrossEndpoint = 'o', 'x'
 		cs.Dot, cs.Bullseye, cs.Ring, cs.DoubleRing = '*', '@', 'O', '@'
+		cs.Middot = '.'
 	} else {
 		cs.ArrowRight, cs.ArrowLeft, cs.ArrowDown, cs.ArrowUp = '►', '◄', '▼', '▲'
 		cs.CircleEndpoint, cs.CrossEndpoint = '○', '×'
 		cs.Dot, cs.Bullseye, cs.Ring, cs.DoubleRing = '●', '◉', '◯', '◎'
+		cs.Middot = '·'
 	}
 	if set.Chamfers == glyph.ASCIIFamily {
 		cs.Slash, cs.Backslash, cs.DiagonalCross = '/', '\\', 'X'
