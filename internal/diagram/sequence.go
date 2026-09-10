@@ -972,7 +972,8 @@ func drawBlockStart(
 		canvas.PutBox(row, right, cs.Rune(glyph.TopRight, glyph.Light), style)
 	}
 
-	// Label row: [kind] label — clear interior first to hide lifeline chars
+	// Label row: [kind] label. Only the label's own cells are cleared, so
+	// every lifeline it does not cover runs on through the row (ADR-402).
 	label := fmt.Sprintf("[%s]", ev.blk.kind)
 	if ev.blk.label != "" {
 		label = fmt.Sprintf("[%s] %s", ev.blk.kind, ev.blk.label)
@@ -980,12 +981,10 @@ func drawBlockStart(
 	labelCol := left + 1
 	if row+1 < canvas.Height {
 		canvas.PutBox(row+1, left, cs.Rune(glyph.Vertical, glyph.Light), style)
-		for c := left + 1; c < minInt(right, canvas.Width); c++ {
-			canvas.ClearCell(row+1, c)
-		}
 		if right < canvas.Width {
 			canvas.PutBox(row+1, right, cs.Rune(glyph.Vertical, glyph.Light), style)
 		}
+		clearSpan(canvas, row+1, labelCol, runeLen(label))
 		canvas.PutText(row+1, labelCol, label, "edge_label")
 	}
 }
@@ -1088,6 +1087,21 @@ func drawNote(
 	}
 
 	renderer.DrawRectangle(canvas, noteX, row, noteWidth, noteHeight, n.text, cs, "node")
+
+	// A lifeline the note covers tees into its top and bottom borders
+	// instead of being cut (ADR-402).
+	bottom := row + noteHeight - 1
+	for _, cx := range colCenters {
+		if cx <= noteX || cx >= noteX+noteWidth-1 {
+			continue
+		}
+		if canvas.Arms(row-1, cx)&glyph.S != 0 {
+			canvas.Arm(row, cx, glyph.N, glyph.Dashed, false, "node")
+		}
+		if canvas.Arms(bottom+1, cx)&glyph.N != 0 {
+			canvas.Arm(bottom, cx, glyph.S, glyph.Dashed, false, "node")
+		}
+	}
 }
 
 // ── Message drawing ─────────────────────────────────────────────────
@@ -1095,158 +1109,84 @@ func drawNote(
 func drawMessage(
 	canvas *renderer.Canvas, srcCol, tgtCol, row int,
 	msg *message, displayLabel string,
-	cs renderer.CharSet, useASCII bool,
+	cs renderer.CharSet,
 ) {
-	left := minInt(srcCol, tgtCol)
-	right := maxInt(srcCol, tgtCol)
-	goingRight := tgtCol > srcCol
-
-	// Line character
-	var hChar rune
+	w := glyph.Light
 	if msg.lineType == "dotted" {
-		if useASCII {
-			hChar = '.'
-		} else {
-			hChar = '\u2504' // ┄
-		}
-	} else {
-		if useASCII {
-			hChar = '-'
-		} else {
-			hChar = '\u2500' // ─
-		}
+		w = glyph.Dashed
 	}
 
-	// Draw the line (excluding endpoints which are lifeline chars)
-	for c := left + 1; c < right; c++ {
-		canvas.Put(row, c, hChar, "edge")
+	// The arrowhead sits in the cell before the target lifeline, which runs
+	// on unbroken. The source cell keeps the lifeline's arms, so it resolves
+	// to a tee, and an intermediate lifeline the line crosses to a cross
+	// (ADR-402).
+	step := 1
+	if tgtCol < srcCol {
+		step = -1
+	}
+	head := tgtCol - step
+	tail := srcCol
+	if msg.arrowType == "bidirectional" {
+		tail = srcCol + step
+	}
+	canvas.Segment(row, tail, row, head, w, false, "edge")
+
+	ahead, aback := cs.ArrowRight, cs.ArrowLeft
+	async := ')'
+	if step < 0 {
+		ahead, aback = cs.ArrowLeft, cs.ArrowRight
+		async = '('
 	}
 
-	// Arrowhead at target
 	switch msg.arrowType {
 	case "bidirectional":
-		if useASCII {
-			canvas.Put(row, left, '<', "arrow")
-			canvas.Put(row, right, '>', "arrow")
-		} else {
-			canvas.Put(row, left, '\u25C4', "arrow")  // ◄
-			canvas.Put(row, right, '\u25BA', "arrow") // ►
-		}
+		canvas.Put(row, head, ahead, "arrow")
+		canvas.Put(row, tail, aback, "arrow")
 	case "arrow":
-		if goingRight {
-			var arrow rune
-			if useASCII {
-				arrow = '>'
-			} else {
-				arrow = '\u25BA' // ►
-			}
-			canvas.Put(row, right, arrow, "arrow")
-			canvas.Put(row, left, hChar, "edge")
-		} else {
-			var arrow rune
-			if useASCII {
-				arrow = '<'
-			} else {
-				arrow = '\u25C4' // ◄
-			}
-			canvas.Put(row, left, arrow, "arrow")
-			canvas.Put(row, right, hChar, "edge")
-		}
+		canvas.Put(row, head, ahead, "arrow")
 	case "cross":
-		if goingRight {
-			canvas.Put(row, right, 'x', "arrow")
-			canvas.Put(row, left, hChar, "edge")
-		} else {
-			canvas.Put(row, left, 'x', "arrow")
-			canvas.Put(row, right, hChar, "edge")
-		}
+		canvas.Put(row, head, 'x', "arrow")
 	case "async":
-		if goingRight {
-			canvas.Put(row, right, ')', "arrow")
-			canvas.Put(row, left, hChar, "edge")
-		} else {
-			canvas.Put(row, left, '(', "arrow")
-			canvas.Put(row, right, hChar, "edge")
-		}
+		canvas.Put(row, head, async, "arrow")
 	default:
-		// "open" — no arrowhead, just line to endpoints
-		canvas.Put(row, left, hChar, "edge")
-		canvas.Put(row, right, hChar, "edge")
+		// "open" — no arrowhead, so the line runs into the lifeline.
+		canvas.Segment(row, tail, row, tgtCol, w, false, "edge")
 	}
 
 	// Label above the line
 	if displayLabel != "" {
-		labelRow := row - 1
-		labelCol := left + 2
-		canvas.PutText(labelRow, labelCol, displayLabel, "edge_label")
+		canvas.PutText(row-1, minInt(srcCol, tgtCol)+2, displayLabel, "edge_label")
 	}
 }
 
 func drawSelfMessage(
 	canvas *renderer.Canvas, col, row int,
 	msg *message, displayLabel string,
-	cs renderer.CharSet, useASCII bool,
+	cs renderer.CharSet,
 ) {
 	loopWidth := maxInt(textwidth.String(displayLabel)+4, 8)
-
-	var hChar, vChar rune
-	if msg.lineType == "dotted" {
-		if useASCII {
-			hChar = '.'
-			vChar = ':'
-		} else {
-			hChar = '\u2504' // ┄
-			vChar = '\u2506' // ┆
-		}
-	} else {
-		if useASCII {
-			hChar = '-'
-			vChar = '|'
-		} else {
-			hChar = '\u2500' // ─
-			vChar = '\u2502' // │
-		}
-	}
-
-	// Top horizontal line going right
-	for c := col + 1; c < col+loopWidth; c++ {
-		canvas.Put(row, c, hChar, "edge")
-	}
-
-	// Vertical line going down
 	rightCol := col + loopWidth - 1
-	canvas.Put(row+1, rightCol, vChar, "edge")
 
-	// Bottom horizontal line going left back to lifeline
-	for c := col + 1; c < col+loopWidth; c++ {
-		canvas.Put(row+1, c, hChar, "edge")
+	w := glyph.Light
+	if msg.lineType == "dotted" {
+		w = glyph.Dashed
 	}
 
-	// Arrowhead pointing back at lifeline
+	// Out of the lifeline, down, and back to the cell before it, which holds
+	// the arrowhead; the lifeline runs on unbroken (ADR-402).
+	canvas.Segment(row, col, row, rightCol, w, false, "edge")
+	canvas.Segment(row, rightCol, row+1, rightCol, w, false, "edge")
+	canvas.Segment(row+1, col+1, row+1, rightCol, w, false, "edge")
+
 	switch msg.arrowType {
-	case "arrow":
-		var arrow rune
-		if useASCII {
-			arrow = '<'
-		} else {
-			arrow = '\u25C4' // ◄
-		}
-		canvas.Put(row+1, col, arrow, "arrow")
 	case "cross":
-		canvas.Put(row+1, col, 'x', "arrow")
+		canvas.Put(row+1, col+1, 'x', "arrow")
 	case "async":
-		canvas.Put(row+1, col, '(', "arrow")
+		canvas.Put(row+1, col+1, '(', "arrow")
+	case "arrow", "bidirectional":
+		canvas.Put(row+1, col+1, cs.ArrowLeft, "arrow")
 	default:
-		canvas.Put(row+1, col, hChar, "edge")
-	}
-
-	// Corners
-	if !useASCII {
-		canvas.Put(row, rightCol, '\u2510', "edge")   // ┐
-		canvas.Put(row+1, rightCol, '\u2518', "edge") // ┘
-	} else {
-		canvas.Put(row, rightCol, '+', "edge")
-		canvas.Put(row+1, rightCol, '+', "edge")
+		canvas.Segment(row+1, col, row+1, col+1, w, false, "edge")
 	}
 
 	// Label above the top line
@@ -1321,12 +1261,22 @@ func renderSequenceModel(diagram *sequenceDiagram, cs renderer.CharSet) *rendere
 		if dr, ok := destroyed[p.id]; ok {
 			endRow = dr
 		}
+		// A lifeline tees into the header's bottom border where the header
+		// is a box; where it is not, the header's label closes it (ADR-402).
+		if canvas.Arms(lifelineStart-1, cx) != 0 {
+			canvas.Arm(lifelineStart-1, cx, glyph.S, glyph.Dashed, false, "edge")
+		}
 		for r := lifelineStart; r < minInt(endRow, lifelineEnd+1); r++ {
 			if isActivated(activationRanges, p.id, r) {
 				canvas.PutBox(r, cx, activeChar, "edge")
 			} else {
 				canvas.PutBox(r, cx, lifelineChar, "edge")
 			}
+		}
+		// A lifeline that reaches the bottom ends at a marker; a destroyed
+		// one ends at its cross.
+		if endRow > lifelineEnd {
+			canvas.Put(lifelineEnd+1, cx, cs.Middot, "edge")
 		}
 	}
 
@@ -1372,6 +1322,7 @@ func renderSequenceModel(diagram *sequenceDiagram, cs renderer.CharSet) *rendere
 
 	// 3. Draw events (messages, notes, blocks)
 	msgCounter := 0
+	var labelRows []int
 	for idx, ev := range flatEvents {
 		row := layout.rowOffsets[idx]
 
@@ -1398,6 +1349,7 @@ func renderSequenceModel(diagram *sequenceDiagram, cs renderer.CharSet) *rendere
 
 		case *blockStart:
 			drawBlockStart(canvas, e, row, layout.colCenters, cs, useASCII)
+			labelRows = append(labelRows, row+1)
 
 		case *blockSectionBreak:
 			drawBlockSection(canvas, e, row, layout.colCenters, cs, useASCII)
@@ -1421,9 +1373,32 @@ func renderSequenceModel(diagram *sequenceDiagram, cs renderer.CharSet) *rendere
 			}
 
 			if si == ti {
-				drawSelfMessage(canvas, layout.colCenters[si], row, e, displayLabel, cs, useASCII)
+				drawSelfMessage(canvas, layout.colCenters[si], row, e, displayLabel, cs)
 			} else {
-				drawMessage(canvas, layout.colCenters[si], layout.colCenters[ti], row, e, displayLabel, cs, useASCII)
+				drawMessage(canvas, layout.colCenters[si], layout.colCenters[ti], row, e, displayLabel, cs)
+			}
+		}
+	}
+
+	// 4. A fragment's label is written over the lifelines, and its own
+	// spaces would leave a hole in one, so each lifeline is drawn again
+	// through the cells the label left blank (ADR-402).
+	for _, r := range labelRows {
+		if r < lifelineStart || r > lifelineEnd {
+			continue
+		}
+		for i, p := range diagram.participants {
+			cx := layout.colCenters[i]
+			if dr, ok := destroyed[p.id]; ok && r >= dr {
+				continue
+			}
+			if canvas.Get(r, cx) != ' ' || canvas.Arms(r, cx) != 0 {
+				continue
+			}
+			if isActivated(activationRanges, p.id, r) {
+				canvas.PutBox(r, cx, activeChar, "edge")
+			} else {
+				canvas.PutBox(r, cx, lifelineChar, "edge")
 			}
 		}
 	}
