@@ -303,7 +303,7 @@ func emLayout(ed *emData) emPlan {
 }
 
 // emDrawLanes writes each lane's label and the rule that closes it.
-func emDrawLanes(c *renderer.Canvas, p emPlan, theme *renderer.Theme, useRegion bool) {
+func emDrawLanes(c *renderer.Canvas, p emPlan, cs renderer.CharSet, theme *renderer.Theme, useRegion bool) {
 	for i, l := range p.lanes {
 		style := "subgraph_label"
 		ruleStyle := "subgraph"
@@ -318,7 +318,11 @@ func emDrawLanes(c *renderer.Canvas, p emPlan, theme *renderer.Theme, useRegion 
 		}
 		c.PutText(l.top+1, 0, l.label, style)
 		if i < len(p.lanes)-1 {
+			// The rule reaches no text at either end, so a marker closes
+			// each (ADR-402).
 			c.Segment(l.top+3, p.contentX, l.top+3, p.width-2, glyph.Light, false, ruleStyle)
+			c.Put(l.top+3, p.contentX, cs.Middot, ruleStyle)
+			c.Put(l.top+3, p.width-2, cs.Middot, ruleStyle)
 		}
 	}
 }
@@ -418,7 +422,7 @@ func RenderEventModeling(source string, cs renderer.CharSet, theme *renderer.The
 	if p.title != "" {
 		c.PutText(0, 0, p.title, "bold_label")
 	}
-	emDrawLanes(c, p, theme, useRegion)
+	emDrawLanes(c, p, cs, theme, useRegion)
 	emDrawBoxes(c, p, theme, useRegion)
 	emRouteArrows(c, p, cs)
 	return c
