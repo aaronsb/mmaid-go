@@ -62,12 +62,30 @@ exceptions.
 ### Negative
 
 - A sequence arrowhead no longer touches its target lifeline.
-- Journey and the axis charts each gain a row or column of chrome.
+- Journey and the axis charts each gain a row or column of chrome, and so
+  do gantt and the sequence diagram, for the row their rules and lifelines
+  end on.
+- A title written into a border abuts the rule on either side. A space
+  between the two opens the line the title interrupts, so journey's section
+  titles read `───Build───`.
+- A fragment's label no longer clears the lifelines under it, so one shows
+  in the gap between the label's words.
 
 ### Neutral
 
 - Each choice was the option the arm tables produce unaided; the
   alternatives that kept the current drawing all needed a lint exception.
+- The charset carries the middot and the four hollow heads beside the
+  markers and filled arrows it already held.
+- The rules the decision names as separators cover more than gantt and
+  eventmodeling: quadrant's centre lines end at a middot, and a note over a
+  lifeline tees it into the note's top and bottom borders rather than
+  cutting it.
+- A class relationship's marker of any kind — hollow head, arrow, or
+  diamond — takes the first cell outside the border of the box it points
+  at, and that end of the line stops there.
+- Two class relationships leaving one port still put one's arrowhead beside
+  the other's arm, the rule 3 finding ADR-102 spreads the ports to settle.
 
 ## Alternatives Considered
 
