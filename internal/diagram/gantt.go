@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aaronsb/mmaid-go/internal/glyph"
 	"github.com/aaronsb/mmaid-go/internal/renderer"
 	"github.com/aaronsb/mmaid-go/internal/textwidth"
 )
@@ -297,13 +298,11 @@ func RenderGantt(source string, cs renderer.CharSet, theme *renderer.Theme) *ren
 	}
 
 	vLine := '│'
-	hLine := '─'
 	barCh := cs.Fills.Dark
 	barHalf := cs.Fills.Medium
 	milestone := '◆'
 	if useASCII {
 		vLine = '|'
-		hLine = '-'
 		milestone = '*'
 	}
 
@@ -317,10 +316,12 @@ func RenderGantt(source string, cs renderer.CharSet, theme *renderer.Theme) *ren
 	c.PutText(row, barStartCol+barW-textwidth.String(endLabel), endLabel, "default")
 	row++
 
-	// Header line
-	for col := barStartCol; col < barStartCol+barW; col++ {
-		c.PutBox(row, col, hLine, "edge")
-	}
+	// The day rule runs from the divider column, so the two meet in a
+	// corner, and stops a cell short of the bar area's end at a marker
+	// (ADR-402).
+	headerRow := row
+	c.Segment(headerRow, labelW+1, headerRow, barStartCol+barW-1, glyph.Light, false, "edge")
+	c.Put(headerRow, barStartCol+barW-1, cs.Middot, "edge")
 	row++
 
 	useRegion := theme != nil && theme.HasDepthColors()
@@ -337,7 +338,6 @@ func RenderGantt(source string, cs renderer.CharSet, theme *renderer.Theme) *ren
 				sectionStyle = "_ansi:" + theme.RegionTextStyle(sectionIdx, 0)
 			}
 			c.PutText(row, 1, t.section, sectionStyle)
-			c.PutBox(row, labelW+1, vLine, "edge")
 
 			// Color strip only on bar area (right of divider)
 			if useRegion {
@@ -356,7 +356,6 @@ func RenderGantt(source string, cs renderer.CharSet, theme *renderer.Theme) *ren
 		}
 		padding := labelW - textwidth.String(t.label) - 1
 		c.PutText(row, padding, t.label, labelStyle)
-		c.PutBox(row, labelW+1, vLine, "edge")
 
 		// Row background
 		if useRegion && sectionIdx >= 0 {
@@ -404,6 +403,11 @@ func RenderGantt(source string, cs renderer.CharSet, theme *renderer.Theme) *ren
 		row++
 	}
 
+	// The divider between the labels and the bars, from the day rule down
+	// past the last row to a marker.
+	c.Segment(headerRow, labelW+1, row, labelW+1, glyph.Light, false, "edge")
+	c.Put(row, labelW+1, cs.Middot, "edge")
+
 	// Today marker: vertical dashed line at current date
 	if gd.todayMarker {
 		now := time.Now()
@@ -415,13 +419,16 @@ func RenderGantt(source string, cs renderer.CharSet, theme *renderer.Theme) *ren
 				if useRegion {
 					todayStyle = "_ansi:\033[1m\033[38;2;255;100;100m" // bright red
 				}
-				// Draw from header line to last task row
-				for r := titleRows + 2; r < row; r++ {
+				// A tee into the day rule, down past the last task
+				// row to a marker; a bar the line meets closes it.
+				c.Arm(headerRow, todayCol, glyph.S, glyph.Dashed, false, todayStyle)
+				for r := headerRow + 1; r < row; r++ {
 					existing := c.Get(r, todayCol)
 					if existing == ' ' || existing == cs.Fills.Light {
-						c.PutBox(r, todayCol, '┆', todayStyle)
+						c.Arm(r, todayCol, glyph.Vertical, glyph.Dashed, false, todayStyle)
 					}
 				}
+				c.Put(row, todayCol, cs.Middot, todayStyle)
 				// Label above
 				label := "today"
 				labelCol := todayCol - textwidth.String(label)/2
