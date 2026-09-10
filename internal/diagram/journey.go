@@ -225,7 +225,8 @@ func renderJourneyHorizontal(jd *journeyData, cs renderer.CharSet, theme *render
 		c.PutText(row, 4, actor, style)
 	}
 
-	// Section bars above the task boxes.
+	// A section is a box around its cards, one cell clear of them, with the
+	// title in the top border (ADR-402).
 	for si, sp := range spans {
 		borderStyle := "node"
 		labelStyle := "bold_label"
@@ -233,16 +234,15 @@ func renderJourneyHorizontal(jd *journeyData, cs renderer.CharSet, theme *render
 			borderStyle = "_ansi:" + theme.RegionBorderStyle(si, 0)
 			labelStyle = "_ansi:" + theme.RegionLabelStyle(si, 0)
 		}
-		c.PutBox(sectionRow, sp.start, tl, borderStyle)
-		c.DrawHorizontal(sectionRow, sp.start, sp.end, glyph.Light, borderStyle)
-		c.PutBox(sectionRow, sp.end, tr, borderStyle)
+		left, right := sp.start-1, sp.end+1
+		bottom := faceRow + 1
+		c.Segment(sectionRow, left, sectionRow, right, glyph.Light, !useASCII, borderStyle)
+		c.Segment(bottom, left, bottom, right, glyph.Light, !useASCII, borderStyle)
+		c.Segment(sectionRow, left, bottom, left, glyph.Light, !useASCII, borderStyle)
+		c.Segment(sectionRow, right, bottom, right, glyph.Light, !useASCII, borderStyle)
 
-		titleX := max(sp.start+(sp.end-sp.start-runeLen(sp.title))/2, sp.start+1)
-		for col := titleX - 1; col < titleX+runeLen(sp.title)+1; col++ {
-			if col > sp.start && col < sp.end {
-				c.ClearCell(sectionRow, col)
-			}
-		}
+		titleX := max(left+(right-left-runeLen(sp.title))/2, left+2)
+		clearSpan(c, sectionRow, titleX, runeLen(sp.title))
 		c.PutText(sectionRow, titleX, sp.title, labelStyle)
 	}
 

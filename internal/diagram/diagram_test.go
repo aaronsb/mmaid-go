@@ -19,6 +19,25 @@ func assertCanvasContains(t *testing.T, c *renderer.Canvas, substr string) {
 	}
 }
 
+// assertOneRowHolds fails unless one row of the canvas holds every substring.
+func assertOneRowHolds(t *testing.T, c *renderer.Canvas, subs ...string) {
+	t.Helper()
+	out := c.ToString()
+	for _, line := range strings.Split(out, "\n") {
+		found := true
+		for _, s := range subs {
+			if !strings.Contains(line, s) {
+				found = false
+				break
+			}
+		}
+		if found {
+			return
+		}
+	}
+	t.Errorf("no row holds all of %q\n---\n%s\n---", subs, out)
+}
+
 func assertCanvasNotEmpty(t *testing.T, c *renderer.Canvas) {
 	t.Helper()
 	out := c.ToString()
@@ -217,12 +236,10 @@ func TestJourneyVerticalViaDirective(t *testing.T) {
 }
 
 func TestJourneyHorizontalByDefault(t *testing.T) {
-	// No directive, no override -> journey's natural default is horizontal.
+	// No directive, no override -> journey's natural default is horizontal,
+	// which lays the cards along one row.
 	c := RenderJourney("journey\n    section S\n        A: 3: X\n        B: 4: Y", renderer.UNICODE, nil)
-	lines := strings.Split(strings.TrimRight(c.ToString(), "\n"), "\n")
-	if len(lines) > 9 {
-		t.Errorf("expected a short horizontal layout, got %d lines", len(lines))
-	}
+	assertOneRowHolds(t, c, "A", "B")
 }
 
 func TestOrientationCLIOverridesDirective(t *testing.T) {

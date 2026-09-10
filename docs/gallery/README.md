@@ -535,6 +535,21 @@ sequenceDiagram
 
 ![sequence](sequence.png)
 
+## sequence-destroy
+
+Rendered with `-t slate -w 80`.
+
+```mermaid
+sequenceDiagram
+    participant C
+    participant D
+    C->>D: hello
+    destroy D
+    D->>C: bye
+```
+
+![sequence-destroy](sequence-destroy.png)
+
 ## state
 
 Rendered with `-t blueprint`.

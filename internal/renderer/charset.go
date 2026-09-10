@@ -25,6 +25,12 @@ type CharSet struct {
 	ArrowDown  rune
 	ArrowUp    rune
 
+	// The hollow heads UML gives inheritance, drawn beside the filled ones.
+	HollowRight rune
+	HollowLeft  rune
+	HollowDown  rune
+	HollowUp    rune
+
 	CircleEndpoint rune
 	CrossEndpoint  rune
 
@@ -34,6 +40,9 @@ type CharSet struct {
 	Bullseye   rune
 	Ring       rune
 	DoubleRing rune
+
+	// Middot closes a separator rule that reaches no text (ADR-402).
+	Middot rune
 
 	// Chamfers and the indicators of the shapes they cut.
 	Slash         rune
@@ -158,12 +167,17 @@ func CharSetFor(set glyph.Set) CharSet {
 	}
 	if set.Arrows == glyph.ASCIIFamily {
 		cs.ArrowRight, cs.ArrowLeft, cs.ArrowDown, cs.ArrowUp = '>', '<', 'v', '^'
+		// ASCII has no hollow heads; the filled ones stand in.
+		cs.HollowRight, cs.HollowLeft, cs.HollowDown, cs.HollowUp = '>', '<', 'v', '^'
 		cs.CircleEndpoint, cs.CrossEndpoint = 'o', 'x'
 		cs.Dot, cs.Bullseye, cs.Ring, cs.DoubleRing = '*', '@', 'O', '@'
+		cs.Middot = '.'
 	} else {
 		cs.ArrowRight, cs.ArrowLeft, cs.ArrowDown, cs.ArrowUp = '►', '◄', '▼', '▲'
+		cs.HollowRight, cs.HollowLeft, cs.HollowDown, cs.HollowUp = '▷', '◁', '▽', '△'
 		cs.CircleEndpoint, cs.CrossEndpoint = '○', '×'
 		cs.Dot, cs.Bullseye, cs.Ring, cs.DoubleRing = '●', '◉', '◯', '◎'
+		cs.Middot = '·'
 	}
 	if set.Chamfers == glyph.ASCIIFamily {
 		cs.Slash, cs.Backslash, cs.DiagonalCross = '/', '\\', 'X'

@@ -636,6 +636,8 @@ func drawClassRelationship(c *renderer.Canvas, rel classRelationship, src, tgt *
 	tgtCY := tgt.y + tgt.height/2
 
 	var srcX, srcY, tgtX, tgtY int
+	// The side of its own box each end's marker points at.
+	var srcToward, tgtToward glyph.Arms
 
 	if isLR {
 		// Connect horizontally
@@ -644,11 +646,13 @@ func drawClassRelationship(c *renderer.Canvas, rel classRelationship, src, tgt *
 			srcY = srcCY
 			tgtX = tgt.x
 			tgtY = tgtCY
+			srcToward, tgtToward = glyph.W, glyph.E
 		} else {
 			srcX = src.x
 			srcY = srcCY
 			tgtX = tgt.x + tgt.width
 			tgtY = tgtCY
+			srcToward, tgtToward = glyph.E, glyph.W
 		}
 	} else {
 		// Connect vertically
@@ -657,22 +661,42 @@ func drawClassRelationship(c *renderer.Canvas, rel classRelationship, src, tgt *
 			srcY = src.y + src.height
 			tgtX = tgtCX
 			tgtY = tgt.y
+			srcToward, tgtToward = glyph.N, glyph.S
 		} else {
 			srcX = srcCX
 			srcY = src.y
 			tgtX = tgtCX
 			tgtY = tgt.y + tgt.height
+			srcToward, tgtToward = glyph.S, glyph.N
 		}
 	}
 
+	// An end carrying a marker stops a cell short of its box: the marker
+	// takes the first cell outside the border and the line feeds its tail,
+	// so no arm reaches the border (ADR-400's edge invariant, ADR-402).
+	srcMX, srcMY := markerCell(srcX, srcY, srcToward, src)
+	tgtMX, tgtMY := markerCell(tgtX, tgtY, tgtToward, tgt)
+	lineSrcX, lineSrcY := srcX, srcY
+	if rel.sourceMarker != "" {
+		lineSrcX, lineSrcY = srcMX, srcMY
+	}
+	lineTgtX, lineTgtY := tgtX, tgtY
+	if rel.targetMarker != "" {
+		lineTgtX, lineTgtY = tgtMX, tgtMY
+	}
+
 	// Draw the routed line
-	drawRoutedLine(c, srcX, srcY, tgtX, tgtY, w, cs)
-	joinLineToBox(c, srcX, srcY, src.x, src.y, src.width, src.height, w)
-	joinLineToBox(c, tgtX, tgtY, tgt.x, tgt.y, tgt.width, tgt.height, w)
+	drawRoutedLine(c, lineSrcX, lineSrcY, lineTgtX, lineTgtY, w, cs)
+	if rel.sourceMarker == "" {
+		joinLineToBox(c, srcX, srcY, src.x, src.y, src.width, src.height, w)
+	}
+	if rel.targetMarker == "" {
+		joinLineToBox(c, tgtX, tgtY, tgt.x, tgt.y, tgt.width, tgt.height, w)
+	}
 
 	// Draw markers
-	drawClassMarker(c, tgtX, tgtY, srcX, srcY, rel.targetMarker, cs, useASCII)
-	drawClassMarker(c, srcX, srcY, tgtX, tgtY, rel.sourceMarker, cs, useASCII)
+	drawClassMarker(c, tgtMX, tgtMY, tgtToward, rel.targetMarker, cs)
+	drawClassMarker(c, srcMX, srcMY, srcToward, rel.sourceMarker, cs)
 
 	// Draw label at midpoint
 	if rel.label != "" {
@@ -769,100 +793,73 @@ func drawRoutedLine(c *renderer.Canvas, x1, y1, x2, y2 int, w glyph.Weight, cs r
 	}
 }
 
-// drawClassMarker draws a relationship marker (arrow, diamond, etc.) at a connection point.
-func drawClassMarker(c *renderer.Canvas, atX, atY, fromX, fromY int, marker string, cs renderer.CharSet, useASCII bool) {
+// markerCell returns the cell a relationship's marker takes: the first cell
+// outside the box's border along the line. A connection point on the top or
+// left side of a box sits on the border itself, so the marker steps one cell
+// away from the box; on the bottom or right side the point is already
+// outside it.
+func markerCell(atX, atY int, toward glyph.Arms, box *classBoxInfo) (int, int) {
+	inside := atX >= box.x && atX < box.x+box.width &&
+		atY >= box.y && atY < box.y+box.height
+	if !inside {
+		return atX, atY
+	}
+	switch toward {
+	case glyph.N:
+		return atX, atY + 1
+	case glyph.S:
+		return atX, atY - 1
+	case glyph.E:
+		return atX - 1, atY
+	default:
+		return atX + 1, atY
+	}
+}
+
+// drawClassMarker draws a relationship marker in the cell before the box it
+// points at. Inheritance is one hollow arrowhead, by direction; composition
+// and aggregation are diamonds. Each is fed by the line running into it.
+func drawClassMarker(c *renderer.Canvas, atX, atY int, toward glyph.Arms, marker string, cs renderer.CharSet) {
 	if marker == "" {
 		return
 	}
 
-	// Determine direction from connection toward the other end
-	dx := 0
-	dy := 0
-	if fromX > atX {
-		dx = 1
-	} else if fromX < atX {
-		dx = -1
-	}
-	if fromY > atY {
-		dy = 1
-	} else if fromY < atY {
-		dy = -1
+	byDir := func(right, left, down, up rune) rune {
+		switch toward {
+		case glyph.E:
+			return right
+		case glyph.W:
+			return left
+		case glyph.S:
+			return down
+		default:
+			return up
+		}
 	}
 
 	var ch rune
 	switch marker {
-	case "|>":
-		// Inheritance arrow pointing toward target
-		if useASCII {
-			ch = '>'
-		} else {
-			if dx > 0 {
-				ch = '\u25B7' // ▷
-			} else if dx < 0 {
-				ch = '\u25C1' // ◁
-			} else if dy > 0 {
-				ch = '\u25BD' // ▽
-			} else {
-				ch = '\u25B3' // △
-			}
-		}
-	case "<|":
-		// Inheritance arrow pointing toward source
-		if useASCII {
-			ch = '<'
-		} else {
-			if dx > 0 {
-				ch = '\u25B7' // ▷
-			} else if dx < 0 {
-				ch = '\u25C1' // ◁
-			} else if dy > 0 {
-				ch = '\u25BD' // ▽
-			} else {
-				ch = '\u25B3' // △
-			}
-		}
-	case ">":
-		if dx > 0 {
-			ch = cs.ArrowRight
-		} else if dx < 0 {
-			ch = cs.ArrowLeft
-		} else if dy > 0 {
-			ch = cs.ArrowDown
-		} else {
-			ch = cs.ArrowUp
-		}
-	case "<":
-		if dx > 0 {
-			ch = cs.ArrowRight
-		} else if dx < 0 {
-			ch = cs.ArrowLeft
-		} else if dy > 0 {
-			ch = cs.ArrowDown
-		} else {
-			ch = cs.ArrowUp
-		}
+	case "|>", "<|":
+		ch = byDir(cs.HollowRight, cs.HollowLeft, cs.HollowDown, cs.HollowUp)
+	case ">", "<":
+		ch = byDir(cs.ArrowRight, cs.ArrowLeft, cs.ArrowDown, cs.ArrowUp)
 	case "*":
 		// Composition: filled diamond
-		if useASCII {
+		ch = '\u25C6' // ◆
+		if cs.ASCII {
 			ch = '#'
-		} else {
-			ch = '\u25C6' // ◆
 		}
 	case "o":
 		// Aggregation: open diamond
-		if useASCII {
+		ch = '\u25C7' // ◇
+		if cs.ASCII {
 			ch = 'o'
-		} else {
-			ch = '\u25C7' // ◇
 		}
 	default:
 		return
 	}
 
-	// Place marker one step inside from the connection point (toward from)
-	markerX := atX + dx
-	markerY := atY + dy
-	if markerX >= 0 && markerX < c.Width && markerY >= 0 && markerY < c.Height {
-		c.Put(markerY, markerX, ch, "edge")
+	if atX >= 0 && atX < c.Width && atY >= 0 && atY < c.Height {
+		c.Put(atY, atX, ch, "edge")
 	}
 }
