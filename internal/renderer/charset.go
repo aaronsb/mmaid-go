@@ -25,6 +25,12 @@ type CharSet struct {
 	ArrowDown  rune
 	ArrowUp    rune
 
+	// The hollow heads UML gives inheritance, drawn beside the filled ones.
+	HollowRight rune
+	HollowLeft  rune
+	HollowDown  rune
+	HollowUp    rune
+
 	CircleEndpoint rune
 	CrossEndpoint  rune
 
@@ -161,11 +167,14 @@ func CharSetFor(set glyph.Set) CharSet {
 	}
 	if set.Arrows == glyph.ASCIIFamily {
 		cs.ArrowRight, cs.ArrowLeft, cs.ArrowDown, cs.ArrowUp = '>', '<', 'v', '^'
+		// ASCII has no hollow heads; the filled ones stand in.
+		cs.HollowRight, cs.HollowLeft, cs.HollowDown, cs.HollowUp = '>', '<', 'v', '^'
 		cs.CircleEndpoint, cs.CrossEndpoint = 'o', 'x'
 		cs.Dot, cs.Bullseye, cs.Ring, cs.DoubleRing = '*', '@', 'O', '@'
 		cs.Middot = '.'
 	} else {
 		cs.ArrowRight, cs.ArrowLeft, cs.ArrowDown, cs.ArrowUp = '►', '◄', '▼', '▲'
+		cs.HollowRight, cs.HollowLeft, cs.HollowDown, cs.HollowUp = '▷', '◁', '▽', '△'
 		cs.CircleEndpoint, cs.CrossEndpoint = '○', '×'
 		cs.Dot, cs.Bullseye, cs.Ring, cs.DoubleRing = '●', '◉', '◯', '◎'
 		cs.Middot = '·'
