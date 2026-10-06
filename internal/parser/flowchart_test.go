@@ -78,6 +78,8 @@ func TestParseAngleBracketInLabel(t *testing.T) {
 		{"graph LR\n  A([\"one<br>two\"])", graph.ShapeStadium, "one two"},
 		{"graph LR\n  A{\"a > b\"}", graph.ShapeDiamond, "a > b"},
 		{"graph LR\n  A>flag]", graph.ShapeAsymmetric, "flag"},
+		{"graph LR\n  A>flag [[x]]", graph.ShapeAsymmetric, "flag [[x]"},
+		{"graph LR\n  A>p [/q/]", graph.ShapeAsymmetric, "p [/q/"},
 	}
 	for _, tt := range tests {
 		g := ParseFlowchart(tt.input)
