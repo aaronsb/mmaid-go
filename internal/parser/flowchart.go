@@ -943,7 +943,9 @@ func (p *flowchartParser) parseNode(text string) *graph.Node {
 		}
 		nodeID := strings.TrimSpace(text[:idx])
 		rawLabel := strings.TrimSpace(rest[:len(rest)-len(sp.close)])
-		if nodeID == "" {
+		// An ID never holds a delimiter or a quote: this match found the
+		// opener inside the label (the `>` of `<br>`), so a later pattern owns it.
+		if nodeID == "" || strings.ContainsAny(nodeID, "[({\"") {
 			continue
 		}
 		p.shapedNodeIDs[nodeID] = struct{}{}

@@ -63,6 +63,46 @@ func TestParseNodeShapes(t *testing.T) {
 	}
 }
 
+// A `>` inside a label (the `<br>` line break, a comparison) is label text,
+// not the flag shape's opening delimiter. sanitizeLabel flattens `<br>` to a
+// space, so the label reads "one two".
+func TestParseAngleBracketInLabel(t *testing.T) {
+	tests := []struct {
+		input string
+		shape graph.NodeShape
+		label string
+	}{
+		{"graph LR\n  A[\"one<br>two\"]", graph.ShapeRectangle, "one two"},
+		{"graph LR\n  A[\"one<br/>two\"]", graph.ShapeRectangle, "one two"},
+		{"graph LR\n  M --> A[\"one<br>two\"]", graph.ShapeRectangle, "one two"},
+		{"graph LR\n  A([\"one<br>two\"])", graph.ShapeStadium, "one two"},
+		{"graph LR\n  A{\"a > b\"}", graph.ShapeDiamond, "a > b"},
+		{"graph LR\n  A>flag]", graph.ShapeAsymmetric, "flag"},
+	}
+	for _, tt := range tests {
+		g := ParseFlowchart(tt.input)
+		n, ok := g.Nodes["A"]
+		if !ok {
+			t.Errorf("input %q: node A not found (nodes: %v)", tt.input, nodeIDs(g))
+			continue
+		}
+		if n.Shape != tt.shape {
+			t.Errorf("input %q: expected shape %d, got %d", tt.input, tt.shape, n.Shape)
+		}
+		if n.Label != tt.label {
+			t.Errorf("input %q: expected label %q, got %q", tt.input, tt.label, n.Label)
+		}
+	}
+}
+
+func nodeIDs(g *graph.Graph) []string {
+	ids := make([]string, 0, len(g.Nodes))
+	for id := range g.Nodes {
+		ids = append(ids, id)
+	}
+	return ids
+}
+
 func TestParseEdgeStyles(t *testing.T) {
 	tests := []struct {
 		input string
