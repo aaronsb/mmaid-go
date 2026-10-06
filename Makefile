@@ -136,12 +136,19 @@ package: version ## Build ./PKGBUILD in a clean chroot and namcap it
 # The artifacts a release must carry. For the AUR and [aaronsb] that is nothing
 # — arch-repo reads the source tarball GitHub generates. The cross-compiled
 # binaries below are for everyone not on Arch.
-release: dist ## Cross-compile, and cut the GitHub release the packaging reads
+release: dist ## Cross-compile, sign and push the tag, and cut the GitHub release the packaging reads
 ifndef VERSION
 	$(error no version found)
 endif
 	@test -n "$(VERSION)"
-	gh release create "v$(VERSION)" --title "v$(VERSION)" --generate-notes \
+	@git diff --quiet HEAD || { echo "uncommitted changes; release from a clean checkout" >&2; exit 1; }
+	@git fetch -q origin main
+	@test "$$(git rev-parse HEAD)" = "$$(git rev-parse origin/main)" || { echo "HEAD is not origin/main; the tag would name a commit the release does not" >&2; exit 1; }
+	# Signed locally, so gpg asks for the passphrase here; gh would make an
+	# unsigned lightweight tag on GitHub's side.
+	git tag -s "v$(VERSION)" -m "v$(VERSION)"
+	git push origin "v$(VERSION)"
+	gh release create "v$(VERSION)" --verify-tag --title "v$(VERSION)" --generate-notes \
 		$(DIST_DIR)/$(BINARY)-linux-amd64 \
 		$(DIST_DIR)/$(BINARY)-linux-arm64 \
 		$(DIST_DIR)/$(BINARY)-darwin-amd64 \
